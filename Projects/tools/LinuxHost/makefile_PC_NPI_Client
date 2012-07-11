@@ -1,0 +1,58 @@
+# Makefile for Linux Simple Console Application
+#
+# $Revision: 20578 $
+# $Date: 2009-08-17 14:27:28 -0700 (Mon, 17 Aug 2009) $
+
+OBJS = debug
+
+LIBS= -lpthread
+CC := gcc
+CXX := g++
+
+DEFINES = -DRNP_HOST 
+# -DNPI_UNIX
+# -D__BIG_DEBUG__ 
+DEFINES_UART = -DHAL_SPI=FALSE -DHAL_UART=TRUE -DHAL_I2C=FALSE
+
+INCLUDES= -I application\
+	-I ipclib \
+	-I rtilib \
+	-I services
+           
+MAINAPP_OBJS= \
+	$(OBJS)/SimpleConsole_lnx.o
+	
+RTILIB_OBJS= \
+	$(OBJS)/rtis_lnx_ipc_client.o
+
+
+
+PROJ_UART_OBJS= $(MAINAPP_OBJS) $(RTILIB_OBJS)
+
+all: $(OBJS)
+$(OBJS):
+	-if test ! -d $(OBJS); then mkdir $(OBJS); fi
+
+all:
+PROJ_OBJS=$(MAINAPP_OBJS) $(RTILIB_OBJS)
+CCFLAGS = -Wall  $(INCLUDES) $(DEFINES) $(DEFINES_UART) 
+
+all: $(OBJS)/NPI_Client_PC
+
+clean:
+	-if test -d $(OBJS); then rm -f $(OBJS)/*.o; fi
+	-if test -f $(OBJS)/NPI_Client_PC; then rm -f $(OBJS)/NPI_Client_PC; fi
+
+erase_obj:
+	-if test -d $(OBJS); then rm -f $(OBJS)/*.o; fi
+
+$(OBJS)/NPI_Client_PC: $(PROJ_UART_OBJS)
+	$(CC) -o $@ $(PROJ_UART_OBJS) $(LIBS) $(CCFLAGS)
+
+$(OBJS)/SimpleConsole_lnx.o: application/SimpleConsole_lnx.c
+	$(CC) -c -o $@ $(CCFLAGS) $<
+	
+$(OBJS)/rtis_lnx_ipc_client.o: rtilib/rtis_lnx_ipc_client.c
+	$(CC) -c -o $@ $(CCFLAGS) $<
+
+.PHONY: all clean uart spi i2c

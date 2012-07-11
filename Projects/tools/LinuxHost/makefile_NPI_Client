@@ -1,0 +1,52 @@
+# Makefile for Linux Simple Console Application
+#
+# $Revision: 20578 $
+# $Date: 2009-08-17 14:27:28 -0700 (Mon, 17 Aug 2009) $
+
+OBJS = debug
+
+LIBS= -lpthread
+CC = arm-none-linux-gnueabi-gcc
+
+#DEFINES = -DRNP_HOST -D__BIG_DEBUG__
+DEFINES = -DRNP_HOST
+#-DNPI_UNRELIABLE_SIGACTION
+DEFINES_ALL = -DHAL_SPI=TRUE -DHAL_UART=TRUE -DHAL_I2C=TRUE
+
+INCLUDES= -I application\
+	-I ipclib \
+	-I rtilib \
+	-I services
+           
+MAINAPP_OBJS= \
+	$(OBJS)/SimpleConsole_lnx.o
+	
+RTILIB_OBJS= \
+	$(OBJS)/rtis_lnx_ipc_client.o
+
+PROJ_ALL_OBJS= $(MAINAPP_OBJS) $(RTILIB_OBJS)
+
+all: CCFLAGS = -Wall  $(INCLUDES) $(DEFINES) -mcpu=cortex-a8 -march=armv7-a 
+all: erase_obj $(OBJS)/NPI_Client
+	-if test ! -d $(OBJS); then mkdir $(OBJS); fi
+
+all: $(OBJS)/NPI_Client
+
+clean:
+	-if test -d $(OBJS); then rm -f $(OBJS)/*.o; fi
+	-if test -f $(OBJS)/NPI_Client; then rm -f $(OBJS)/NPI_Client; fi
+
+erase_obj:
+	-if test -d $(OBJS); then rm -f $(OBJS)/*.o; fi
+	-if test ! -d $(OBJS); then mkdir $(OBJS); fi
+
+$(OBJS)/NPI_Client: $(PROJ_ALL_OBJS)
+	$(CC) -o $@ $(PROJ_ALL_OBJS) $(LIBS) $(CCFLAGS)
+	
+$(OBJS)/SimpleConsole_lnx.o: application/SimpleConsole_lnx.c
+	$(CC) -c -o $@ $(CCFLAGS) $<
+	
+$(OBJS)/rtis_lnx_ipc_client.o: rtilib/rtis_lnx_ipc_client.c
+	$(CC) -c -o $@ $(CCFLAGS) $<
+
+.PHONY: all clean
