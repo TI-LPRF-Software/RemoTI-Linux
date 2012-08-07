@@ -65,6 +65,10 @@
 #include "hal_rpc.h"
 #include "hal_gpio.h"
 
+#if (defined __STRESS_TEST__) || (defined __DEBUG_TIME__I2C)
+#include <sys/time.h>
+#endif // __STRESS_TEST__
+
 // -- macros --
 
 #ifndef TRUE
@@ -81,21 +85,27 @@
 #define debug_printf(fmt, ...)
 #endif
 
+#ifdef __DEBUG_TIME__I2C
+struct timeval curTime, initTime;
+#endif
 // -- Constants --
 
 // State variable used to indicate that a device is open.
 static int npiOpenFlag = FALSE;
-static int polling = FALSE;
 
 // NPI device related variables
-static int              npi_poll_terminate;
-static pthread_mutex_t  npiPollLock;
-static pthread_mutex_t  npi_poll_mutex;
-static pthread_cond_t   npi_poll_cond;
+static int              	npi_poll_terminate;
+static pthread_mutex_t  	npiPollLock;
+static pthread_mutexattr_t 	npiPollLock_attr;
+static pthread_mutex_t  	npi_poll_mutex;
+static pthread_cond_t   	npi_poll_cond;
 // Polling thread
-static pthread_t        npiPollThread;
+static pthread_t        	npiPollThread;
 // Event thread
-static pthread_t        npiEventThread;
+static pthread_t        	npiEventThread;
+
+// For debugging mainly
+uint8 writeOnce = 0;
 
 // thread termination subroutines
 static void npi_termpoll(void);
@@ -112,9 +122,15 @@ static int npi_poll_terminate;
 
 // -- Public functions --
 
+#ifdef __STRESS_TEST__
+extern struct timeval curTime, startTime;
+struct timeval prevTimeI2C;
+#endif //__STRESS_TEST__
+
 // -- Private functions --
 static void npi_initsyncres(void);
 static int npi_initThreads(void);
+void npi_i2c_pollData(npiMsgData_t *pMsg);
 
 /******************************************************************************
  * @fn         NPI_OpenDevice
@@ -164,6 +180,11 @@ int NPI_I2C_OpenDevice(const char *portName, void *pCfg)
 
   // initialize thread synchronization resources
   npi_initsyncres();
+
+#ifdef __DEBUG_TIME__I2C
+  gettimeofday(&initTime, NULL);
+  printf("NPI I2C timer started\n");
+#endif //__DEBUG_TIME__I2C
 
   // Reset The RNP
   NPI_I2C_ResetSlave();
@@ -220,33 +241,150 @@ void NPI_I2C_CloseDevice(void)
  */
 void NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
 {
-  //This a Not Polling Command
-  if(FALSE == polling)
+	debug_printf("Sync Lock SRDY ...");
+	//Lock the polling until the command is send
+	if (0 == pthread_mutex_lock(&npiPollLock))
+	{
+		writeOnce = 0;
+
+#ifdef __DEBUG_TIME__I2C
+		//	debug_
+		gettimeofday(&curTime, NULL);
+		printf("[MUTEX %.5ld.%.6ld] NPI_I2C_SendAsynchData has lock (%d cnt: %d) [tid: %ld]\n",
+				curTime.tv_sec - initTime.tv_sec,
+				curTime.tv_usec,
+				npiPollLock,
+				((int *)&npiPollLock)[1],
+				syscall(224));
+#elif (defined __DEBUG_MUTEX__)
+	printf("[MUTEX] NPI_I2C_SendAsynchData has lock (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //__DEBUG_TIME__I2C
+	}
+    else
+    {
+#if (defined __DEBUG_MUTEX__)
+		printf("[MUTEX-ERR] NPI_I2C_SendAsynchData has lock (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //(defined __DEBUG_MUTEX__)
+    	perror("Mutex unlock Poll:");
+    }
+	debug_printf("(Sync) success \n");
+
+	// Add Proper RPC type to header
+	((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_AREQ;
+
+	HAL_RNP_MRDY_CLR();
+
+	//This wait is only valid if RNP manage MRDY line, if not SRDY will never be set low on SREQ.
+	// To avoid any problem, just add a timeout, or ignore it.
+	HalGpioWaitSrdyClr();
+//	usleep(1000);	// NOTE! This function seems unreliable.
+
+	//Send LEN, CMD0 and CMD1 (comand Header)
+	HalI2cWrite(0, (uint8*) pMsg, RPC_FRAME_HDR_SZ + (pMsg->len));
+
+	HAL_RNP_MRDY_SET();
+
+	if (0 == pthread_mutex_unlock(&npiPollLock))
+	{
+#ifdef __DEBUG_TIME__I2C
+		//	debug_
+		gettimeofday(&curTime, NULL);
+		printf("[MUTEX %.5ld.%.6ld] NPI_I2C_SendAsynchData released (%d cnt: %d) [tid: %ld]\n",
+				curTime.tv_sec - initTime.tv_sec,
+				curTime.tv_usec,
+				npiPollLock,
+				((int *)&npiPollLock)[1],
+				syscall(224));
+#elif (defined __DEBUG_MUTEX__)
+		printf("[MUTEX] NPI_I2C_SendAsynchData released (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //__DEBUG_TIME__I2C
+	}
+    else
+    {
+#if (defined __DEBUG_MUTEX__)
+		printf("[MUTEX-ERR] NPI_I2C_SendAsynchData released (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //(defined __DEBUG_MUTEX__)
+    	perror("Mutex unlock Poll:");
+    }
+	debug_printf("Sync unLock SRDY ...");
+
+}
+
+
+/**************************************************************************************************
+ * @fn          npi_i2c_pollData
+ *
+ * @brief       This function is called by the client when it has data ready to
+ *              be sent synchronously. This routine allocates a SREQ buffer,
+ *              copies the client's payload, sends the data, and waits for the
+ *              reply. The input buffer is used for the output data.
+ *
+ * input parameters
+ *
+ * @param *pMsg  - Pointer to data to be sent synchronously (i.e. the SREQ).
+ *
+ * output parameters
+ *
+ * @param *pMsg  - Pointer to replay data (i.e. the SRSP).
+ *
+ * @return      None.
+ **************************************************************************************************
+ */
+void npi_i2c_pollData(npiMsgData_t *pMsg)
+{
+
+#ifdef __BIG_DEBUG__
+  printf("Polling Command ...");
+
+  int i;
+  for(i = 0 ; i < (RPC_FRAME_HDR_SZ+pMsg->len); i++)
+    printf(" 0x%.2x", ((uint8*)pMsg)[i]);
+
+  printf("\n");
+#endif
+
+#ifdef __STRESS_TEST__
+  //	debug_
+  gettimeofday(&curTime, NULL);
+  long int diffPrev;
+  int t = 0;
+  if (curTime.tv_usec >= prevTimeI2C.tv_usec)
   {
-    debug_printf("Sync Lock SRDY ...");
-    //Lock the polling until the command is send
-    pthread_mutex_lock(&npiPollLock);
-    debug_printf("(Sync) success \n");
+	  diffPrev = curTime.tv_usec - prevTimeI2C.tv_usec;
+  }
+  else
+  {
+	  diffPrev = (curTime.tv_usec + 1000000) - prevTimeI2C.tv_usec;
+	  t = 1;
   }
 
-  // Add Proper RPC type to header
-  ((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_AREQ;
+  prevTimeI2C = curTime;
 
+  printf("[POLL %.5ld.%.6ld (+%ld.%6ld)] MRDY Low \n",
+		  curTime.tv_sec - startTime.tv_sec,
+		  curTime.tv_usec,
+		  curTime.tv_sec - prevTimeI2C.tv_sec - t,
+		  diffPrev);
+#endif //__STRESS_TEST__
   HAL_RNP_MRDY_CLR();
+
+//This wait is only valid if RNP manage MRDY line, if not SRDY will never be set low on SREQ.
+// To avoid any problem, just add a timeout, or ignore it.
+  HalGpioWaitSrdyClr();
+//  usleep(1000);
 
   //Send LEN, CMD0 and CMD1 (comand Header)
   HalI2cWrite(0, (uint8*) pMsg, RPC_FRAME_HDR_SZ + (pMsg->len));
 
-  if(FALSE == polling)
-  {
-    pthread_mutex_unlock(&npiPollLock);
-    debug_printf("Sync unLock SRDY ...");
-  }
+  HalI2cRead(0, (uint8*) pMsg, RPC_FRAME_HDR_SZ);
+
+  if(pMsg->len != 0)
+    //Read RSP Data
+    HalI2cRead(0, (uint8*) &(pMsg->pData[0]), (pMsg->len));
 
   HAL_RNP_MRDY_SET();
 
 }
-
 
 /**************************************************************************************************
  * @fn          NPI_I2C_SendSynchData
@@ -269,57 +407,116 @@ void NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
  */
 void NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 {
+	// Do not attempt to send until polling is finished
 
-  //This a Not Polling Command
-  if(FALSE == polling)
-  {
-    debug_printf("Sync Lock SRDY ...");
-    //Lock the polling until the command is send
-    pthread_mutex_lock(&npiPollLock);
-    debug_printf("(Sync) success \n");
+	int lockRet = 0;
+	debug_printf("Sync Lock SRDY ...");
+	//Lock the polling until the command is send
+	lockRet = pthread_mutex_lock(&npiPollLock);
+	debug_printf("(Sync) success \n");
+	if (lockRet != 0)
+	{
+		printf("[ERR] Could not get lock\n");
+		perror("mutex lock");
+	}
+	else
+	{
+		writeOnce = 0;
+#ifdef __DEBUG_TIME__I2C
+		//	debug_
+		gettimeofday(&curTime, NULL);
+		printf("[MUTEX %.5ld.%.6ld] NPI_I2C_SendSynchData has lock (%d cnt: %d) [tid: %ld]\n",
+				curTime.tv_sec - initTime.tv_sec,
+				curTime.tv_usec,
+				npiPollLock,
+				((int *)&npiPollLock)[1],
+				syscall(224));
+#elif (defined __DEBUG_MUTEX__)
+		printf("[MUTEX] NPI_I2C_SendSynchData has lock (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //__DEBUG_TIME__I2C
+	}
 
-    // Add Proper RPC type to header
-    ((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_SREQ;
-  }
+	// Add Proper RPC type to header
+	((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_SREQ;
 
-//#ifdef __BIG_DEBUG__
-  printf("Sync Data Command ...");
+#ifdef __BIG_DEBUG__
+	printf("Sync Data Command ...");
 
-  int i;
-  for(i = 0 ; i < (RPC_FRAME_HDR_SZ+pMsg->len); i++)
-    printf(" 0x%.2x", ((uint8*)pMsg)[i]);
+	int i;
+	for(i = 0 ; i < (RPC_FRAME_HDR_SZ+pMsg->len); i++)
+		printf(" 0x%.2x", ((uint8*)pMsg)[i]);
 
-  printf("\n");
-//#endif
+	printf("\n");
+#endif
 
-  HAL_RNP_MRDY_CLR();
+#ifdef __STRESS_TEST__
+	//	debug_
+	gettimeofday(&curTime, NULL);
+	long int diffPrev;
+	int t = 0;
+	if (curTime.tv_usec >= prevTimeI2C.tv_usec)
+	{
+		diffPrev = curTime.tv_usec - prevTimeI2C.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTimeI2C.tv_usec;
+		t = 1;
+	}
 
-//This wait is only valid if RNP mange MRDY line, if not SRDY will never be set low on SREQ.
-// To avoid any problem, just add a timeout, or ignore it.
-//  HalI2cWaitSrdyClr();
-  usleep(1000);
+	prevTimeI2C = curTime;
 
-  //Send LEN, CMD0 and CMD1 (comand Header)
-  HalI2cWrite(0, (uint8*) pMsg, RPC_FRAME_HDR_SZ + (pMsg->len));
+	printf("[--> %.5ld.%.6ld (+%ld.%6ld)] MRDY Low \n",
+			curTime.tv_sec - startTime.tv_sec,
+			curTime.tv_usec,
+			curTime.tv_sec - prevTimeI2C.tv_sec - t,
+			diffPrev);
+#endif //__STRESS_TEST__
+	HAL_RNP_MRDY_CLR();
 
-  HalI2cRead(0, (uint8*) pMsg, RPC_FRAME_HDR_SZ);
+	//This wait is only valid if RNP manage MRDY line, if not SRDY will never be set low on SREQ.
+	// To avoid any problem, just add a timeout, or ignore it.
+	HalGpioWaitSrdyClr();
+//	usleep(1000);
 
-  if(pMsg->len != 0)
-    //Read RSP Data
-    HalI2cRead(0, (uint8*) &(pMsg->pData[0]), (pMsg->len));
+	//Send LEN, CMD0 and CMD1 (comand Header)
+	HalI2cWrite(0, (uint8*) pMsg, RPC_FRAME_HDR_SZ + (pMsg->len));
 
-  //Release the polling lock
-  if(FALSE == polling)
-  {
-    //This is the SRSP, clear out the PC type in header
-    ((uint8 *)pMsg)[RPC_POS_CMD0] &=  RPC_SUBSYSTEM_MASK;
+	HalI2cRead(0, (uint8*) pMsg, RPC_FRAME_HDR_SZ);
 
-    pthread_mutex_unlock(&npiPollLock);
-    debug_printf("Sync unLock SRDY ...");
-  }
+	if(pMsg->len != 0)
+		//Read RSP Data
+		HalI2cRead(0, (uint8*) &(pMsg->pData[0]), (pMsg->len));
 
-  HAL_RNP_MRDY_SET();
+	//Release the polling lock
+	//This is the SRSP, clear out the PC type in header
+	((uint8 *)pMsg)[RPC_POS_CMD0] &=  RPC_SUBSYSTEM_MASK;
 
+	HAL_RNP_MRDY_SET();
+
+	if (0 == pthread_mutex_unlock(&npiPollLock))
+	{
+#ifdef __DEBUG_TIME__I2C
+		//	debug_
+		gettimeofday(&curTime, NULL);
+		printf("[MUTEX %.5ld.%.6ld] NPI_I2C_SendSynchData released (%d cnt: %d) [tid: %ld]\n",
+				curTime.tv_sec - initTime.tv_sec,
+				curTime.tv_usec,
+				npiPollLock,
+				((int *)&npiPollLock)[1],
+				syscall(224));
+#elif (defined __DEBUG_MUTEX__)
+		printf("[MUTEX] NPI_I2C_SendSynchData released (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //__DEBUG_TIME__I2C
+	}
+    else
+    {
+#if (defined __DEBUG_MUTEX__)
+		printf("[MUTEX-ERR] NPI_I2C_SendAsynchData released (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //(defined __DEBUG_MUTEX__)
+    	perror("Mutex unlock Poll:");
+    }
+	debug_printf("Sync unLock SRDY ...");
 }
 
 /**************************************************************************************************
@@ -384,31 +581,35 @@ static int npi_initThreads(void)
 /* Initialize thread synchronization resources */
 static void npi_initsyncres(void)
 {
-  // initialize all mutexes
-  if (pthread_mutex_init(&npiPollLock, NULL))
-  {
-    printf("Fail To Initialize Mutex npiPollLock\n");
-    exit(-1);
-  }
+	printf("[MUTEX] Initializing mutexes\n");
+	// initialize all mutexes
+	pthread_mutexattr_init(&npiPollLock_attr);
+	pthread_mutexattr_settype(&npiPollLock_attr, PTHREAD_MUTEX_ERRORCHECK);
+	if ( pthread_mutex_init(&npiPollLock, &npiPollLock_attr) )
+//	if ( pthread_mutex_init(&npiPollLock, NULL) )
+	{
+		printf("Fail To Initialize Mutex npiPollLock\n");
+		exit(-1);
+	}
 
-  if(pthread_mutex_init(&npi_poll_mutex, NULL))
-  {
-    printf("Fail To Initialize Mutex npi_poll_mutex\n");
-    exit(-1);
-  }
+	if(pthread_mutex_init(&npi_poll_mutex, NULL))
+	{
+		printf("Fail To Initialize Mutex npi_poll_mutex\n");
+		exit(-1);
+	}
 #ifdef SRDY_INTERRUPT
-  if(pthread_mutex_init(&npi_Srdy_mutex, NULL))
-  {
-    printf("Fail To Initialize Mutex npi_Srdy_mutex\n");
-    exit(-1);
-  }
+	if(pthread_mutex_init(&npi_Srdy_mutex, NULL))
+	{
+		printf("Fail To Initialize Mutex npi_Srdy_mutex\n");
+		exit(-1);
+	}
 #endif
 
-  if(pthread_cond_init(&npi_poll_cond, NULL))
-  {
-    printf("Fail To Initialize Condition npi_poll_cond\n");
-    exit(-1);
-  }
+	if(pthread_cond_init(&npi_poll_cond, NULL))
+	{
+		printf("Fail To Initialize Condition npi_poll_cond\n");
+		exit(-1);
+	}
 
 }
 
@@ -433,49 +634,120 @@ static void *npi_poll_entry(void *ptr)
     pthread_mutex_lock(&npi_Srdy_mutex);
     debug_printf("POLL: Locked SRDY mutex \n");
 #endif
-    if(0 == pthread_mutex_trylock(&npiPollLock))
+    if(0 == pthread_mutex_lock(&npiPollLock))
     {
+    	if (writeOnce < 4)
+    	{
+#ifdef __DEBUG_TIME__I2C
+    		//	debug_
+    		gettimeofday(&curTime, NULL);
+    		printf("[MUTEX %.5ld.%.6ld] npi_i2c_pollData has lock (%d cnt: %d) [tid: %ld]\n",
+				curTime.tv_sec - initTime.tv_sec,
+				curTime.tv_usec,
+				npiPollLock,
+				((int *)&npiPollLock)[1],
+				syscall(224));
+#elif (defined __DEBUG_MUTEX__)
+    		printf("[MUTEX] npi_i2c_pollData has lock (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //__DEBUG_TIME__I2C
+    	}
 
-      //Ready SRDY Status
-      // This Test check if RNP has asserted SRDY line because it has some Data pending.
-      // If SRDY is not Used, thgen this line need to be commented, and the Poll command need
-      // to be send regulary to check if any data is pending. this is done every 10ms (see below npi_poll_cond)
+    	//Ready SRDY Status
+    	// This Test check if RNP has asserted SRDY line because it has some Data pending.
+    	// If SRDY is not Used, thgen this line need to be commented, and the Poll command need
+    	// to be send regulary to check if any data is pending. this is done every 10ms (see below npi_poll_cond)
 #ifndef SRDY_INTERRUPT
-      if(TRUE == HAL_RNP_SRDY_CLR())
+    	if(TRUE == HAL_RNP_SRDY_CLR())
 #else
-      //Interruption case, In case of a SREQ, SRDY will go low a end generate an event.
-      // the npiPollLock will prevent us to arrive to this test,
-      // BUT an AREQ can immediatly follow  a SREQ: SRDY will stay low for the whole process
-      // In this case, we need ot check that the SRDY line is still LOW or is HIGH.
-      if(1)
+    		//Interruption case, In case of a SREQ, SRDY will go low a end generate an event.
+    		// the npiPollLock will prevent us to arrive to this test,
+    		// BUT an AREQ can immediately follow  a SREQ: SRDY will stay low for the whole process
+    		// In this case, we need to check that the SRDY line is still LOW or is HIGH.
+    		if(1)
 #endif
-      {
-        //   exit(-1);
-        //RNP is polling, retrieve the data
-        *readbuf = 0; //Poll Command has zero data bytes.
-        *(readbuf+1) = RPC_CMD_POLL;
-        *(readbuf+2) = 0;
-        //Send the Polling Command,
-        //polling is set to TRUE so that the command cannot be send while a SREQ is already called.
-        polling = TRUE;
-        NPI_I2C_SendSynchData((npiMsgData_t *)readbuf);
-        polling = FALSE;
-        pthread_mutex_unlock(&npiPollLock);
+    		{
+    			//   exit(-1);
+    			//RNP is polling, retrieve the data
+    			*readbuf = 0; //Poll Command has zero data bytes.
+    			*(readbuf+1) = RPC_CMD_POLL;
+    			*(readbuf+2) = 0;
 
-        //Check if polling was successful
-        if((readbuf[RPC_POS_CMD0] & RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ)
-        {
-          ((uint8 *)readbuf)[RPC_POS_CMD0] &=  RPC_SUBSYSTEM_MASK;
-          NPI_AsynchMsgCback((npiMsgData_t *)(readbuf));
-        }
-        pollStatus = TRUE;
-      }
-      else
-      {
-        pollStatus = FALSE;
-      }
+    			//Send the Polling Command,
+    			npi_i2c_pollData((npiMsgData_t *)readbuf);
 
-      pthread_mutex_unlock(&npiPollLock);
+#ifdef __DEBUG_TIME__I2C
+    			  //	debug_
+    			  gettimeofday(&curTime, NULL);
+#endif //__DEBUG_TIME__I2C
+
+    	        if(0 == pthread_mutex_unlock(&npiPollLock))
+    	        {
+#ifdef __DEBUG_TIME__I2C
+    	        	printf("[MUTEX %.5ld.%.6ld] npi_i2c_pollData released (%d cnt: %d) [tid: %ld]\n",
+    	        			curTime.tv_sec - initTime.tv_sec,
+    	        			curTime.tv_usec,
+    	        			npiPollLock,
+    	        			((int *)&npiPollLock)[1],
+    	        			syscall(224));
+#elif (defined __DEBUG_MUTEX__)
+
+    	        	printf("[MUTEX] npi_i2c_pollData released (%d @ 0x%.16X)\n",
+    	        			npiPollLock,
+    	        			&npiPollLock);
+#endif //__DEBUG_TIME__I2C
+    	        	pollStatus = TRUE;
+    	        }
+    	        else
+    	        {
+#if (defined __DEBUG_MUTEX__)
+    	    		printf("[MUTEX-ERR] npi_i2c_pollData released (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //(defined __DEBUG_MUTEX__)
+    	        	perror("Mutex unlock Poll:");
+    	        }
+
+    			//Check if polling was successful
+    			if((readbuf[RPC_POS_CMD0] & RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ)
+    			{
+    				((uint8 *)readbuf)[RPC_POS_CMD0] &=  RPC_SUBSYSTEM_MASK;
+    				NPI_AsynchMsgCback((npiMsgData_t *)(readbuf));
+    				writeOnce = 0;
+    			}
+    		}
+    		else
+    		{
+    			pollStatus = FALSE;
+    		}
+
+
+    	if (pollStatus == FALSE)
+    	{
+    		if(0 == pthread_mutex_unlock(&npiPollLock))
+    		{
+    			if (writeOnce < 4)
+    			{
+#ifdef __DEBUG_TIME__I2C
+    				//	debug_
+    				gettimeofday(&curTime, NULL);
+    				printf("[MUTEX %.5ld.%.6ld] npi_i2c_pollData released (%d cnt: %d) [tid: %ld]\n",
+    	        			curTime.tv_sec - initTime.tv_sec,
+    	        			curTime.tv_usec,
+    	        			npiPollLock,
+    	        			((int *)&npiPollLock)[1],
+    	        			syscall(224));
+#elif (defined __DEBUG_MUTEX__)
+    				printf("[MUTEX] npi_i2c_pollData released (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //__DEBUG_TIME__I2C
+    				writeOnce++;
+    			}
+    		}
+    		else
+    		{
+#if (defined __DEBUG_MUTEX__)
+    			printf("[MUTEX-ERR] npi_i2c_pollData released (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+#endif //(defined __DEBUG_MUTEX__)
+    			perror("Mutex unlock Poll:");
+    		}
+    	}
     }
     else
     {
@@ -499,7 +771,7 @@ static void *npi_poll_entry(void *ptr)
 
       gettimeofday(&curtime, NULL);
       expirytime.tv_sec = curtime.tv_sec;
-      expirytime.tv_nsec = (curtime.tv_usec * 1000) + 10000000; //Wait 10ms for next polling
+      expirytime.tv_nsec = (curtime.tv_usec * 1000) + 1000000; //Wait 1000us for next polling
 
       if(expirytime.tv_nsec >= 1000000000)
       {

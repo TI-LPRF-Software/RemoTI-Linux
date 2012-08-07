@@ -55,6 +55,7 @@ uint8 destIdx;
 uint8 ch;
 
 static void ConfigParam( void );
+void appClearPairingTable( void );
 
 int main(int argc, char **argv)
 {
@@ -108,6 +109,11 @@ int main(int argc, char **argv)
 			printf("Calling RTI_AllowPairReq\n");
 			RTI_AllowPairReq();
 		}
+		else if (ch == 'c')
+		{
+			// Clear pairing table
+			appClearPairingTable();
+		}
 	}
 
 	RTIS_Close();
@@ -115,6 +121,54 @@ int main(int argc, char **argv)
 	return 0;
 }
 
+
+/**************************************************************************************************
+ *
+ * @fn      appClearPairingTable
+ *
+ * @brief   Function to clear pairing table
+ *
+ * @param   status - Result of RTI_InitReq API call.
+ *
+ * @return  void
+ */
+void appClearPairingTable()
+{
+	rcnNwkPairingEntry_t *pEntry;
+	// Allocate memory for one pairing entry
+	pEntry = (rcnNwkPairingEntry_t *) malloc(sizeof(rcnNwkPairingEntry_t));
+
+	uint8 i, result, pairingTableSize;
+
+	(void)RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_CONST_ITEM_MAX_PAIRING_TABLE_ENTRIES, 1, (uint8*)&pairingTableSize);
+
+	for (i = 0; i < pairingTableSize; i++)
+	{
+		// Set current pairing entry
+		RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_PT_CURRENT_ENTRY_INDEX, 1,
+				(uint8 *) &i);
+		// Try to read out this entry
+		if ((result = RTI_ReadItemEx(RTI_PROFILE_RTI,
+				RTI_SA_ITEM_PT_CURRENT_ENTRY,
+				sizeof(rcnNwkPairingEntry_t),
+				(uint8 *) pEntry)) == RTI_SUCCESS)
+		{
+			// Invalidate item
+			pEntry->pairingRef = RTI_INVALID_PAIRING_REF;
+			RTI_WriteItemEx(RTI_PROFILE_RTI,
+				RTI_SA_ITEM_PT_CURRENT_ENTRY,
+				sizeof(rcnNwkPairingEntry_t),
+				(uint8 *) pEntry);
+		}
+	}
+
+	printf("*************************************\n");
+	printf("* Pairing Table Is Empty\n");
+	printf("*************************************\n");
+
+	// Free pairing entry buffer
+	free(pEntry);
+}
 
 /**************************************************************************************************
  *
@@ -139,7 +193,8 @@ void RTI_InitCnf(rStatus_t status)
 		RTI_WriteItem(RTI_CP_ITEM_STARTUP_CTRL, 1, &startupFlg );
 		printf("-------------------- END Init Req-------------------\n");
 		printf("\n- SUCCESS: RTI_InitCnf called with status %u\n", (unsigned) status);
-		printf("\nPress key 'p' the <enter> to allow pairing\n");
+		printf("\nPress key 'p' then <enter> to allow pairing\n");
+		printf("Press key 'c' then <enter> to clear pairing table\n");
 	}
 	else
 	{

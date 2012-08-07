@@ -57,6 +57,10 @@
 #include  "hal_types.h"
 #include  "hal_gpio.h"
 
+#ifdef __STRESS_TEST__
+#include <sys/time.h>
+#endif // __STRESS_TEST__
+
 /**************************************************************************************************
  *                                            CONSTANTS
  **************************************************************************************************/
@@ -85,6 +89,11 @@ static int gpioResetFd;
 static halGpioCfg_t srdyGpioCfg;
 static halGpioCfg_t mrdyGpioCfg;
 static halGpioCfg_t resetGpioCfg;
+
+#ifdef __STRESS_TEST__
+extern struct timeval curTime, startTime;
+extern struct timeval prevTimeI2C;
+#endif //__STRESS_TEST__
 
 /**************************************************************************************************
  *                                          FUNCTIONS - API
@@ -577,9 +586,9 @@ uint8 HalGpioSrdyCheck(uint8 state)
 		exit(-1);
 	}
 
-	debug_printf("===>check SRDY: %c  (%d) \n", srdy, atoi(&srdy));
+	debug_printf("===>check SRDY: %c  (%c) \n", srdy, srdy);
 
-		return (state == atoi(&srdy));
+	return (state == ((srdy == '1') ? 1 : 0));
 }
 
 /**************************************************************************************************
@@ -610,11 +619,11 @@ void HalGpioWaitSrdyClr(void)
 		debug_printf("\ncan't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
 		exit(-1);
 	}
-	debug_printf("SRDY: %c  (%d) \n", srdy, atoi(&srdy));
+	debug_printf("SRDY: %c  (%c) \n", srdy, srdy);
 
-	while(atoi(&srdy) == 1)
+	while(srdy == '1')
 	{
-		usleep(1000);
+		usleep(100);
 		lseek(gpioSrdyFd,0,SEEK_SET);
 		if(ERROR == read(gpioSrdyFd,&srdy, 1))
 		{
@@ -623,8 +632,31 @@ void HalGpioWaitSrdyClr(void)
 			exit(-1);
 		}
 	}
+#ifdef __STRESS_TEST__
+  //	debug_
+  gettimeofday(&curTime, NULL);
+  long int diffPrev;
+  int t = 0;
+  if (curTime.tv_usec >= prevTimeI2C.tv_usec)
+  {
+	  diffPrev = curTime.tv_usec - prevTimeI2C.tv_usec;
+  }
+  else
+  {
+	  diffPrev = (curTime.tv_usec + 1000000) - prevTimeI2C.tv_usec;
+	  t = 1;
+  }
 
-	debug_printf("==>SRDY change to : %c  (%d) \n", srdy, atoi(&srdy));
+  prevTimeI2C = curTime;
+
+  printf("[--> %.5ld.%.6ld (+%ld.%6ld)] SRDY Low \n",
+		  curTime.tv_sec - startTime.tv_sec,
+		  curTime.tv_usec,
+		  curTime.tv_sec - prevTimeI2C.tv_sec - t,
+		  diffPrev);
+#endif //__STRESS_TEST__
+
+  debug_printf("==>SRDY change to : %c  (%c) \n", srdy, srdy);
 }
 
 /**************************************************************************************************
@@ -656,11 +688,11 @@ void HalGpioWaitSrdySet(void)
 		exit(-1);
 	}
 
-	debug_printf(" SRDY: %c  (%d) \n", srdy, atoi(&srdy));
+	debug_printf(" SRDY: %c  (%c) \n", srdy, srdy);
 
-	while(atoi(&srdy) == 0)
+	while(srdy == '1')
 	{
-		usleep(1000);
+		usleep(100);
 		lseek(gpioSrdyFd,0,SEEK_SET);
 		if(ERROR == read(gpioSrdyFd,&srdy, 1))
 		{
@@ -670,7 +702,7 @@ void HalGpioWaitSrdySet(void)
 		}
 	}
 
-	debug_printf("==>SRDY change to : %c  (%d) \n", srdy, atoi(&srdy));
+	debug_printf("==>SRDY change to : %c  (%c) \n", srdy, srdy);
 }
 
 /**************************************************************************************************

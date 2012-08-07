@@ -53,9 +53,13 @@ extern "C"
   /* NPI includes */
   #include "npi_lnx.h"
 
-  /* RTI_LNX includes */
-  #include "rti_lnx.h"
-  #include "rti_lnx_constants.h"
+/* RTI_LNX includes */
+#ifndef RTI_H
+#include "rti_lnx.h"
+#endif
+#ifndef RTI_CONSTANTS_H
+#include "rti_lnx_constants.h"
+#endif
 
   /* Initialize RTI Surrogate
    * devpath - serial interface device path, or IPaddress:port
@@ -65,6 +69,9 @@ extern "C"
   /* Close RTI Surrogate */
   void RTIS_Close(void);
 
+  /* The following two functions comes from NPI. They are used in the RTIS client module.*/
+  void NPI_SendAsynchData( npiMsgData_t *pMsg );
+  void NPI_SendSynchData( npiMsgData_t *pMsg );
 
   /**************************************************************************************************
    * TYPEDEFS

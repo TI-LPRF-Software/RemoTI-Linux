@@ -302,7 +302,7 @@ void halDelay(uint8 msecs, uint8 sleep)
  *
  **************************************************************************************************/
 
-int RTIS_Init(const char *devpath, const char *port)
+int RTIS_Init(const char *devpath)
 {
 	(void) devpath;
 	int res = FALSE;
@@ -354,7 +354,7 @@ int RTIS_Init(const char *devpath, const char *port)
 	strBuf = SerialConfigParser(serialCfgFd, "DEVICE", "deviceKey", strBuf);
 
 	// Copy from buffer to variable
-	devIdx = atoi(strBuf);
+	devIdx = strBuf[0] - '0';
 //	debug_
 	printf("deviceKey = %i\n", devIdx);
 
@@ -408,7 +408,7 @@ int RTIS_Init(const char *devpath, const char *port)
 			strBuf = pStrBufRoot;
 			strBuf = SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][0], "active_high_low", strBuf);
 			// Copy from buffer to variable
-			gpioCfg[gpioIdx]->gpio.active_high_low = atoi(strBuf);
+			gpioCfg[gpioIdx]->gpio.active_high_low = strBuf[0] - '0';
 			debug_printf("gpioCfg[%i]->gpio.active_high_low = %d\n",
 					gpioIdx,
 					gpioCfg[gpioIdx]->gpio.active_high_low);
@@ -438,7 +438,7 @@ int RTIS_Init(const char *devpath, const char *port)
 			strBuf = pStrBufRoot;
 			strBuf = SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][1], "active_high_low", strBuf);
 			// Copy from buffer to variable
-			gpioCfg[gpioIdx]->levelshifter.active_high_low = atoi(strBuf);
+			gpioCfg[gpioIdx]->levelshifter.active_high_low = strBuf[0] - '0';
 			debug_printf("gpioCfg[%i]->levelshifter.active_high_low = %d\n",
 					gpioIdx,
 					gpioCfg[gpioIdx]->levelshifter.active_high_low);

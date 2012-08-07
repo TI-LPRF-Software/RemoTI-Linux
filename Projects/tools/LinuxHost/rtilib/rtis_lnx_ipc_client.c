@@ -92,6 +92,15 @@
  *                                        Type definitions
  **************************************************************************************************/
 
+struct linkedAreqMsg
+{
+	npiMsgData_t message;
+	struct linkedAreqMsg *nextMessage;
+};
+
+typedef struct linkedAreqMsg areqMsg;
+
+
 /**************************************************************************************************
  *                                        Global Variables
  **************************************************************************************************/
@@ -104,8 +113,14 @@
 int sNPIconnected;
 // Client data transmission buffers
 char rtis_ipc_buf[2][RTIS_IPC_BUF_SIZE];
-// Client data AREQ transmission buffer
-char rtis_ipc_areq_buf[(sizeof(npiMsgData_t))];
+// Client data AREQ received buffer
+areqMsg *rtis_ipc_areq_rec_buf;
+// Client data AREQ processing buffer
+areqMsg *rtis_ipc_areq_proc_buf;
+
+// Message count to keep track of incoming and processed messages
+static int messageCount = 0;
+
 // Client data SRSP reception buffer
 char rtis_ipc_srsp_buf[(sizeof(npiMsgData_t))];
 
@@ -361,7 +376,7 @@ int RTIS_Init(const char *devPath)
 
 static void *rtis_lnx_ipc_handleThreadFunc (void *ptr)
 {
-	int done = 0;
+	int done = 0, tryLockFirstTimeOnly = 0;
 //	, result = 0;
 //	struct timespec expirytime;
 //	struct timeval curtime;
@@ -369,37 +384,41 @@ static void *rtis_lnx_ipc_handleThreadFunc (void *ptr)
 	// Handle message from socket
 	do {
 
-		// Lock mutex
-		debug_printf("[MUTEX] Lock AREQ Mutex (Handle)\n");
-		int mutexRet = 0, writeOnce = 0;
-		while ( (mutexRet = pthread_mutex_trylock(&rtisLnxClientAREQmutex)) == EBUSY)
+		if (tryLockFirstTimeOnly == 0)
 		{
-			if (writeOnce == 0)
+			// Lock mutex
+			debug_printf("[MUTEX] Lock AREQ Mutex (Handle)\n");
+			int mutexRet = 0, writeOnce = 0;
+			while ( (mutexRet = pthread_mutex_trylock(&rtisLnxClientAREQmutex)) == EBUSY)
 			{
-				debug_printf("[MUTEX] AREQ Mutex (Handle) busy");
-				fflush(stdout);
-				writeOnce++;
-			}
-			else
-			{
-				writeOnce++;
-				if ( (writeOnce % 1000) == 0)
+				if (writeOnce == 0)
 				{
-					debug_printf(".");
+					debug_printf("[MUTEX] AREQ Mutex (Handle) busy");
+					fflush(stdout);
+					writeOnce++;
 				}
-				if (writeOnce > 0xEFFFFFF0)
-					writeOnce = 1;
-				fflush(stdout);
+				else
+				{
+					writeOnce++;
+					if ( (writeOnce % 1000) == 0)
+					{
+						debug_printf(".");
+					}
+					if (writeOnce > 0xEFFFFFF0)
+						writeOnce = 1;
+					fflush(stdout);
+				}
 			}
+			debug_printf("\n[MUTEX] AREQ Lock (Handle) status: %d\n", mutexRet);
+			tryLockFirstTimeOnly = 1;
 		}
-		debug_printf("\n[MUTEX] AREQ Lock (Handle) status: %d\n", mutexRet);
 
 		// Conditional wait for the response handled in the AREQ handling thread,
 //		// wait maximum 10 seconds
 //		gettimeofday(&curtime, NULL);
 //		expirytime.tv_sec = curtime.tv_sec + 10;
 //		expirytime.tv_nsec = curtime.tv_usec * 1000;
-		debug_printf("[MUTEX] Wait for AREQ Cond (Handle) signal...\n");
+		debug_printf("[MUTEX] Wait for AREQ Cond (Handle) signal... (areqMsgProcessStatus = %d), effectively releasing lock\n", areqMsgProcessStatus);
 //		result = pthread_cond_timedwait(&rtisLnxClientAREQcond, &rtisLnxClientAREQmutex, &expirytime);
 		pthread_cond_wait(&rtisLnxClientAREQcond, &rtisLnxClientAREQmutex);
 //		if (result == ETIMEDOUT)
@@ -408,24 +427,58 @@ static void *rtis_lnx_ipc_handleThreadFunc (void *ptr)
 //		}
 //		else
 //		{
-			debug_printf("[MUTEX] AREQ Cond Wait (Handle), status: %d\n", result);
+//			debug_printf("[MUTEX] AREQ Cond Wait (Handle), status: %d\n", result);
+		debug_printf("[MUTEX] AREQ (Handle) has lock\n");
 
-			debug_printf("[MUTEX] AREQ Signal message handled (Handle)...\n");
-			// Signal to the read thread that we're ready for more
-//			pthread_cond_signal(&rtisLnxClientAREQcond);
-			areqMsgProcessStatus = RTIS_MSG_AREQ_READY;
+		// Walk through all received AREQ messages before releasing MUTEX
+		areqMsg *searchList = rtis_ipc_areq_proc_buf, *clearList;
+		while (searchList != NULL)
+		{
+			debug_printf("\n\n[DBG] Processing \t@ 0x%.16X next \t@ 0x%.16X\n",
+					(unsigned int)searchList,
+					(unsigned int)(searchList->nextMessage));
 
 			// Must remove command type before calling NPI_AsynchMsgCback
-			((npiMsgData_t *)rtis_ipc_areq_buf)->subSys &= ~(RPC_CMD_TYPE_MASK);
+			searchList->message.subSys &= ~(RPC_CMD_TYPE_MASK);
 
-			NPI_AsynchMsgCback((npiMsgData_t *)rtis_ipc_areq_buf);
+			debug_printf("[MUTEX] AREQ Calling NPI_AsynchMsgCback (Handle)...\n");
 
-			// Clear buffer for next message
-			memset(rtis_ipc_areq_buf, 0, sizeof(npiMsgData_t));
-//		}
+			NPI_AsynchMsgCback((npiMsgData_t *)&(searchList->message));
 
-		debug_printf("[MUTEX] Unlock AREQ Mutex (Handle)\n\n");
-		pthread_mutex_unlock(&rtisLnxClientAREQmutex);
+			debug_printf("[MUTEX] AREQ (Handle) (message @ 0x%.16X)...\n", (unsigned int)searchList);
+
+			clearList = searchList;
+			// Set search list to next message
+			searchList = searchList->nextMessage;
+			// Free processed buffer
+			if (clearList == NULL)
+			{
+				// Impossible error, must abort
+				done = 1;
+				printf("[ERR] clearList buffer was already free\n");
+				break;
+			}
+			else
+			{
+	//			clearList = NULL;
+				messageCount--;
+				debug_printf("[DBG] Clearing \t\t@ 0x%.16X (processed %d messages)...\n",
+						(unsigned int)clearList,
+						messageCount);
+				memset(clearList, 0, sizeof(areqMsg));
+				free(clearList);
+			}
+		}
+		debug_printf("[MUTEX] AREQ Signal message(s) handled (Handle) (processed %d messages)...\n", messageCount);
+		// Signal to the read thread that we're ready for more
+		//			pthread_cond_signal(&rtisLnxClientAREQcond);
+		areqMsgProcessStatus = RTIS_MSG_AREQ_READY;
+
+		debug_printf("[DBG] Finished processing (processed %d messages)...\n",
+				messageCount);
+
+//		debug_printf("[MUTEX] Unlock AREQ Mutex (Handle)\n\n");
+//		pthread_mutex_unlock(&rtisLnxClientAREQmutex);
 
 	} while (!done);
 
@@ -434,55 +487,86 @@ static void *rtis_lnx_ipc_handleThreadFunc (void *ptr)
 
 static void *rtis_lnx_ipc_readThreadFunc (void *ptr)
 {
-	int done = 0, n, incomingBufOffset = 0;
+	int done = 0, n;
 //	, result = 0;
 //	struct timespec expirytime;
 //	struct timeval curtime;
 
+	int mutexRet = 0;
+#ifdef __BIG_DEBUG__
+	static int writeOnceAREQMutexTry = 0, writeOnceAREQReady = 0;
+#endif //__BIG_DEBUG__
+
 	/* thread loop */
+
+	struct pollfd ufds[1];
+	int pollRet;
+	ufds[0].fd = sNPIconnected;
+	ufds[0].events = POLLIN | POLLPRI;
 
 	// Read from socket
 	do {
-		incomingBufOffset = 0;
-		n = recv(sNPIconnected,
-				rtis_ipc_buf[0],
-				RPC_FRAME_HDR_SZ,
-				0);
-		if (n <= 0)
-		{
-			if (n < 0)
-				perror("recv");
-			done = 1;
-		}
-		else if (n == 3)
-		{
-			// We have received the header, now read out length byte and process it
-			n = recv(sNPIconnected,
-					(uint8*)&(rtis_ipc_buf[0][RPC_FRAME_HDR_SZ]),
-					((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->len,
-					0);
-			if (n == ((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->len)
-			{
-				int i;
-				debug_printf("Received %d bytes,\t subSys 0x%.2X, cmdId 0x%.2X, pData:\t",
-						((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->len,
-						((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->subSys,
-						((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->cmdId);
-				for (i = 3; i < (n + RPC_FRAME_HDR_SZ); i++)
-				{
-					debug_printf(" 0x%.2X", (uint8)rtis_ipc_buf[0][i]);
-				}
-				debug_printf("\n");
+		// To be able to continue processing previous AREQ we need to perform a non-blocking read of the socket,
+		// this is solved by using poll() to see if there are bytes to read.
 
-				do
+		// TODO: Maybe only poll in case there are AREQ messages to process?
+		pollRet = poll((struct pollfd*)&ufds, 1, 1);
+		if (pollRet == -1)
+		{
+			// Error occured in poll()
+			perror("poll");
+		}
+		else if (pollRet == 0)
+		{
+			// Timeout, could still be AREQ to process
+		}
+		else
+		{
+			if (ufds[0].revents & POLLIN) {
+				n = recv(sNPIconnected,
+						rtis_ipc_buf[0],
+						RPC_FRAME_HDR_SZ,
+						0); // normal data
+			}
+			if (ufds[0].revents & POLLPRI) {
+				n = recv(sNPIconnected,
+						rtis_ipc_buf[0],
+						RPC_FRAME_HDR_SZ,
+						MSG_OOB); // out-of-band data
+			}
+			if (n <= 0)
+			{
+				if (n < 0)
+					perror("recv");
+				done = 1;
+			}
+			else if (n == 3)
+			{
+				// We have received the header, now read out length byte and process it
+				n = recv(sNPIconnected,
+						(uint8*)&(rtis_ipc_buf[0][RPC_FRAME_HDR_SZ]),
+						((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len,
+						0);
+				if (n == ((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len)
 				{
-					if ( ( (uint8)(((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->subSys) & (uint8)RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP )
+					int i;
+					debug_printf("Received %d bytes,\t subSys 0x%.2X, cmdId 0x%.2X, pData:\t",
+							((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len,
+							((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->subSys,
+							((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->cmdId);
+					for (i = 3; i < (n + RPC_FRAME_HDR_SZ); i++)
 					{
-						numOfReceievedSRSPbytes = ((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->len + RPC_FRAME_HDR_SZ;
+						debug_printf(" 0x%.2X", (uint8)rtis_ipc_buf[0][i]);
+					}
+					debug_printf("\n");
+
+					if ( ( (uint8)(((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->subSys) & (uint8)RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP )
+					{
+						numOfReceievedSRSPbytes = ((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len + RPC_FRAME_HDR_SZ;
 
 						// Copy buffer so that we don't clear it before it's handled.
 						memcpy(rtis_ipc_srsp_buf,
-								(uint8*)&(rtis_ipc_buf[0][incomingBufOffset]),
+								(uint8*)&(rtis_ipc_buf[0][0]),
 								numOfReceievedSRSPbytes);
 
 						// and signal the synchronous reception
@@ -490,120 +574,66 @@ static void *rtis_lnx_ipc_readThreadFunc (void *ptr)
 						debug_printf("Client Read: (len %d): ", numOfReceievedSRSPbytes);
 						fflush(stdout);
 						pthread_cond_signal(&rtisLnxClientSREQcond);
-
 					}
-					else if ( ( (uint8)(((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->subSys) & (uint8)RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ )
+					else if ( ( (uint8)(((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->subSys) & (uint8)RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ )
 					{
-						int mutexRet = 0, writeOnce = 0;
-
-						// TODO: Can we replace this while with something a little safer?
-						while (areqMsgProcessStatus != RTIS_MSG_AREQ_READY)
-						{
-							// Can only process 1 AREQ at a time...
-							if (writeOnce == 0)
-							{
-								debug_printf("[MUTEX] Waiting for AREQ Handle to acknowledge processing the message.");
-								fflush(stdout);
-								writeOnce++;
-							}
-							else
-							{
-								writeOnce++;
-								if ( (writeOnce % 1000) == 0)
-								{
-									debug_printf(".");
-								}
-								if (writeOnce > 0xEFFFFFF0)
-									writeOnce = 1;
-								fflush(stdout);
-							}
-						}
-						debug_printf("\n");
-
-						debug_printf("[MUTEX] Lock AREQ Mutex (Read)\n");
-						while ( (mutexRet = pthread_mutex_trylock(&rtisLnxClientAREQmutex)) == EBUSY)
-						{
-							if (writeOnce == 0)
-							{
-								debug_printf("[MUTEX] AREQ Mutex (Read) busy");
-								fflush(stdout);
-								writeOnce++;
-							}
-							else
-							{
-								writeOnce++;
-								if ( (writeOnce % 1000) == 0)
-								{
-									debug_printf(".");
-								}
-								if (writeOnce > 0xEFFFFFF0)
-									writeOnce = 1;
-								fflush(stdout);
-							}
-						}
-						debug_printf("\n[MUTEX] AREQ Lock (Read), status: %d\n", mutexRet);
-
+						debug_printf("RPC_CMD_AREQ cmdId: 0x%.2X, %.6d\n", ((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->cmdId, counter++);
 						// Verify the size of the incoming message before passing it
-						if ( (((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->len + RPC_FRAME_HDR_SZ) <= sizeof(npiMsgData_t) )
+						if ( (((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len + RPC_FRAME_HDR_SZ) <= sizeof(npiMsgData_t) )
 						{
-							areqMsgProcessStatus = RTIS_MSG_AREQ_BUSY;
+							// Allocate memory for new message
+							areqMsg *newMessage = (areqMsg *) malloc(sizeof(areqMsg));
+							if (newMessage == NULL)
+							{
+								// Serious error, must abort
+								done = 1;
+								printf("[ERR] Could not allocate memory for AREQ message\n");
+								break;
+							}
+							else
+							{
+								messageCount++;
+								memset(newMessage, 0, sizeof(areqMsg));
+								debug_printf("\n[DBG] Allocated \t@ 0x%.16X (received\040 %d messages)...\n",
+										(unsigned int)newMessage,
+										messageCount);
+							}
+
+							debug_printf("Filling new message (@ 0x%.16X)...\n", (unsigned int)newMessage);
 
 							// Copy AREQ message into AREQ buffer
-							memcpy(rtis_ipc_areq_buf,
-									(uint8*)&(rtis_ipc_buf[0][incomingBufOffset]),
-									(((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->len + RPC_FRAME_HDR_SZ));
+							memcpy(&(newMessage->message),
+									(uint8*)&(rtis_ipc_buf[0][0]),
+									(((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len + RPC_FRAME_HDR_SZ));
 
-
-							debug_printf("[MUTEX] Unlock AREQ Mutex (Read)\n");
-							// Then unlock the thread so the handle can handle the AREQ
-							pthread_mutex_unlock(&rtisLnxClientAREQmutex);
-
-							debug_printf("[MUTEX] AREQ Signal message read (Read)...\n");
-							// Signal to the handle thread an AREQ message is ready
-							pthread_cond_signal(&rtisLnxClientAREQcond);
-							debug_printf("[MUTEX] AREQ Signal message read (Read)... sent\n");
-
-							//							debug_printf("[MUTEX] Lock AREQ Mutex (Read)\n");
-							//							if ( (mutexRet = pthread_mutex_trylock(&rtisLnxClientAREQmutex)) == EBUSY)
-							//							{
-							//								debug_printf("[MUTEX] AREQ Mutex (Read) busy");
-							//								// If mutex is busy it means data the AREQ handler has it, which
-							//								// is good! We can't, and won't have to, wait for the 'AREQ handled' signal
-							//							}
-							//							else if (mutexRet == 0)
-							//							{
-							//								debug_printf("\n[MUTEX] AREQ Lock (Read), status: %d\n", mutexRet);
-							//
-							//								// Conditional wait for the response handled in the AREQ handling thread,
-							//								// wait maximum 10 seconds
-							//								gettimeofday(&curtime, NULL);
-							//								expirytime.tv_sec = curtime.tv_sec + 10;
-							//								expirytime.tv_nsec = curtime.tv_usec * 1000;
-							//								debug_printf("[MUTEX] Wait for AREQ Cond (Read) signal...\n");
-							//								result = pthread_cond_timedwait(&rtisLnxClientAREQcond, &rtisLnxClientAREQmutex, &expirytime);
-							//								if (result == ETIMEDOUT)
-							//								{
-							//									debug_printf("[MUTEX] AREQ Cond Wait (Read) timed out!\n");
-							//								}
-							//								else
-							//								{
-							//									debug_printf("[MUTEX] AREQ Cond Wait (Read) timed out!\n");
-							//								}
-							//								debug_printf("[MUTEX] Unlock AREQ Mutex (Read)\n");
-							//								// Then unlock the thread so the handle can handle the AREQ
-							//								pthread_mutex_unlock(&rtisLnxClientAREQmutex);
-							//							}
+							// Place message in read list
+							if (rtis_ipc_areq_rec_buf == NULL)
+							{
+								// First message in list
+								rtis_ipc_areq_rec_buf = newMessage;
+							}
+							else
+							{
+								areqMsg *searchList = rtis_ipc_areq_rec_buf;
+								// Find last entry and place it here
+								while (searchList->nextMessage != NULL)
+								{
+									searchList = searchList->nextMessage;
+								}
+								searchList->nextMessage = newMessage;
+							}
 						}
 						else
 						{
 							// Serious error
 							printf("ERR: Incoming AREQ has incorrect length field; %d\n",
-									((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->len);
+									((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len);
 
 							debug_printf("[MUTEX] Unlock AREQ Mutex (Read)\n");
 							// Then unlock the thread so the handle can handle the AREQ
 							pthread_mutex_unlock(&rtisLnxClientAREQmutex);
 						}
+
 					}
 					else
 					{
@@ -611,33 +641,145 @@ static void *rtis_lnx_ipc_readThreadFunc (void *ptr)
 						printf("ERR: Received SREQ\n");
 					}
 
-					// Increase buffer offset pointer to handle the rest of the messages.
-					incomingBufOffset += (((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->len + RPC_FRAME_HDR_SZ);
-
-					// When we (correctly) reach the end of the buffer the appointed len should be 0
-					if ( (((npiMsgData_t *)&(rtis_ipc_buf[0][incomingBufOffset]))->len) == 0)
-						break;
-					else if (incomingBufOffset > RTIS_IPC_BUF_SIZE)
-					{
-						// Serious error!
-						printf("ERR: Incoming data buffer overflow. The incoming NPI message is broken.\n");
-					}
-
-
-				} while (incomingBufOffset < RTIS_IPC_BUF_SIZE);
-
-				// Clear buffer for next message
-				memset(rtis_ipc_buf[0], 0, RTIS_IPC_BUF_SIZE);
+					// Clear buffer for next message
+					memset(rtis_ipc_buf[0], 0, RTIS_IPC_BUF_SIZE);
+				}
+				else
+				{
+					// Impossible. ... ;)
+				}
 			}
 			else
 			{
 				// Impossible. ... ;)
 			}
 		}
-		else
+
+		// Place processing of AREQ message here so it can be retried without receiving a new message
+		// TODO: Can we replace this while with something a little safer?
+		if (areqMsgProcessStatus != RTIS_MSG_AREQ_READY)
 		{
-			// Impossible. ... ;)
+#ifdef __BIG_DEBUG__
+			// Can only process 1 AREQ at a time...
+			if (writeOnceAREQReady == 0)
+			{
+				debug_printf("[MUTEX] Waiting for AREQ Handle to acknowledge processing the message\n");
+				fflush(stdout);
+				writeOnceAREQReady++;
+			}
+			else
+			{
+				writeOnceAREQReady++;
+				if ( (writeOnceAREQReady % 1000) == 0)
+				{
+					debug_printf("[MUTEX] Still waiting for AREQ Handle to acknowledge processing the message\n");
+				}
+				else if ( (writeOnceAREQReady % 10) == 0)
+				{
+					debug_printf("*");
+				}
+				if (writeOnceAREQReady > 0xEFFFFFF0)
+					writeOnceAREQReady = 1;
+				fflush(stdout);
+			}
+#endif //__BIG_DEBUG__
+			if (messageCount > 50)
+			{
+				printf("[WARNING] AREQ message count: %4d", messageCount);
+			}
 		}
+		// Handle thread must make sure it has finished its list. See if there are new messages to move over
+		else if (rtis_ipc_areq_rec_buf != NULL)
+		{
+#ifdef __BIG_DEBUG__
+			if (writeOnceAREQMutexTry == 0)
+				debug_printf("[MUTEX] Lock AREQ Mutex (Read)\n");
+#endif //__BIG_DEBUG__
+			if ( (mutexRet = pthread_mutex_trylock(&rtisLnxClientAREQmutex)) == EBUSY)
+			{
+#ifdef __BIG_DEBUG__
+				if (writeOnceAREQMutexTry == 0)
+				{
+					debug_printf("[MUTEX] AREQ Mutex (Read) busy");
+					fflush(stdout);
+					writeOnceAREQMutexTry++;
+				}
+				else
+				{
+					writeOnceAREQMutexTry++;
+					if ( (writeOnceAREQMutexTry % 100) == 0)
+					{
+						debug_printf(".");
+					}
+					if (writeOnceAREQMutexTry > 0xEFFFFFF0)
+						writeOnceAREQMutexTry = 1;
+					fflush(stdout);
+				}
+#endif //__BIG_DEBUG__
+			}
+			else if (mutexRet == 0)
+			{
+#ifdef __BIG_DEBUG__
+				writeOnceAREQMutexTry = 0;
+				debug_printf("\n[MUTEX] AREQ Lock (Read), status: %d\n", mutexRet);
+#endif //__BIG_DEBUG__
+
+				areqMsgProcessStatus = RTIS_MSG_AREQ_BUSY;
+
+				// Move list over for processing
+				rtis_ipc_areq_proc_buf = rtis_ipc_areq_rec_buf;
+				// Clear receiving buffer for new messages
+				rtis_ipc_areq_rec_buf = NULL;
+
+				debug_printf("[DBG] Copied message list (processed %d messages)...\n",
+						messageCount);
+
+				debug_printf("[MUTEX] Unlock AREQ Mutex (Read)\n");
+				// Then unlock the thread so the handle can handle the AREQ
+				pthread_mutex_unlock(&rtisLnxClientAREQmutex);
+
+				debug_printf("[MUTEX] AREQ Signal message read (Read)...\n");
+				// Signal to the handle thread an AREQ message is ready
+				pthread_cond_signal(&rtisLnxClientAREQcond);
+				debug_printf("[MUTEX] AREQ Signal message read (Read)... sent\n");
+
+				//							debug_printf("[MUTEX] Lock AREQ Mutex (Read)\n");
+				//							if ( (mutexRet = pthread_mutex_trylock(&rtisLnxClientAREQmutex)) == EBUSY)
+				//							{
+				//								debug_printf("[MUTEX] AREQ Mutex (Read) busy");
+				//								// If mutex is busy it means data the AREQ handler has it, which
+				//								// is good! We can't, and won't have to, wait for the 'AREQ handled' signal
+				//							}
+				//							else if (mutexRet == 0)
+				//							{
+				//								debug_printf("\n[MUTEX] AREQ Lock (Read), status: %d\n", mutexRet);
+				//
+				//								// Conditional wait for the response handled in the AREQ handling thread,
+				//								// wait maximum 10 seconds
+				//								gettimeofday(&curtime, NULL);
+				//								expirytime.tv_sec = curtime.tv_sec + 10;
+				//								expirytime.tv_nsec = curtime.tv_usec * 1000;
+				//								debug_printf("[MUTEX] Wait for AREQ Cond (Read) signal...\n");
+				//								result = pthread_cond_timedwait(&rtisLnxClientAREQcond, &rtisLnxClientAREQmutex, &expirytime);
+				//								if (result == ETIMEDOUT)
+				//								{
+				//									debug_printf("[MUTEX] AREQ Cond Wait (Read) timed out!\n");
+				//								}
+				//								else
+				//								{
+				//									debug_printf("[MUTEX] AREQ Cond Wait (Read) timed out!\n");
+				//								}
+				//								debug_printf("[MUTEX] Unlock AREQ Mutex (Read)\n");
+				//								// Then unlock the thread so the handle can handle the AREQ
+				//								pthread_mutex_unlock(&rtisLnxClientAREQmutex);
+				//							}
+
+#ifdef __BIG_DEBUG__
+				writeOnceAREQReady = 0;
+#endif //__BIG_DEBUG__
+			}
+		}
+
 	} while (!done);
 
 
@@ -706,7 +848,7 @@ void RTIS_Close(void)
 
 /**************************************************************************************************
  *
- * @fn          RTIS_SendSynchData
+ * @fn          NPI_SendSynchData
  *
  * @brief       This function sends a message synchronously over the socket
  *
@@ -721,7 +863,7 @@ void RTIS_Close(void)
  * @return      None.
  *
  **************************************************************************************************/
-void RTIS_SendSynchData (npiMsgData_t *pMsg)
+void NPI_SendSynchData (npiMsgData_t *pMsg)
 {
 	int result = 0;
 	struct timespec expirytime;
@@ -786,6 +928,7 @@ void RTIS_SendSynchData (npiMsgData_t *pMsg)
 	{
 		// TODO: Indicate synchronous transaction error
 		debug_printf("[MUTEX] SRSP Cond Wait timed out!\n");
+		printf("[ERR] SRSP Cond Wait timed out!\n");
 	}
 
 //	int pollOK = 0;
@@ -878,7 +1021,7 @@ void RTIS_SendSynchData (npiMsgData_t *pMsg)
 
 /**************************************************************************************************
  *
- * @fn          RTIS_SendAsynchData
+ * @fn          NPI_SendAsynchData
  *
  * @brief       This function sends a message asynchronously over the socket
  *
@@ -893,7 +1036,7 @@ void RTIS_SendSynchData (npiMsgData_t *pMsg)
  * @return      None.
  *
  **************************************************************************************************/
-void RTIS_SendAsynchData (npiMsgData_t *pMsg)
+void NPI_SendAsynchData (npiMsgData_t *pMsg)
 {
 	// Add Proper RPC type to header
 	((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_AREQ;
@@ -954,7 +1097,7 @@ rStatus_t RTI_ReadItemEx( uint8 profileId, uint8 itemId, uint8 len, uint8 *pValu
 
 
   // send Read Item request to NPI socket synchronously
-  RTIS_SendSynchData( &pMsg );
+  NPI_SendSynchData( &pMsg );
 
 
   // DEBUG
@@ -1010,7 +1153,7 @@ rStatus_t RTI_ReadItem( uint8 itemId, uint8 len, uint8 *pValue )
   pMsg.pData[1] = len;
 
   // send Read Item request to NP RTIS synchronously
-  RTIS_SendSynchData( &pMsg );
+  NPI_SendSynchData( &pMsg );
 
   // DEBUG
   if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
@@ -1071,7 +1214,7 @@ rStatus_t RTI_WriteItemEx( uint8 profileId, uint8 itemId, uint8 len, uint8 *pVal
   rtisAttribEConv( itemId, len, &pMsg.pData[3] );
 
   // send Write Item request to NP RTIS synchronously
-  RTIS_SendSynchData( &pMsg );
+  NPI_SendSynchData( &pMsg );
 
   // DEBUG
   if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
@@ -1125,7 +1268,7 @@ rStatus_t RTI_WriteItem( uint8 itemId, uint8 len, uint8 *pValue )
   rtisAttribEConv( itemId, len, &pMsg.pData[2] );
 
   // send Write Item request to NP RTIS synchronously
-  RTIS_SendSynchData( &pMsg );
+  NPI_SendSynchData( &pMsg );
 
   // DEBUG
   if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
@@ -1191,7 +1334,7 @@ RTILIB_API void RTI_InitReq( void )
   pMsg.len    = 0;
 
   // send Init request to NP RTIS asynchronously as a confirm is due back
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1223,7 +1366,7 @@ RTILIB_API void RTI_PairReq( void )
   pMsg.len    = 0;
 
   // send Pair request to NP RTIS asynchronously as a confirm is due back
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1259,7 +1402,7 @@ RTILIB_API void RTI_PairAbortReq( void )
   pMsg.len    = 0;
 
   // send Pair request to NP RTIS asynchronously as a confirm is due back
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1298,7 +1441,7 @@ RTILIB_API void RTI_AllowPairReq( void )
   pMsg.len    = 0;
 
   // send Pair request to NP RTIS asynchronously as a confirm is due back
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1331,7 +1474,7 @@ RTILIB_API void RTI_AllowPairAbortReq( void )
   pMsg.len    = 0;
 
   // send Pair request to NP RTIS asynchronously as a confirm is due back
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1362,7 +1505,7 @@ RTILIB_API void RTI_UnpairReq( uint8 dstIndex )
   pMsg.pData[0] = dstIndex;
 
   // send Pair request to NP RTIS asynchronously as a confirm is due back
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1407,7 +1550,7 @@ RTILIB_API void RTI_SendDataReq( uint8 dstIndex, uint8 profileId, uint16 vendorI
   msg_memcpy( &pMsg.pData[6], pData, len );
 
   // send Send Data request to NP RTIS synchronously
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1442,7 +1585,7 @@ RTILIB_API void RTI_StandbyReq( uint8 mode )
   pMsg.pData[0] = mode;
 
   // send Standby request to NP RTIS asynchronously as a confirm is due back
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1475,7 +1618,7 @@ RTILIB_API void RTI_RxEnableReq( uint16 duration )
   RTI_SET_ITEM_WORD( &pMsg.pData[0], (duration & 0x00FFFFFF) ); // max duration is 0x00FF_FFFF
 
   // send Rx Enable request to NP RTIS asynchronously as a confirm is due back
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1505,7 +1648,7 @@ RTILIB_API void RTI_EnableSleepReq( void )
   pMsg.len    = 0;
 
   // send Enable Sleep request to NP RTIS asynchronously
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1541,7 +1684,7 @@ RTILIB_API void RTI_DisableSleepReq( void )
   pMsg.pData[1] = 0xCC;
 
   // send command to slave
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1573,7 +1716,7 @@ RTILIB_API void RTI_SwResetReq( void )
   pMsg.len      = 0;
 
   // send command to slave
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 
   // wait for 200ms.
 //  halDelay(200, 1);
@@ -1613,7 +1756,7 @@ RTILIB_API void RTI_TestModeReq( uint8 mode, int8 txPower, uint8 channel )
   pMsg.pData[2] = channel;
 
   // send command to slave
-  RTIS_SendAsynchData( &pMsg );
+  NPI_SendAsynchData( &pMsg );
 }
 
 /**************************************************************************************************
@@ -1644,7 +1787,7 @@ RTILIB_API uint16 RTI_TestRxCounterGetReq(uint8 resetFlag)
   pMsg.pData[0] = resetFlag;
 
   // send serialized request to NP RTIS synchronously
-  RTIS_SendSynchData( &pMsg );
+  NPI_SendSynchData( &pMsg );
 
   // return the status, which is stored is the first byte of the payload
   return (pMsg.pData[0] + ((uint16)pMsg.pData[1] << 8));
@@ -1673,89 +1816,89 @@ RTILIB_API uint16 RTI_TestRxCounterGetReq(uint8 resetFlag)
  */
 void NPI_AsynchMsgCback( npiMsgData_t *pMsg )
 {
-  if (rtisState != RTIS_STATE_READY)
-  {
-    return;
-  }
+	if (rtisState != RTIS_STATE_READY)
+	{
+		return;
+	}
 
-  if (pMsg->subSys == RPC_SYS_RCAF)
-  {
-    switch( pMsg->cmdId )
-    {
-    // confirmation to init request
-    case RTIS_CMD_ID_RTI_INIT_CNF:
-      RTI_InitCnf( (rStatus_t)pMsg->pData[0] );
-      break;
+	if (pMsg->subSys == RPC_SYS_RCAF)
+	{
+		switch( pMsg->cmdId )
+		{
+		// confirmation to init request
+		case RTIS_CMD_ID_RTI_INIT_CNF:
+			RTI_InitCnf( (rStatus_t)pMsg->pData[0] );
+			break;
 
-    // confirmation to pair request
-    case RTIS_CMD_ID_RTI_PAIR_CNF:
-      // status, pairing ref table index, pairing table device type
-      RTI_PairCnf( (rStatus_t)pMsg->pData[0], pMsg->pData[1], pMsg->pData[2] );
-      break;
+			// confirmation to pair request
+		case RTIS_CMD_ID_RTI_PAIR_CNF:
+			// status, pairing ref table index, pairing table device type
+			RTI_PairCnf( (rStatus_t)pMsg->pData[0], pMsg->pData[1], pMsg->pData[2] );
+			break;
 
-    // confirmation to pair abort request
-    case RTIS_CMD_ID_RTI_PAIR_ABORT_CNF:
-      RTI_PairAbortCnf( (rStatus_t) pMsg->pData[0] );
-      break;
+			// confirmation to pair abort request
+		case RTIS_CMD_ID_RTI_PAIR_ABORT_CNF:
+			RTI_PairAbortCnf( (rStatus_t) pMsg->pData[0] );
+			break;
 
-    // confirmation to allow pair request
-    case RTIS_CMD_ID_RTI_ALLOW_PAIR_CNF:
-      RTI_AllowPairCnf( (rStatus_t) pMsg->pData[0], pMsg->pData[1], pMsg->pData[2]);
-      break;
+			// confirmation to allow pair request
+		case RTIS_CMD_ID_RTI_ALLOW_PAIR_CNF:
+			RTI_AllowPairCnf( (rStatus_t) pMsg->pData[0], pMsg->pData[1], pMsg->pData[2]);
+			break;
 
-    // confirmation to send data request
-    case RTIS_CMD_ID_RTI_SEND_DATA_CNF:
-      RTI_SendDataCnf( (rStatus_t)pMsg->pData[0] );
-      break;
+			// confirmation to send data request
+		case RTIS_CMD_ID_RTI_SEND_DATA_CNF:
+			RTI_SendDataCnf( (rStatus_t)pMsg->pData[0] );
+			break;
 
-    // indication of received data
-    case RTIS_CMD_ID_RTI_REC_DATA_IND:
-      RTI_ReceiveDataInd( pMsg->pData[0], pMsg->pData[1],
-        pMsg->pData[2] | (pMsg->pData[3] << 8), // vendor Id
-        pMsg->pData[4],
-        pMsg->pData[5],
-        pMsg->pData[6],
-        &pMsg->pData[7]);
-      break;
+			// indication of received data
+		case RTIS_CMD_ID_RTI_REC_DATA_IND:
+			RTI_ReceiveDataInd( pMsg->pData[0], pMsg->pData[1],
+					pMsg->pData[2] | (pMsg->pData[3] << 8), // vendor Id
+					pMsg->pData[4],
+					pMsg->pData[5],
+					pMsg->pData[6],
+					&pMsg->pData[7]);
+			break;
 
-    case RTIS_CMD_ID_RTI_STANDBY_CNF:
-      RTI_StandbyCnf( (rStatus_t) pMsg->pData[0] );
-      break;
+		case RTIS_CMD_ID_RTI_STANDBY_CNF:
+			RTI_StandbyCnf( (rStatus_t) pMsg->pData[0] );
+			break;
 
-    // confirmation to send data request
-    case RTIS_CMD_ID_RTI_ENABLE_SLEEP_CNF:
-      RTI_EnableSleepCnf( (rStatus_t)pMsg->pData[0] );
-      break;
+			// confirmation to send data request
+		case RTIS_CMD_ID_RTI_ENABLE_SLEEP_CNF:
+			RTI_EnableSleepCnf( (rStatus_t)pMsg->pData[0] );
+			break;
 
-    // confirmation to send data request
-    case RTIS_CMD_ID_RTI_DISABLE_SLEEP_CNF:
-      RTI_DisableSleepCnf( (rStatus_t)pMsg->pData[0] );
-      break;
+			// confirmation to send data request
+		case RTIS_CMD_ID_RTI_DISABLE_SLEEP_CNF:
+			RTI_DisableSleepCnf( (rStatus_t)pMsg->pData[0] );
+			break;
 
-    case RTIS_CMD_ID_RTI_RX_ENABLE_CNF:
-      RTI_RxEnableCnf( (rStatus_t ) pMsg->pData[0] );
-      break;
+		case RTIS_CMD_ID_RTI_RX_ENABLE_CNF:
+			RTI_RxEnableCnf( (rStatus_t ) pMsg->pData[0] );
+			break;
 
-    case RTIS_CMD_ID_RTI_UNPAIR_CNF:
-      RTI_UnpairCnf( (rStatus_t) pMsg->pData[0],
-        pMsg->pData[1] ); // dstIndex
-      break;
+		case RTIS_CMD_ID_RTI_UNPAIR_CNF:
+			RTI_UnpairCnf( (rStatus_t) pMsg->pData[0],
+					pMsg->pData[1] ); // dstIndex
+			break;
 
-    case RTIS_CMD_ID_RTI_UNPAIR_IND:
-      RTI_UnpairInd( pMsg->pData[0] ); // dstIndex
-      break;
+		case RTIS_CMD_ID_RTI_UNPAIR_IND:
+			RTI_UnpairInd( pMsg->pData[0] ); // dstIndex
+			break;
 
-    default:
-      // nothing can be done here!
-      break;
-    }
-  }
-  else if (pMsg->subSys == RPC_SYS_RCN_CLIENT)
-  {
+		default:
+			// nothing can be done here!
+			break;
+		}
+	}
+	else if (pMsg->subSys == RPC_SYS_RCN_CLIENT)
+	{
 #ifdef _WIN32 // TODO: remove this compile flag once RCNS is ported to an app processor
-    RCNS_AsynchMsgCback(pMsg);
+		RCNS_AsynchMsgCback(pMsg);
 #endif
-  }
+	}
 }
 
 
