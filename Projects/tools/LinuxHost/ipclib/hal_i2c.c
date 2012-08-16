@@ -183,13 +183,8 @@ void HalI2cWrite(uint8 port, uint8 *pBuf, uint8 len)
   {
     /* ERROR HANDLING: i2c transaction failed */
     printf("Failed to write to the i2c bus for %d ms. read %d byte(s)...reason: %s\n", I2C_OPEN_100MS_TIMEOUT, res, strerror(errno));
-    printf("Exit Now ...time to debug\n");
+    printf("RNP may have reset unexpectedly. Keep going...\n");
     printf("\n\n");
-#ifdef __BIG_DEBUG__
-    printf("Closing I2C ...\n");
-#endif
-    close(i2cDevFd);
-    exit(-1); //if you don't want to exit, return a error and handle it.
   }
 
   pthread_mutex_unlock(&I2cMutex1);
@@ -229,13 +224,8 @@ void HalI2cRead(uint8 port, uint8 *pBuf, uint8 len)
     		I2C_OPEN_100MS_TIMEOUT,
     		res,
     		strerror(errno));
-    printf("Exit Now ...time to debug\n");
+    printf("RNP may have reset unexpectedly. Keep going...\n");
     printf("\n\n");
-#ifdef __BIG_DEBUG__
-  printf("Closing I2C...\n");
-#endif
-    close(i2cDevFd);
-    exit(-1); //if you don't want to exit, return a error and handle it.
   }
 
 #ifdef __BIG_DEBUG__

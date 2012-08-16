@@ -918,9 +918,9 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 	debug_printf("Waiting for synchronous response...\n");
 
 	// Conditional wait for the response handled in the receiving thread,
-	// wait maximum 10 seconds
+	// wait maximum 4 seconds
 	gettimeofday(&curtime, NULL);
-	expirytime.tv_sec = curtime.tv_sec + 10;
+	expirytime.tv_sec = curtime.tv_sec + 4;
 	expirytime.tv_nsec = curtime.tv_usec * 1000;
 	debug_printf("[MUTEX] Wait for SRSP Cond signal...\n");
 	result = pthread_cond_timedwait(&rtisLnxClientSREQcond, &rtisLnxClientSREQmutex, &expirytime);
@@ -929,62 +929,12 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 		// TODO: Indicate synchronous transaction error
 		debug_printf("[MUTEX] SRSP Cond Wait timed out!\n");
 		printf("[ERR] SRSP Cond Wait timed out!\n");
+
+		// Clear response buffer before processing
+		memset(rtis_ipc_srsp_buf, 0, sizeof(npiMsgData_t));
 	}
-
-//	int pollOK = 0;
-//	struct pollfd ufds;
-//	if (firstAttempt > 0)
-//	{
-//		printf("Received data out of bounds!...\n");
-//		numOfReceievedSRSPbytes = recv(sNPIconnected, rtis_ipc_buf[1], RTIS_IPC_BUF_SIZE, MSG_OOB);
-//
-//		ufds.fd = sNPIconnected;
-//		ufds.events = POLLIN | POLLOUT;	// Poll for incoming data and out-of-band data
-//
-//		// Poll the socket for 3 seconds at a time
-//		do {
-//			numOfReceievedSRSPbytes = poll((struct pollfd*)&ufds, 1, 3000);
-//
-//			if (numOfReceievedSRSPbytes < 0)
-//			{
-//				perror("poll");
-//			}
-//			else if (t == 0)
-//			{
-//				printf("Still polling for synchronous response...\n");
-//			}
-//			else
-//			{
-//				if (ufds.revents &  POLLIN)
-//				{
-//					numOfReceievedSRSPbytes = recv(sNPIconnected, rtis_ipc_buf[1], RTIS_IPC_BUF_SIZE, 0);
-//					// Indicate that we are finished polling.
-//					pollOK = 1;
-//				}
-//				else if (ufds.revents &  POLLOUT)
-//				{
-//					// Receive data out-of-bounds
-//					printf("Received data out of bounds!...\n");
-//					numOfReceievedSRSPbytes = recv(sNPIconnected, rtis_ipc_buf[1], RTIS_IPC_BUF_SIZE, MSG_OOB);
-//					// Indicate that we are finished polling.
-//					//				if (numOfReceievedSRSPbytes > 0)
-//					pollOK = 1;
-//				}
-//				else
-//				{
-//					printf("Unknown error occurred while polling for synchronous response...\n");
-//				}
-//			}
-//		} while (!pollOK);
-//	}
-//	else
-//	{
-//		numOfReceievedSRSPbytes = recv(sNPIconnected, rtis_ipc_buf[0], RTIS_IPC_BUF_SIZE, 0);
-//		firstAttempt++;
-//	}
-
 	// Wait for response
-	if ( numOfReceievedSRSPbytes > 0)
+	else if ( numOfReceievedSRSPbytes > 0)
 	{
 		for (i = 0; i < numOfReceievedSRSPbytes; i++)
 		{
@@ -1010,8 +960,9 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 			perror("recv");
 		else
 			printf("Server closed connection\n");
-		exit(1);
 	}
+
+	numOfReceievedSRSPbytes = 0;
 
 	// Now unlock the mutex before returning
 	debug_printf("[MUTEX] Unlock SRSP Mutex\n");
@@ -1886,6 +1837,10 @@ void NPI_AsynchMsgCback( npiMsgData_t *pMsg )
 
 		case RTIS_CMD_ID_RTI_UNPAIR_IND:
 			RTI_UnpairInd( pMsg->pData[0] ); // dstIndex
+			break;
+
+		case RTIS_CMD_ID_RTI_RESET_IND:
+			RTI_ResetInd();
 			break;
 
 		default:

@@ -527,6 +527,7 @@ extern RTILIB_API void RTI_StandbyReq( uint8 mode );
 extern RTILIB_API void RTI_RxEnableReq( uint16 duration );
 extern RTILIB_API void RTI_EnableSleepReq( void );
 extern RTILIB_API void RTI_DisableSleepReq( void );
+extern RTILIB_API void RTI_EnterBootModeReq( void );
 
 // RTI Callbacks
 extern void RTI_InitCnf( rStatus_t status );
@@ -541,6 +542,7 @@ extern void RTI_ReceiveDataInd( uint8 srcIndex, uint8 profileId, uint16 vendorId
 extern void RTI_RxEnableCnf( rStatus_t status );
 extern void RTI_EnableSleepCnf( rStatus_t status );
 extern void RTI_DisableSleepCnf( rStatus_t status );
+extern void RTI_ResetInd( void );
 
 // The following function is used by a module within radio processor.
 // The functionsi not intended for use by application in host processor.

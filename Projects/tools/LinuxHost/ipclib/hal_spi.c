@@ -41,11 +41,7 @@
 /**************************************************************************************************
  *                                           INCLUDES
  **************************************************************************************************/
-/*#include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include "spidev.h"*/
+#include <errno.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -59,8 +55,6 @@
 
 #include "pthread.h"
 
-//#include  "hal_board.h"
-//#include  "hal_defs.h"
 #include  "hal_types.h"
 #include  "hal_spi.h"
 
@@ -85,7 +79,7 @@ static int spiDevFd;
 
 
 static uint8 bits = 8;
-static uint32 speed = 500000;
+static uint32 speed = 500000; //Hz
 static uint16 delay = 0;
 
 pthread_mutex_t spiMutex1 = PTHREAD_MUTEX_INITIALIZER;
@@ -124,10 +118,12 @@ void HalSpiInit(const char *devpath, uint32 speedIn)
   uint8_t mode=0;
   uint8_t bits = 8;
   speed = speedIn;
-  
+
+#ifdef __BIG_DEBUG__
   printf("Opening %s ...\n",devpath);
+#endif
   spiDevFd = open(devpath, O_RDWR );
-  if (spiDevFd <0) 
+  if (spiDevFd <0)
   {
     perror(devpath);
     printf("%s open failed\n",devpath);
@@ -137,16 +133,16 @@ void HalSpiInit(const char *devpath, uint32 speedIn)
    * spi mode
    */
   ret = ioctl(spiDevFd, SPI_IOC_WR_MODE, &mode);
-  if (ret == -1)
+  if (ret < 0 )
   {
-    printf("can't set spi mode\n");
+    perror("can't set spi mode\n");
     exit(-1);
   }
 
   ret = ioctl(spiDevFd, SPI_IOC_RD_MODE, &mode);
-  if (ret == -1)
+  if (ret < 0 )
   {
-    printf("can't get spi mode\n");
+    perror("can't set spi mode\n");
     exit(-1);
   }
 
@@ -154,16 +150,16 @@ void HalSpiInit(const char *devpath, uint32 speedIn)
  * bits per word
  */
   ret = ioctl(spiDevFd, SPI_IOC_WR_BITS_PER_WORD, &bits);
-  if (ret == -1)
+  if (ret < 0 )
   {
-    printf("can't set bits per word\n");
+    perror("can't set bits per word\n");
     exit(-1);
   }
 
   ret = ioctl(spiDevFd, SPI_IOC_RD_BITS_PER_WORD, &bits);
-  if (ret == -1)
+  if (ret < 0 )
   {
-    printf("can't get bits per word\n");
+    perror("can't get bits per word\n");
     exit(-1);
   }
 
@@ -171,22 +167,24 @@ void HalSpiInit(const char *devpath, uint32 speedIn)
  * max speed hz
  */
   ret = ioctl(spiDevFd, SPI_IOC_WR_MAX_SPEED_HZ, &speed);
-  if (ret == -1)
+  if (ret < 0 )
   {
-    printf("can't set max speed hz\n");
+    perror("can't set max speed hz\n");
     exit(-1);
   }
 
   ret = ioctl(spiDevFd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);
-  if (ret == -1)
+  if (ret < 0 )
   {
-    printf("can't get max speed hz\n");
+    perror("can't get max speed hz\n");
     exit(-1);
   }
 
+#ifdef __BIG_DEBUG__
   printf("spi mode: %d\n", mode);
   printf("bits per word: %d\n", bits);
   printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000);
+#endif
 
 
 }
@@ -216,8 +214,6 @@ void HalSpiClose( void )
  **************************************************************************************************/
 void HalSpiPoll(void)
 {
-//  extern void zapPhySpiPoll(uint8 port);
-//  zapPhySpiPoll(0);
 }
 /**************************************************************************************************
  * @fn      HalSpiWrite
@@ -234,6 +230,7 @@ void HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 {
   uint8* tx;
   uint8* rx;
+  int ret;
 #ifdef __BIG_DEBUG__
   uint8 i;
 #endif
@@ -248,7 +245,7 @@ void HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
   tr.delay_usecs = delay;
   tr.speed_hz = speed;
   tr.bits_per_word = bits;
-  
+
   pthread_mutex_lock(&spiMutex1);
 #ifdef __BIG_DEBUG__
   printf("SPI: Sending ...");
@@ -256,7 +253,11 @@ void HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
   printf("\n");
 #endif
 
-  ioctl(spiDevFd, SPI_IOC_MESSAGE(1), &tr);
+  ret = ioctl(spiDevFd, SPI_IOC_MESSAGE(1), &tr);
+  if (ret < 0 )
+  {
+    perror("can't write to SPI \n");
+  }
 
   memcpy(pBuf, rx, len);
 #ifdef __BIG_DEBUG__
@@ -265,7 +266,6 @@ void HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
   printf("\n");
 #endif
   free(rx);
-
   pthread_mutex_unlock(&spiMutex1);
 }
 

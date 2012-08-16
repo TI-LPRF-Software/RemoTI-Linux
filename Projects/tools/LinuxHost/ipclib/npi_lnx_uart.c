@@ -83,7 +83,7 @@
 #define NPI_CBACK_BUF_HDR_LEN (sizeof(npiAsyncDataHdr_t) + NPI_MSG_DATA_HDR_LEN)
 
 // Time out value for response from RNP
-#define NPI_RNP_TIMEOUT 10 // 10 seconds
+#define NPI_RNP_TIMEOUT 3 // 3 seconds
 
 // UART Baud rate
 #define NPI_BAUDRATE B115200
@@ -361,13 +361,17 @@ void NPI_UART_SendSynchData( npiMsgData_t *pMsg )
   gettimeofday(&curtime, NULL);
   expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
   expirytime.tv_nsec = curtime.tv_usec * 1000;
+  debug_printf("[UART] (synch data) Conditional wait %d ns\n", NPI_RNP_TIMEOUT);
   result = pthread_cond_timedwait(&npiSyncRespCond, &npiSyncRespLock, &expirytime);
   if (ETIMEDOUT == result)
   {
     // TODO: Indicate synchronous transaction error
     // Uncommenting the following line will cause assert when connection is not there
     // Uncomment it only during debugging.
-    //pMsg->pData[0] = 0xff;
+#ifdef __BIG_DEBUG__
+    pMsg->pData[0] = 0xff;
+    printf("[UART] Send synch data timed out\n");
+#endif //__BIG_DEBUG__
   }
   // Clear the pointer.
   pNpiSyncData = NULL;
@@ -522,9 +526,9 @@ static void *npi_rx_entry(void *ptr)
 		int readcount;
 
 		do {
-			debug_printf("Ready to read from npi_fd:%d\n", npi_fd);
+			debug_printf("[UART] Ready to read from npi_fd:%d\n", npi_fd);
 			readcount = read(npi_fd, readbuf, sizeof(readbuf));
-			debug_printf("read %d bytes from npi_fd:%d\n", readcount, npi_fd);
+			debug_printf("[UART] read %d bytes from npi_fd:%d\n", readcount, npi_fd);
 			if (readcount > 0) {
 				npi_parseframe(readbuf, readcount);
 			}
@@ -543,19 +547,23 @@ static void *npi_rx_entry(void *ptr)
 			struct timespec expirytime;
 			struct timeval curtime;
 
+			int waitTime = 10000000;
 			gettimeofday(&curtime, NULL);
 			expirytime.tv_sec = curtime.tv_sec;
-			expirytime.tv_nsec = (curtime.tv_usec * 1000) + 10000000;
+			expirytime.tv_nsec = (curtime.tv_usec * 1000) + waitTime;
 			if (expirytime.tv_nsec >= 1000000000) {
 				expirytime.tv_nsec -= 1000000000;
 				expirytime.tv_sec++;
 			}
+			debug_printf("[UART] (read loop) Conditional wait %d ns\n", waitTime);
 			pthread_cond_timedwait(&npi_rx_cond, &npi_rx_mutex, &expirytime);
 		}
 #else
-	pthread_cond_wait(&npi_rx_cond, &npi_rx_mutex);
+		debug_printf("[UART] (read loop) Conditional wait\n");
+		pthread_cond_wait(&npi_rx_cond, &npi_rx_mutex);
 #endif
 	}
+	debug_printf("[UART] npi_rx_terminate == %d, unlocking mutex\n", npi_rx_terminate);
 	pthread_mutex_unlock(&npi_rx_mutex);
 
 	return NULL;
@@ -655,13 +663,13 @@ static int npi_write(const void *buf, size_t count)
 {
   int result;
 
-  debug_printf("write %d bytes to %d\n", (int)count, npi_fd);
+  debug_printf("[UART] write %d bytes to %d\n", (int)count, npi_fd);
 
   pthread_mutex_lock(&npi_write_mutex);
   result = write(npi_fd, buf, count);
   pthread_mutex_unlock(&npi_write_mutex);
 
-  debug_printf("result: %d\n", (int)result);
+  debug_printf("[UART] result: %d\n", (int)result);
 
   return result;
 }
@@ -705,138 +713,145 @@ static void npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len)
 /* Parse an NPI frame */
 static void npi_parseframe(const unsigned char *buf, int len)
 {
-  uint8 ch;
-  int  bytesInRxBuffer;
+	uint8 ch;
+	int  bytesInRxBuffer;
 
-  if (len) {
-    // fire UART wakeup signal
-    pthread_mutex_lock(&npiUartWakeupLock);
-    pthread_cond_signal(&npiUartWakeupCond);
-    pthread_mutex_unlock(&npiUartWakeupLock);
-  }
+	if (len) {
+		// fire UART wakeup signal
+		pthread_mutex_lock(&npiUartWakeupLock);
+		pthread_cond_signal(&npiUartWakeupCond);
+		pthread_mutex_unlock(&npiUartWakeupLock);
+	}
 
-  while (len) {
-    ch = *buf++;
-    len--;
+	while (len) {
+		ch = *buf++;
+		len--;
 
-    switch (npi_parseinfo.state)
-    {
-      case SOP_STATE:
-        if (ch == AIC_UART_SOF)
-          npi_parseinfo.state = LEN_STATE;
-        break;
+		switch (npi_parseinfo.state)
+		{
+		case SOP_STATE:
+			if (ch == AIC_UART_SOF)
+				npi_parseinfo.state = LEN_STATE;
+			break;
 
-      case LEN_STATE:
-        npi_parseinfo.LEN_Token = ch;
+		case LEN_STATE:
+			npi_parseinfo.LEN_Token = ch;
 
-        npi_parseinfo.tempDataLen = 0;
+			npi_parseinfo.tempDataLen = 0;
 
-        /* Allocate memory for the data */
-        npi_parseinfo.pMsg = (uint8 *)malloc(
-          NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.LEN_Token );
+			/* Allocate memory for the data */
+			npi_parseinfo.pMsg = (uint8 *)malloc(
+					NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.LEN_Token );
 
-        if (npi_parseinfo.pMsg)
-        {
-          /* Fill up what we can */
-          npi_parseinfo.state = CMD_STATE1;
-          break;
-        }
-        else
-        {
-          npi_parseinfo.state = SOP_STATE;
-          break;
-        }
-        break;
+			if (npi_parseinfo.pMsg)
+			{
+				/* Fill up what we can */
+				npi_parseinfo.state = CMD_STATE1;
+				break;
+			}
+			else
+			{
+				npi_parseinfo.state = SOP_STATE;
+				break;
+			}
+			break;
 
-      case CMD_STATE1:
-        npi_parseinfo.CMD0_Token = ch;
-        npi_parseinfo.state = CMD_STATE2;
-        break;
+		case CMD_STATE1:
+			npi_parseinfo.CMD0_Token = ch;
+			npi_parseinfo.state = CMD_STATE2;
+			break;
 
-      case CMD_STATE2:
-        npi_parseinfo.CMD1_Token = ch;
-        /* If there is no data, skip to FCS state */
-        if (npi_parseinfo.LEN_Token)
-        {
-          npi_parseinfo.state = DATA_STATE;
-        }
-        else
-        {
-          npi_parseinfo.state = FCS_STATE;
-        }
-        break;
+		case CMD_STATE2:
+			npi_parseinfo.CMD1_Token = ch;
+			/* If there is no data, skip to FCS state */
+			if (npi_parseinfo.LEN_Token)
+			{
+				npi_parseinfo.state = DATA_STATE;
+			}
+			else
+			{
+				npi_parseinfo.state = FCS_STATE;
+			}
+			break;
 
-      case DATA_STATE:
+		case DATA_STATE:
 
-        /* Fill in the buffer the first byte of the data */
-        npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.tempDataLen++] = ch;
+			/* Fill in the buffer the first byte of the data */
+			npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.tempDataLen++] = ch;
 
-        /* Check number of bytes left in the Rx buffer */
-        bytesInRxBuffer = len;
+			/* Check number of bytes left in the Rx buffer */
+			bytesInRxBuffer = len;
 
-        /* If the remainder of the data is there, read them all, otherwise, just read enough */
-        if (bytesInRxBuffer <= npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen)
-        {
-          memcpy(&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.tempDataLen],
-            buf, bytesInRxBuffer);
-          buf += bytesInRxBuffer;
-          len -= bytesInRxBuffer;
-          npi_parseinfo.tempDataLen += (uint8) bytesInRxBuffer;
-        }
-        else
-        {
-          memcpy(&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.tempDataLen],
-            buf, npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen);
-          buf += npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen;
-          len -= npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen;
-          npi_parseinfo.tempDataLen += (npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen);
-        }
+			/* If the remainder of the data is there, read them all, otherwise, just read enough */
+			if (bytesInRxBuffer <= npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen)
+			{
+				memcpy(&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.tempDataLen],
+						buf, bytesInRxBuffer);
+				buf += bytesInRxBuffer;
+				len -= bytesInRxBuffer;
+				npi_parseinfo.tempDataLen += (uint8) bytesInRxBuffer;
+			}
+			else
+			{
+				memcpy(&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.tempDataLen],
+						buf, npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen);
+				buf += npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen;
+				len -= npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen;
+				npi_parseinfo.tempDataLen += (npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen);
+			}
 
-        /* If number of bytes read is equal to data length, time to move on to FCS */
-        if ( npi_parseinfo.tempDataLen == npi_parseinfo.LEN_Token )
-            npi_parseinfo.state = FCS_STATE;
+			/* If number of bytes read is equal to data length, time to move on to FCS */
+			if ( npi_parseinfo.tempDataLen == npi_parseinfo.LEN_Token )
+				npi_parseinfo.state = FCS_STATE;
 
-        break;
+			break;
 
-      case FCS_STATE:
+		case FCS_STATE:
 
-        npi_parseinfo.FSC_Token = ch;
+			npi_parseinfo.FSC_Token = ch;
 
-        /* Make sure it's correct */
-        if ((npi_calcfcs(
-          npi_parseinfo.LEN_Token,
-          npi_parseinfo.CMD0_Token,
-          npi_parseinfo.CMD1_Token,
-          &npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN])
-          == npi_parseinfo.FSC_Token))
-        {
-          // Trace the received data
-          if (npi_tracehook_rx)
-          {
-            npi_tracehook_rx(npi_parseinfo.CMD0_Token, npi_parseinfo.CMD1_Token,
-                             &npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN],
-                             npi_parseinfo.LEN_Token);
-          }
+			/* Make sure it's correct */
+			if ((npi_calcfcs(
+					npi_parseinfo.LEN_Token,
+					npi_parseinfo.CMD0_Token,
+					npi_parseinfo.CMD1_Token,
+					&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN])
+					== npi_parseinfo.FSC_Token))
+			{
+				// Trace the received data
+				if (npi_tracehook_rx)
+				{
+					npi_tracehook_rx(npi_parseinfo.CMD0_Token, npi_parseinfo.CMD1_Token,
+							&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN],
+							npi_parseinfo.LEN_Token);
+				}
 
-          // process the received frame
-          npi_procframe(npi_parseinfo.CMD0_Token, npi_parseinfo.CMD1_Token,
-                        npi_parseinfo.pMsg, npi_parseinfo.LEN_Token);
-        }
-        else
-        {
-          /* deallocate the msg */
-          free ( (uint8 *)npi_parseinfo.pMsg );
-        }
+				debug_printf("[UART] npi_parseframe: found frame, going to npi_procframe\n");
+				// process the received frame
+				npi_procframe(npi_parseinfo.CMD0_Token, npi_parseinfo.CMD1_Token,
+						npi_parseinfo.pMsg, npi_parseinfo.LEN_Token);
+			}
+			else
+			{
+				debug_printf("[UART] npi_parseframe: found incomplete frame, destroying the message:\n");
+				debug_printf("[UART] \t \t len: 0x%.2X, cmd0: 0x%.2X, cmd1: 0x%.2X, FCS: 0x%.2X\n",
+						npi_parseinfo.LEN_Token,
+						npi_parseinfo.CMD0_Token,
+						npi_parseinfo.CMD1_Token,
+						npi_parseinfo.FSC_Token);
+				/* deallocate the msg */
+				free ( (uint8 *)npi_parseinfo.pMsg );
+			}
 
-        /* Reset the state, send or discard the buffers at this point */
-        npi_parseinfo.state = SOP_STATE;
+			/* Reset the state, send or discard the buffers at this point */
+			npi_parseinfo.state = SOP_STATE;
 
-        break;
+			break;
 
-      default:
-        break;
-    }
-  }
+		default:
+			break;
+		}
+	}
 }
 
 /* Process received frame */
@@ -863,6 +878,7 @@ static void npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
     // the buffer usage is done, no more use expected
     free(pBuf);
 
+	debug_printf("[UART] npi_procframe signal synch response received (invoked by read loop) \n");
     // Unblock the synchronous request call
     pthread_cond_signal(&npiSyncRespCond);
     pthread_mutex_unlock(&npiSyncRespLock);
@@ -895,6 +911,7 @@ static void npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
     }
     pNpiAsyncQueueHead = pElement;
 
+	debug_printf("[UART] npi_procframe signal areq callback thread (invoked by read loop) \n");
     /* wake up the asynchronous callback thread */
     pthread_cond_signal(&npiAsyncCond);
     pthread_mutex_unlock(&npiAsyncLock);
@@ -917,10 +934,12 @@ static uint8 npi_calcfcs( uint8 len, uint8 cmd0, uint8 cmd1, uint8 *data_ptr )
 
 static void npi_iohandler(int status)
 {
-  /* send wakeup signal */
-  pthread_mutex_lock(&npi_rx_mutex);
-  pthread_cond_signal(&npi_rx_cond);
-  pthread_mutex_unlock(&npi_rx_mutex);
+	/* send wakeup signal */
+	debug_printf("[UART] Signal from UART, grabbing mutex\n");
+	pthread_mutex_lock(&npi_rx_mutex);
+	debug_printf("[UART] Signal read handle, owning mutex\n");
+	pthread_cond_signal(&npi_rx_cond);
+	pthread_mutex_unlock(&npi_rx_mutex);
 }
 
 /* Install signal handler for UART IO */

@@ -437,6 +437,21 @@ void RTI_UnpairCnf( rStatus_t status, uint8 dstIndex )
 	// This function is introduced in RemoTI 1.1
 }
 
+/**************************************************************************************************
+ *
+ * @fn      RTI_ResetInd
+ *
+ * @brief   RTI indication that is used to notify AP that the NP has been reset.
+ *
+ * @param   void
+ *
+ * @return  void
+ */
+void RTI_ResetInd( void )
+{
+}
+
+
 // List of supported target device types: maximum up to 6 device types.
 static const uint8 tgtList[RTI_MAX_NUM_SUPPORTED_TGT_TYPES] =
 {

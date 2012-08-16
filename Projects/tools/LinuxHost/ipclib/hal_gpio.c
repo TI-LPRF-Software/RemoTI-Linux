@@ -50,6 +50,7 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/types.h>
+#include <sys/poll.h>
 
 #include "pthread.h"
 
@@ -60,6 +61,9 @@
 #ifdef __STRESS_TEST__
 #include <sys/time.h>
 #endif // __STRESS_TEST__
+#elif defined __DEBUG_TIME__
+#include <sys/time.h>
+#endif //__DEBUG_TIME__
 
 /**************************************************************************************************
  *                                            CONSTANTS
@@ -93,7 +97,10 @@ static halGpioCfg_t resetGpioCfg;
 #ifdef __STRESS_TEST__
 extern struct timeval curTime, startTime;
 extern struct timeval prevTimeI2C;
-#endif //__STRESS_TEST__
+#elif defined __DEBUG_TIME__
+struct timeval curTime, startTime;
+struct timeval prevTime;
+#endif //__DEBUG_TIME__
 
 /**************************************************************************************************
  *                                          FUNCTIONS - API
@@ -609,29 +616,47 @@ uint8 HalGpioSrdyCheck(uint8 state)
  */
 void HalGpioWaitSrdyClr(void)
 {
-	char srdy;
+	char srdy= '1';
 
 	debug_printf("Wait SRDY Low, \n");
-	lseek(gpioSrdyFd,0,SEEK_SET);
-	if(ERROR == read(gpioSrdyFd,&srdy, 1))
-	{
-		perror(srdyGpioCfg.gpio.value);
-		debug_printf("\ncan't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
-		exit(-1);
-	}
-	debug_printf("SRDY: %c  (%c) \n", srdy, srdy);
+
+	struct pollfd ufds[1];
+	int pollRet, waitMs = 100;
+	ufds[0].fd = gpioSrdyFd;
+	ufds[0].events = POLLIN | POLLPRI;
 
 	while(srdy == '1')
 	{
-		usleep(100);
-		lseek(gpioSrdyFd,0,SEEK_SET);
-		if(ERROR == read(gpioSrdyFd,&srdy, 1))
+		debug_printf("SRDY: 0x%.2X , %c(0x%.2X) TRUE \n", atoi(&srdy), srdy, srdy);
+		pollRet = poll((struct pollfd*)&ufds, 1, waitMs);
+		if (pollRet == -1)
 		{
-			perror(srdyGpioCfg.gpio.value);
-			debug_printf("\ncan't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
-			exit(-1);
+			// Error occured in poll()
+			perror("poll");
+		}
+		else if (pollRet == 0)
+		{
+			// Timeout
+			printf("[WARNING] Waiting for SRDY to go low timed out.\n");
+			break;
+		}
+		else
+		{
+			if ( (ufds[0].revents & POLLIN) || (ufds[0].revents & POLLPRI) )
+			{
+				lseek(gpioSrdyFd,0,SEEK_SET);
+				if(ERROR == read(gpioSrdyFd,&srdy, 1))
+				{
+					perror(srdyGpioCfg.gpio.value);
+					debug_printf("\ncan't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
+					exit(-1);
+				}
+			}
 		}
 	}
+	debug_printf("SRDY: 0x%.2X , %c(0x%.2X) FALSE \n", atoi(&srdy), srdy, srdy);
+
+
 #ifdef __STRESS_TEST__
   //	debug_
   gettimeofday(&curTime, NULL);
@@ -662,47 +687,117 @@ void HalGpioWaitSrdyClr(void)
 /**************************************************************************************************
  * @fn          HalGpioWaitSrdySet
  *
- * @brief       Check that SRDY is High, if not, wait until it gets high.
+ * @brief       Check that SRDY is High, if not, wait until it gets high, or times out.
+ * 				0xFFFF means never time out.
  *
  * input parameters
  *
- * @param       None.
+ * @param       waitMs	- Maximum wait time in ms. Necessary to detect unexpected handshake.
+ * 						  0xFFFF means never time out.
  *
  * output parameters
  *
  * None.
  *
- * @return      None.
+ * @return      srdy	- If positive it indicates success
  **************************************************************************************************
  */
-void HalGpioWaitSrdySet(void)
+uint8 HalGpioWaitSrdySet(uint16 waitMs)
 {
-	char srdy;
+	char srdy= '0';
 
-	debug_printf("Wait SRDY high, ");
-	lseek(gpioSrdyFd,0,SEEK_SET);
-	if(ERROR == read(gpioSrdyFd,&srdy, 1))
+	debug_printf("Wait SRDY High, \n");
+
+	struct pollfd ufds[1];
+	int pollRet;
+	ufds[0].fd = gpioSrdyFd;
+	ufds[0].events = POLLIN | POLLPRI;
+
+#ifdef __DEBUG_TIME__
+	gettimeofday(&curTime, NULL);
+	long int diffPrev;
+	int t = 0;
+	if (curTime.tv_usec >= prevTime.tv_usec)
 	{
-		perror(srdyGpioCfg.gpio.value);
-		debug_printf("\ncan't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
-		exit(-1);
+		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+		t = 1;
 	}
 
-	debug_printf(" SRDY: %c  (%c) \n", srdy, srdy);
+	prevTime = curTime;
 
-	while(srdy == '1')
+	//	debug_
+	printf("[%.5ld.%.6ld (+%ld.%6ld)] SRDY: %c  (%c), wait %d ms\n",
+			curTime.tv_sec - startTime.tv_sec,
+			curTime.tv_usec,
+			curTime.tv_sec - prevTime.tv_sec - t,
+			diffPrev,
+			srdy,
+			srdy,
+			waitMs);
+#endif //(defined __DEBUG_TIME__)
+
+	while( (srdy == '0') )
 	{
-		usleep(100);
-		lseek(gpioSrdyFd,0,SEEK_SET);
-		if(ERROR == read(gpioSrdyFd,&srdy, 1))
+		pollRet = poll((struct pollfd*)&ufds, 1, waitMs);
+		if (pollRet == -1)
 		{
-			perror(srdyGpioCfg.gpio.value);
-			debug_printf("\ncan't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
-			exit(-1);
+			// Error occured in poll()
+			perror("poll");
+		}
+		else if (pollRet == 0)
+		{
+			// Timeout
+			printf("[WARNING] Waiting for SRDY to go high timed out.\n");
+			break;
+		}
+		else
+		{
+			if ( (ufds[0].revents & POLLIN) || (ufds[0].revents & POLLPRI) )
+			{
+				lseek(gpioSrdyFd,0,SEEK_SET);
+				if(ERROR == read(gpioSrdyFd,&srdy, 1))
+				{
+					perror(srdyGpioCfg.gpio.value);
+					debug_printf("\ncan't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
+					exit(-1);
+				}
+			}
 		}
 	}
 
-	debug_printf("==>SRDY change to : %c  (%c) \n", srdy, srdy);
+#ifdef __DEBUG_TIME__
+	gettimeofday(&curTime, NULL);
+	t = 0;
+	if (curTime.tv_usec >= prevTime.tv_usec)
+	{
+		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+		t = 1;
+	}
+
+	prevTime = curTime;
+
+//	debug_
+		printf("[%.5ld.%.6ld (+%ld.%6ld)] SRDY: %c  (%c), wait %d ms\n",
+				curTime.tv_sec - startTime.tv_sec,
+				curTime.tv_usec,
+				curTime.tv_sec - prevTime.tv_sec - t,
+				diffPrev,
+				srdy,
+				srdy,
+				waitMs);
+#endif //__DEBUG_TIME__
+
+//	debug_printf("==>SRDY change to : %c  (%c) \n", srdy, srdy);
+
+	return (srdy == '1') ? 1 : 0;
 }
 
 /**************************************************************************************************

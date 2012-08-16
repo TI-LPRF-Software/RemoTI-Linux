@@ -806,19 +806,40 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 	// Handle the connection
 	debug_printf("Receive message...\n");
 
-	n = recv(connection, npi_ipc_buf[0], sizeof(npiMsgData_t), 0);
+	// Receive only NPI header first. Then then number of bytes indicated by length.
+	n = recv(connection, npi_ipc_buf[0], RPC_FRAME_HDR_SZ, 0);
 	if (n <= 0)
 	{
 		if (n < 0)
 		{
 			perror("recv");
 		}
+		else
+		{
+			debug_printf("Will disconnect %d\n", connection);
+		}
 		// Disconnect this
 		connectionDone = connection;
 	}
-
-	if (n > 0)
+	else if (n == RPC_FRAME_HDR_SZ)
 	{
+		// Now read out the payload of the NPI message, if it exists
+		if (((npiMsgData_t *) npi_ipc_buf[0])->len > 0)
+		{
+			n = recv(connection, (uint8*) &npi_ipc_buf[0][RPC_FRAME_HDR_SZ], ((npiMsgData_t *) npi_ipc_buf[0])->len , 0);
+			if (n != ((npiMsgData_t *) npi_ipc_buf[0])->len)
+			{
+				printf("[ERR] Could not read out the NPI payload. Requested %d, but read %d!\n",
+						((npiMsgData_t *) npi_ipc_buf[0])->len, n);
+				if (n < 0)
+				{
+					perror("recv");
+					// Disconnect this
+					connectionDone = connection;
+					debug_printf("Will disconnect %d\n", connection);
+				}
+			}
+		}
 		/*
 		 * Take the message from the client and pass it to the NPI
 		 */
@@ -846,7 +867,7 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 		int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 		int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
 		//            debug_
-		printf("[--> %.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] %.2d bytes, cmdId 0x%.2X, subSys 0x%.2X, pData: \040 ",
+		printf("[<-- %.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] %.2d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData: \040 ",
 				hours,											// hours
 				minutes,										// minutes
 				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
@@ -854,8 +875,8 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 				curTime.tv_sec - prevTimeRec.tv_sec - t,
 				diffPrev,
 				((npiMsgData_t *) npi_ipc_buf[0])->len,
-				((npiMsgData_t *) npi_ipc_buf[0])->cmdId,
-				((npiMsgData_t *) npi_ipc_buf[0])->subSys);
+				((npiMsgData_t *) npi_ipc_buf[0])->subSys,
+				((npiMsgData_t *) npi_ipc_buf[0])->cmdId);
 		prevTimeRec = curTime;
 
 		for (i = 0; i < ((npiMsgData_t *) npi_ipc_buf[0])->len; i++)
@@ -869,8 +890,8 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 #endif //__DEBUG_TIME__
 
 
-		if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys)
-				& (uint8) RPC_CMD_TYPE_MASK) == RPC_CMD_SREQ) {
+		if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_CMD_TYPE_MASK) == RPC_CMD_SREQ)
+		{
 			debug_printf("NPI SREQ:  (len %d)", n);
 			for (i = 0; i < n; i++)
 			{
@@ -882,8 +903,10 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			(NPI_SendSynchDataFnArr[devIdx])(
 					(npiMsgData_t *) npi_ipc_buf[0]);
 
-			if ( (((npiMsgData_t *) npi_ipc_buf[0])->cmdId > 0) &&
-			     (((npiMsgData_t *) npi_ipc_buf[0])->cmdId <= 0x22) ) //0x22 = RTIS_CMD_ID_RTI_WRITE_ITEM_EX
+			//0x22 = RTIS_CMD_ID_RTI_WRITE_ITEM_EX
+			// 0x80 is bitmask for response, e.g. for the Serial Bootloader. In order not to exclude response
+			if ( ((((npiMsgData_t *) npi_ipc_buf[0])->cmdId & 0x7F) > 0) &&
+			     ((((npiMsgData_t *) npi_ipc_buf[0])->cmdId & 0x7F) <= 0x22) )
 			{
 				n = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
 			}
@@ -926,8 +949,9 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			// Send bytes
 			NPI_LNX_IPC_SendData(n, connection);
 
-		} else if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys)
-				& (uint8) RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ) {
+		}
+		else if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ)
+		{
 			debug_printf("NPI AREQ: (len %d)", n);
 			for (i = 0; i < n; i++) {
 				debug_printf(" 0x%.2X", (uint8)npi_ipc_buf[0][i]);
@@ -936,9 +960,16 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			// Asynchronous request may just be sent
 			(NPI_SendAsynchDataFnArr[devIdx])(
 					(npiMsgData_t *) npi_ipc_buf[0]);
-		} else {
-			//                                                                                            debug_
+		}
+		else
+		{
 			printf("Can only accept AREQ or SREQ for now...\n");
+			printf("Unknown: (len %d)", n);
+			for (i = 0; i < n; i++)
+			{
+				printf(" 0x%.2X", (uint8)npi_ipc_buf[0][i]);
+			}
+			printf("\n");
 		}
 	}
 
@@ -948,11 +979,14 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 #endif
 
 	if (connectionDone)
-		debug_printf("Done\n");
+		debug_printf("Done with %d\n", connection);
 	else
 		debug_printf("!Done\n");
 	if (connectionDone != -1)
+	{
+		debug_printf("Closing down connection %d\n", connectionDone);
 		close(connectionDone);
+	}
 
 	return connectionDone;
 }
@@ -1024,7 +1058,7 @@ void NPI_LNX_IPC_SendData(uint8 len, int connection)
 	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
 	//            debug_
-	printf("[--> %.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] %.2d bytes, cmdId 0x%.2X, subSys 0x%.2X, pData: \040 ",
+	printf("[--> %.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] %.2d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData: \040 ",
 			hours,											// hours
 			minutes,										// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
@@ -1032,8 +1066,8 @@ void NPI_LNX_IPC_SendData(uint8 len, int connection)
 			curTime.tv_sec - prevTimeSend.tv_sec - t,
 			diffPrev,
 			((npiMsgData_t *) npi_ipc_buf[1])->len,
-			((npiMsgData_t *) npi_ipc_buf[1])->cmdId,
-			((npiMsgData_t *) npi_ipc_buf[1])->subSys);
+			((npiMsgData_t *) npi_ipc_buf[1])->subSys,
+			((npiMsgData_t *) npi_ipc_buf[1])->cmdId);
 
 	for (i = 0; i < ((npiMsgData_t *) npi_ipc_buf[1])->len; i++) {
 		//                            debug_
@@ -1205,10 +1239,10 @@ char* SerialConfigParser(FILE* serialCfgFd, const char* section,
  */
 void NPI_AsynchMsgCback(npiMsgData_t *pMsg) {
 	int i;
-	debug_printf("[-->] %d bytes, cmdId 0x%.2X, subSys 0x%.2X, pData:",
+	debug_printf("[-->] %d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData:",
 			pMsg->len,
-			pMsg->cmdId,
-			pMsg->subSys); debug_printf("\t");
+			pMsg->subSys,
+			pMsg->cmdId);
 	for (i = 0; i < pMsg->len; i++) {
 		debug_printf(" 0x%.2X", pMsg->pData[i]);
 	} debug_printf("\n");
