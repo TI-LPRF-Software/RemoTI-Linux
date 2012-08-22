@@ -141,7 +141,7 @@ uint8 HalGpioResetInit(halGpioCfg_t *gpioCfg);
 void HalGpioMrdySet(uint8 state);
 uint8 HalGpioSrdyCheck(uint8 state);
 void HalGpioWaitSrdyClr(void);
-uint8 HalGpioWaitSrdySet(uint16 wait10sUs);
+void HalGpioWaitSrdySet(void);
 void HalGpioSrdyClose( void );
 void HalGpioMrdyClose( void );
 void HalGpioResetClose( void );

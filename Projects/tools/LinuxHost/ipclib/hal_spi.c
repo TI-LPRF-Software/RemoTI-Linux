@@ -60,6 +60,16 @@
 
 
 #if (defined HAL_SPI) && (HAL_SPI == TRUE)
+
+#if (defined __DEBUG_TIME__)
+#include <sys/time.h>
+#endif // __STRESS_TEST__
+
+#ifdef __BIG_DEBUG__
+#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
+#else
+#define debug_printf(fmt, ...)
+#endif
 /**************************************************************************************************
  *                                            CONSTANTS
  **************************************************************************************************/
@@ -77,6 +87,9 @@
  **************************************************************************************************/
 static int spiDevFd;
 
+#if (defined __DEBUG_TIME__)
+struct timeval curTime, prevTime, startTime;
+#endif //__STRESS_TEST__
 
 static uint8 bits = 8;
 static uint32 speed = 500000; //Hz
@@ -246,6 +259,31 @@ void HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
   tr.speed_hz = speed;
   tr.bits_per_word = bits;
 
+#ifdef __DEBUG_TIME__
+	gettimeofday(&curTime, NULL);
+	long int diffPrev;
+	int t = 0;
+	if (curTime.tv_usec >= prevTime.tv_usec)
+	{
+		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+		t = 1;
+	}
+
+	prevTime = curTime;
+	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+	debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] ----- WRITE SPI LOCK MUTEX ---------\n",
+			hours,											// hours
+			minutes,										// minutes
+			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+			curTime.tv_usec,
+			curTime.tv_sec - prevTime.tv_sec - t,
+			diffPrev);
+#endif //(defined __DEBUG_TIME__)
   pthread_mutex_lock(&spiMutex1);
 #ifdef __BIG_DEBUG__
   printf("SPI: Sending ...");
@@ -258,6 +296,31 @@ void HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
   {
     perror("can't write to SPI \n");
   }
+
+#ifdef __DEBUG_TIME__
+	gettimeofday(&curTime, NULL);
+	t = 0;
+	if (curTime.tv_usec >= prevTime.tv_usec)
+	{
+		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+		t = 1;
+	}
+
+	prevTime = curTime;
+	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+	debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] ----- WRITE SPI DONE ---------------\n",
+			hours,											// hours
+			minutes,										// minutes
+			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+			curTime.tv_usec,
+			curTime.tv_sec - prevTime.tv_sec - t,
+			diffPrev);
+#endif //(defined __DEBUG_TIME__)
 
   memcpy(pBuf, rx, len);
 #ifdef __BIG_DEBUG__

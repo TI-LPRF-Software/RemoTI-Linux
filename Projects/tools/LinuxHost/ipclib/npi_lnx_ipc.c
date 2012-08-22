@@ -100,7 +100,7 @@
 /**************************************************************************************************
  *                                        Defines
  **************************************************************************************************/
-#define NPI_SERVER_CONNECTION_QUEUE_SIZE                                           4
+#define NPI_SERVER_CONNECTION_QUEUE_SIZE                                           20
 
 /**************************************************************************************************
  *                                           Constant
@@ -184,6 +184,10 @@ uint32 sNPIlisten;
 // Socket connection file descriptors
 fd_set activeConnectionsFDs;
 int fdmax;
+struct {
+	int list[NPI_SERVER_CONNECTION_QUEUE_SIZE];
+	int size;
+} activeConnections;
 
 // NPI IPC Server buffers
 char npi_ipc_buf[2][sizeof(npiMsgData_t)];
@@ -231,6 +235,9 @@ static uint8 devIdx = 0;
 
 void NPI_LNX_IPC_SendData(uint8 len, int connection);
 int NPI_LNX_IPC_ConnectionHandle(int connection);
+
+int removeFromActiveList(int c);
+int addToActiveList(int c);
 
 void npiSynchSlave(void) {
 	// This function is specific to SPI
@@ -462,6 +469,8 @@ int main(void) {
 		strBuf = SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf);
 		spiCfg.speed = atoi(strBuf);
 		spiCfg.gpioCfg = gpioCfg;
+
+		// Now open device for processing
 		res = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiSpiCfg_t *) &spiCfg);
 
 		// Perform Reset of the RNP
@@ -742,6 +751,7 @@ int main(void) {
 							inet_ntop(AF_INET, &((struct sockaddr_in *) &their_addr)->sin_addr, ipstr, sizeof ipstr);
 							inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&their_addr)->sin6_addr, ipstr2, sizeof ipstr2);
 							printf("Connected to %d.(%s / %s)\n", justConnected, ipstr, ipstr2);
+							addToActiveList(justConnected);
 #ifdef __DEBUG_TIME__
 							gettimeofday(&startTime, NULL);
 #endif //__DEBUG_TIME__
@@ -755,8 +765,11 @@ int main(void) {
 						}
 						else
 						{
+							close(c);
+							printf("Removing connection %d\n", c);
 							// Connection closed. Remove from set
 							FD_CLR(c, &activeConnectionsFDs);
+							removeFromActiveList(c);
 						}
 					}
 				}
@@ -779,6 +792,98 @@ int main(void) {
 #endif //(defined __STRESS_TEST__) && (__STRESS_TEST__ == TRUE)
 
 	return !res;
+}
+
+
+/**************************************************************************************************
+ *
+ * @fn          addToActiveList
+ *
+ * @brief       Manage active connections, add to list
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      -1 if something went wrong, 0 if success
+ *
+ **************************************************************************************************/
+
+int addToActiveList(int c)
+{
+	if (activeConnections.size <= NPI_SERVER_CONNECTION_QUEUE_SIZE)
+	{
+		// Entry at position activeConnections.size is always the last available entry
+		activeConnections.list[activeConnections.size] = c;
+
+		// Increment size
+		activeConnections.size++;
+
+		return 0;
+	}
+	else
+	{
+		// There's no more room in the list
+		return -1;
+	}
+}
+
+/**************************************************************************************************
+ *
+ * @fn          addToActiveList
+ *
+ * @brief       Manage active connections, remove from list. Re organize so list is full
+ * 				up to its declared size
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      -1 if something went wrong, 0 if success
+ *
+ **************************************************************************************************/
+
+int removeFromActiveList(int c)
+{
+	int i;
+	// Find entry
+	for (i = 0; i < activeConnections.size; i++)
+	{
+		if (activeConnections.list[i] == c)
+			break;
+	}
+	if (i < activeConnections.size)
+	{
+		// Found our entry, replace this entry by the last entry
+		activeConnections.list[i] = activeConnections.list[activeConnections.size - 1];
+
+		// Decrement size
+		activeConnections.size--;
+
+		return 0;
+	}
+	else
+	{
+		// Could not find entry
+		return -1;
+	}
+#ifdef __BIG_DEBUG__
+	printf("Active Connections: %d", activeConnections.list[0]);
+	// Send data to all connections, except listener
+	for (i = 1; i < activeConnections.size; i++)
+	{
+		printf(", %d", activeConnections.list[i]);
+	}
+	printf("\n");
+#endif //__BIG_DEBUG__
 }
 
 /**************************************************************************************************
@@ -948,7 +1053,6 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 //			pthread_mutex_lock(&npiSyncRespLock);
 			// Send bytes
 			NPI_LNX_IPC_SendData(n, connection);
-
 		}
 		else if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ)
 		{
@@ -982,11 +1086,6 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 		debug_printf("Done with %d\n", connection);
 	else
 		debug_printf("!Done\n");
-	if (connectionDone != -1)
-	{
-		debug_printf("Closing down connection %d\n", connectionDone);
-		close(connectionDone);
-	}
 
 	return connectionDone;
 }
@@ -1081,24 +1180,60 @@ void NPI_LNX_IPC_SendData(uint8 len, int connection)
 
 	if (connection < 0)
 	{
+#ifdef __BIG_DEBUG__
+		printf("Active Connections: %d", activeConnections.list[0]);
 		// Send data to all connections, except listener
-		for (i = 0; i <= fdmax; i++)
+		for (i = 1; i < activeConnections.size; i++)
 		{
-			if (i != sNPIlisten)
-				bytesSent = send(i, npi_ipc_buf[1], len, MSG_NOSIGNAL);
+			printf(", %d", activeConnections.list[i]);
+		}
+		printf("\n");
+#endif //__BIG_DEBUG__
+		// Send data to all connections, except listener
+		for (i = 0; i < activeConnections.size; i++)
+		{
+			if (activeConnections.list[i] != sNPIlisten)
+			{
+				bytesSent = send(activeConnections.list[i], npi_ipc_buf[1], len, MSG_NOSIGNAL);
+				if (bytesSent < 0) {
+					if (errno != ENOTSOCK)
+					{
+						char *errorStr = (char *)malloc(30);
+						sprintf(errorStr, "send %d, %d", activeConnections.list[i], errno);
+						perror(errorStr);
+						// Remove from list if detected bad file descriptor
+						if (errno == EBADF)
+						{
+							printf("Removing connection %d\n", activeConnections.list[i]);
+							close(activeConnections.list[i]);
+							// Connection closed. Remove from set
+							FD_CLR(activeConnections.list[i], &activeConnectionsFDs);
+							removeFromActiveList(activeConnections.list[i]);
+						}
+					}
+				}
+			}
 		}
 	}
 	else
 	{
 		// Send to specific connection only
 		bytesSent = send(connection, npi_ipc_buf[1], len, MSG_NOSIGNAL);
-	}
 
-	debug_printf("...sent %d bytes to Client\n", bytesSent);
+		debug_printf("...sent %d bytes to Client\n", bytesSent);
 
-	if (bytesSent < 0) {
-		perror("send");
-		//                                            connectionDone = 1;
+		if (bytesSent < 0) {
+			perror("send");
+			// Remove from list if detected bad file descriptor
+			if (errno == EBADF)
+			{
+				printf("Removing connection %d\n", connection);
+				close(connection);
+				// Connection closed. Remove from set
+				FD_CLR(connection, &activeConnectionsFDs);
+				removeFromActiveList(connection);
+			}
+		}
 	}
 }
 

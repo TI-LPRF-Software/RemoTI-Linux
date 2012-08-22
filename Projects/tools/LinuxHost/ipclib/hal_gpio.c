@@ -60,7 +60,6 @@
 
 #ifdef __STRESS_TEST__
 #include <sys/time.h>
-#endif // __STRESS_TEST__
 #elif defined __DEBUG_TIME__
 #include <sys/time.h>
 #endif //__DEBUG_TIME__
@@ -546,6 +545,32 @@ void HalGpioMrdySet(uint8 state)
  **************************************************************************************************/
 void HalGpioReset(void)
 {
+#ifdef __DEBUG_TIME__
+	gettimeofday(&curTime, NULL);
+	long int diffPrev;
+	int t = 0;
+	if (curTime.tv_usec >= prevTime.tv_usec)
+	{
+		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+		t = 1;
+	}
+
+	prevTime = curTime;
+	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+	//	debug_
+	printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] Reset High\n",
+			hours,										// hours
+			minutes,									// minutes
+			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
+			curTime.tv_usec,
+			curTime.tv_sec - prevTime.tv_sec - t,
+			diffPrev);
+#endif //(defined __DEBUG_TIME__)
 	debug_printf("Reset High\n");
 	if(ERROR == write(gpioResetFd, "1", 1))
 	{
@@ -553,6 +578,32 @@ void HalGpioReset(void)
 		debug_printf("\ncan't write in %s , is something already accessing it? abort everything for debug purpose...\n",mrdyGpioCfg.gpio.value);
 		exit(-1);
 	}
+#ifdef __DEBUG_TIME__
+	gettimeofday(&curTime, NULL);
+	t = 0;
+	if (curTime.tv_usec >= prevTime.tv_usec)
+	{
+		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+		t = 1;
+	}
+
+	prevTime = curTime;
+
+	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+	//	debug_
+	printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] Reset Low\n",
+			hours,										// hours
+			minutes,									// minutes
+			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
+			curTime.tv_usec,
+			curTime.tv_sec - prevTime.tv_sec - t,
+			diffPrev);
+#endif //(defined __DEBUG_TIME__)
 	debug_printf("Reset low\n");
 	if(ERROR == write(gpioResetFd, "0", 1))
 	{
@@ -564,6 +615,31 @@ void HalGpioReset(void)
 	// Reset Should last at least 1us from datasheet, set it to 500us.
 	usleep(500);
 
+#ifdef __DEBUG_TIME__
+	gettimeofday(&curTime, NULL);
+	t = 0;
+	if (curTime.tv_usec >= prevTime.tv_usec)
+	{
+		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+		t = 1;
+	}
+
+	prevTime = curTime;
+	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+	//	debug_
+	printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] Reset High\n",
+			hours,										// hours
+			minutes,									// minutes
+			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
+			curTime.tv_usec,
+			curTime.tv_sec - prevTime.tv_sec - t,
+			diffPrev);
+#endif //(defined __DEBUG_TIME__)
 	debug_printf("Reset High\n");
 	if(ERROR == write(gpioResetFd, "1", 1))
 	{
@@ -601,7 +677,7 @@ uint8 HalGpioSrdyCheck(uint8 state)
 /**************************************************************************************************
  * @fn          HalGpioWaitSrdyClr
  *
- * @brief       Check that SRDY is low, if not, wait until it gets low. poll every ms.
+ * @brief       Check that SRDY is low, if not, wait until it gets low.
  *
  * input parameters
  *
@@ -621,14 +697,39 @@ void HalGpioWaitSrdyClr(void)
 	debug_printf("Wait SRDY Low, \n");
 
 	struct pollfd ufds[1];
-	int pollRet, waitMs = 100;
+	int pollRet;
 	ufds[0].fd = gpioSrdyFd;
 	ufds[0].events = POLLIN | POLLPRI;
 
+#ifdef __DEBUG_TIME__
+	gettimeofday(&curTime, NULL);
+	long int diffPrev;
+	int t = 0;
+	if (curTime.tv_usec >= prevTime.tv_usec)
+	{
+		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+		t = 1;
+	}
+
+	prevTime = curTime;
+	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+		debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY: wait to go Low\n",
+			hours,										// hours
+			minutes,									// minutes
+			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
+			curTime.tv_usec,
+			curTime.tv_sec - prevTime.tv_sec - t,
+			diffPrev);
+#endif //(defined __DEBUG_TIME__)
+
 	while(srdy == '1')
 	{
-		debug_printf("SRDY: 0x%.2X , %c(0x%.2X) TRUE \n", atoi(&srdy), srdy, srdy);
-		pollRet = poll((struct pollfd*)&ufds, 1, waitMs);
+		pollRet = poll((struct pollfd*)&ufds, 1, 100);
 		if (pollRet == -1)
 		{
 			// Error occured in poll()
@@ -651,10 +752,40 @@ void HalGpioWaitSrdyClr(void)
 					debug_printf("\ncan't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
 					exit(-1);
 				}
+				debug_printf("[0x%.2X , %c(0x%.2X)]", atoi(&srdy), srdy, srdy);
+			}
+			else
+			{
+				printf("(%d)", ufds[0].revents);
 			}
 		}
 	}
-	debug_printf("SRDY: 0x%.2X , %c(0x%.2X) FALSE \n", atoi(&srdy), srdy, srdy);
+#ifdef __DEBUG_TIME__
+	gettimeofday(&curTime, NULL);
+	t = 0;
+	if (curTime.tv_usec >= prevTime.tv_usec)
+	{
+		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+		t = 1;
+	}
+
+	prevTime = curTime;
+	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+		debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY: %c  (%c)\n",
+			hours,										// hours
+			minutes,									// minutes
+			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
+			curTime.tv_usec,
+			curTime.tv_sec - prevTime.tv_sec - t,
+			diffPrev,
+			srdy,
+			srdy);
+#endif //(defined __DEBUG_TIME__)
 
 
 #ifdef __STRESS_TEST__
@@ -670,12 +801,15 @@ void HalGpioWaitSrdyClr(void)
   {
 	  diffPrev = (curTime.tv_usec + 1000000) - prevTimeI2C.tv_usec;
 	  t = 1;
-  }
 
   prevTimeI2C = curTime;
 
-  printf("[--> %.5ld.%.6ld (+%ld.%6ld)] SRDY Low \n",
-		  curTime.tv_sec - startTime.tv_sec,
+  hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+  minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+	printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY Low\n",
+		  hours,										// hours
+		  minutes,										// minutes
+		  (curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
 		  curTime.tv_usec,
 		  curTime.tv_sec - prevTimeI2C.tv_sec - t,
 		  diffPrev);
@@ -692,8 +826,7 @@ void HalGpioWaitSrdyClr(void)
  *
  * input parameters
  *
- * @param       waitMs	- Maximum wait time in ms. Necessary to detect unexpected handshake.
- * 						  0xFFFF means never time out.
+ * None
  *
  * output parameters
  *
@@ -702,7 +835,7 @@ void HalGpioWaitSrdyClr(void)
  * @return      srdy	- If positive it indicates success
  **************************************************************************************************
  */
-uint8 HalGpioWaitSrdySet(uint16 waitMs)
+void HalGpioWaitSrdySet()
 {
 	char srdy= '0';
 
@@ -729,20 +862,20 @@ uint8 HalGpioWaitSrdySet(uint16 waitMs)
 
 	prevTime = curTime;
 
-	//	debug_
-	printf("[%.5ld.%.6ld (+%ld.%6ld)] SRDY: %c  (%c), wait %d ms\n",
-			curTime.tv_sec - startTime.tv_sec,
+	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+		debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY: wait to go High\n",
+			hours,											// hours
+			minutes,										// minutes
+			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
 			curTime.tv_usec,
 			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev,
-			srdy,
-			srdy,
-			waitMs);
+			diffPrev);
 #endif //(defined __DEBUG_TIME__)
 
 	while( (srdy == '0') )
 	{
-		pollRet = poll((struct pollfd*)&ufds, 1, waitMs);
+		pollRet = poll((struct pollfd*)&ufds, 1, 400);
 		if (pollRet == -1)
 		{
 			// Error occured in poll()
@@ -766,6 +899,10 @@ uint8 HalGpioWaitSrdySet(uint16 waitMs)
 					exit(-1);
 				}
 			}
+			else
+			{
+				printf("(%d)", ufds[0].revents);
+			}
 		}
 	}
 
@@ -784,20 +921,20 @@ uint8 HalGpioWaitSrdySet(uint16 waitMs)
 
 	prevTime = curTime;
 
-//	debug_
-		printf("[%.5ld.%.6ld (+%ld.%6ld)] SRDY: %c  (%c), wait %d ms\n",
-				curTime.tv_sec - startTime.tv_sec,
-				curTime.tv_usec,
-				curTime.tv_sec - prevTime.tv_sec - t,
-				diffPrev,
-				srdy,
-				srdy,
-				waitMs);
+	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+		printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY: %c  (%c)\n",
+			hours,											// hours
+			minutes,										// minutes
+			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+			curTime.tv_usec,
+			curTime.tv_sec - prevTime.tv_sec - t,
+			diffPrev,
+			srdy,
+			srdy);
 #endif //__DEBUG_TIME__
 
-//	debug_printf("==>SRDY change to : %c  (%c) \n", srdy, srdy);
-
-	return (srdy == '1') ? 1 : 0;
+	debug_printf("==>SRDY change to : %c  (%c) \n", srdy, srdy);
 }
 
 /**************************************************************************************************
