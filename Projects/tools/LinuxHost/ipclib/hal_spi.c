@@ -58,6 +58,8 @@
 #include  "hal_types.h"
 #include  "hal_spi.h"
 
+#include "npi_lnx_error.h"
+
 
 #if (defined HAL_SPI) && (HAL_SPI == TRUE)
 
@@ -68,7 +70,7 @@
 #ifdef __BIG_DEBUG__
 #define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #else
-#define debug_printf(fmt, ...)
+#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
 #endif
 /**************************************************************************************************
  *                                            CONSTANTS
@@ -124,7 +126,7 @@ void HalSpiFlush(uint8 port, uint8 len)
  *
  * @return  None
  **************************************************************************************************/
-void HalSpiInit(const char *devpath, uint32 speedIn)
+int HalSpiInit(const char *devpath, uint32 speedIn)
 {
   /* open the device */
   int ret;
@@ -140,7 +142,8 @@ void HalSpiInit(const char *devpath, uint32 speedIn)
   {
     perror(devpath);
     printf("%s open failed\n",devpath);
-    exit(-1);
+    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_OPEN_DEVICE;
+    return NPI_LNX_FAILURE;
   }
   /*
    * spi mode
@@ -149,14 +152,16 @@ void HalSpiInit(const char *devpath, uint32 speedIn)
   if (ret < 0 )
   {
     perror("can't set spi mode\n");
-    exit(-1);
+    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_SET_MODE;
+    return NPI_LNX_FAILURE;
   }
 
   ret = ioctl(spiDevFd, SPI_IOC_RD_MODE, &mode);
   if (ret < 0 )
   {
-    perror("can't set spi mode\n");
-    exit(-1);
+    perror("can't get spi mode\n");
+    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_GET_MODE;
+    return NPI_LNX_FAILURE;
   }
 
 /*
@@ -166,14 +171,16 @@ void HalSpiInit(const char *devpath, uint32 speedIn)
   if (ret < 0 )
   {
     perror("can't set bits per word\n");
-    exit(-1);
+    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_SET_BPW;
+    return NPI_LNX_FAILURE;
   }
 
   ret = ioctl(spiDevFd, SPI_IOC_RD_BITS_PER_WORD, &bits);
   if (ret < 0 )
   {
     perror("can't get bits per word\n");
-    exit(-1);
+    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_GET_BPW;
+    return NPI_LNX_FAILURE;
   }
 
 /*
@@ -183,14 +190,16 @@ void HalSpiInit(const char *devpath, uint32 speedIn)
   if (ret < 0 )
   {
     perror("can't set max speed hz\n");
-    exit(-1);
+    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_SET_MAX_SPEED;
+    return NPI_LNX_FAILURE;
   }
 
   ret = ioctl(spiDevFd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);
   if (ret < 0 )
   {
     perror("can't get max speed hz\n");
-    exit(-1);
+    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_GET_MAX_SPEED;
+    return NPI_LNX_FAILURE;
   }
 
 #ifdef __BIG_DEBUG__
@@ -199,7 +208,7 @@ void HalSpiInit(const char *devpath, uint32 speedIn)
   printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000);
 #endif
 
-
+  return NPI_LNX_SUCCESS;
 }
 
 /**************************************************************************************************
@@ -209,7 +218,7 @@ void HalSpiInit(const char *devpath, uint32 speedIn)
  *
  * @param   None
  *
- * @return  None
+ * @return  STATUS
  **************************************************************************************************/
 void HalSpiClose( void )
 {
@@ -237,9 +246,9 @@ void HalSpiPoll(void)
  *          pBuf - Pointer to the buffer that will be written.
  *          len - Number of bytes to write/read.
  *
- * @return  None
+ * @return  STATUS
  **************************************************************************************************/
-void HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
+int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 {
   uint8* tx;
   uint8* rx;
@@ -295,6 +304,17 @@ void HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
   if (ret < 0 )
   {
     perror("can't write to SPI \n");
+    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_WRITE_FAILED;
+    ret = NPI_LNX_FAILURE;
+  }
+  else if (ret == len)
+  {
+	  ret = NPI_LNX_SUCCESS;
+  }
+  else
+  {
+	  npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_WRITE_FAILED_INCORRECT_NUM_OF_BYTES;
+	  ret = NPI_LNX_FAILURE;
   }
 
 #ifdef __DEBUG_TIME__
@@ -330,6 +350,8 @@ void HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 #endif
   free(rx);
   pthread_mutex_unlock(&spiMutex1);
+
+  return ret;
 }
 
 #endif

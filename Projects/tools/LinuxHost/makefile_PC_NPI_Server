@@ -9,7 +9,7 @@ LIBS= -lpthread
 CC := gcc
 CXX := g++
 
-DEFINES = -DRNP_HOST 
+DEFINES = -DRNP_HOST -D__DEBUG_TIME__
 # -D__DEBUG_TIME__
 # -DNPI_UNIX
 #-D__BIG_DEBUG__ 

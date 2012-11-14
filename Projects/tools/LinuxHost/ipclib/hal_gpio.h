@@ -112,6 +112,7 @@ PACK_1 typedef struct ATTR_PACKED
 {
 	char value[128];
 	char direction[128];
+	char edge[128];
 	uint8 active_high_low;
 } gpioCfg_t;
 
@@ -135,17 +136,18 @@ PACK_1 typedef struct ATTR_PACKED
  * FUNCTIONS - API
  */
 void HalGpioUsage(void);
-uint8 HalGpioSrdyInit(halGpioCfg_t *gpioCfg);
-uint8 HalGpioMrdyInit(halGpioCfg_t *gpioCfg);
-uint8 HalGpioResetInit(halGpioCfg_t *gpioCfg);
-void HalGpioMrdySet(uint8 state);
-uint8 HalGpioSrdyCheck(uint8 state);
-void HalGpioWaitSrdyClr(void);
-void HalGpioWaitSrdySet(void);
+int HalGpioSrdyInit(halGpioCfg_t *gpioCfg);
+int HalGpioMrdyInit(halGpioCfg_t *gpioCfg);
+int HalGpioResetInit(halGpioCfg_t *gpioCfg);
+int HalGpioMrdySet(uint8 state);
+int HalGpioMrdyCheck(uint8 state);
+int HalGpioSrdyCheck(uint8 state);
+int HalGpioWaitSrdyClr(void);
+int HalGpioWaitSrdySet(void);
 void HalGpioSrdyClose( void );
 void HalGpioMrdyClose( void );
 void HalGpioResetClose( void );
-void HalGpioReset( void );
+int HalGpioReset( void );
 
 #ifdef __cplusplus
 }

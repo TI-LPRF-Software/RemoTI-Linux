@@ -125,7 +125,7 @@ extern "C" {
  * @return      None.
  **************************************************************************************************
  */
-extern void NPI_SPI_SynchSlave( void );
+extern int NPI_SPI_SynchSlave( void );
 
 /**************************************************************************************************
  * @fn          NPI_SPI_ResetSlave
@@ -143,7 +143,7 @@ extern void NPI_SPI_SynchSlave( void );
  * @return      None.
  **************************************************************************************************
  */
-extern void NPI_SPI_ResetSlave( void );
+extern int NPI_SPI_ResetSlave( void );
 
 /**************************************************************************************************
  * @fn          NPI_SPI_SendAsynchData
@@ -160,10 +160,10 @@ extern void NPI_SPI_ResetSlave( void );
  *
  * None.
  *
- * @return      None.
+ * @return      STATUS
  **************************************************************************************************
  */
-extern void NPI_SPI_SendAsynchData( npiMsgData_t *pMsg );
+extern int NPI_SPI_SendAsynchData( npiMsgData_t *pMsg );
 
 /**************************************************************************************************
  * @fn          NPI_SPI_SendSynchData
@@ -181,10 +181,10 @@ extern void NPI_SPI_SendAsynchData( npiMsgData_t *pMsg );
  *
  * @param *pMsg  - Pointer to replay data (i.e. the SRSP).
  *
- * @return      None.
+ * @return      STATUS
  **************************************************************************************************
  */
-extern void NPI_SPI_SendSynchData( npiMsgData_t *pMsg );
+extern int NPI_SPI_SendSynchData( npiMsgData_t *pMsg );
 
 /**************************************************************************************************
  * @fn          NPI_SPI_SynchSlave
@@ -199,10 +199,10 @@ extern void NPI_SPI_SendSynchData( npiMsgData_t *pMsg );
  *
  * None.
  *
- * @return      None.
+ * @return      STATUS
  **************************************************************************************************
  */
-extern void NPI_SPI_SynchSlave( void );
+extern int NPI_SPI_SynchSlave( void );
 
 #ifdef __cplusplus
 }
