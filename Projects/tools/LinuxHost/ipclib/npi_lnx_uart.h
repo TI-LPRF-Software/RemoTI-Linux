@@ -114,7 +114,7 @@ extern "C" {
    * @return      None.
    **************************************************************************************************
    */
-  extern void NPI_UART_SendAsynchData( npiMsgData_t *pMsg );
+  extern int NPI_UART_SendAsynchData( npiMsgData_t *pMsg );
 
   /**************************************************************************************************
    * @fn          NPI_UART_SendSynchData
@@ -135,7 +135,7 @@ extern "C" {
    * @return      None.
    **************************************************************************************************
    */
-  extern void NPI_UART_SendSynchData( npiMsgData_t *pMsg );
+  extern int NPI_UART_SendSynchData( npiMsgData_t *pMsg );
 
 #ifdef __cplusplus
 }

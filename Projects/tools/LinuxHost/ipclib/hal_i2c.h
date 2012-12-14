@@ -104,10 +104,10 @@ extern "C"
  * FUNCTIONS - API
  */
 
-void HalI2cInit(const char *devpath);
-void HalI2cWrite(uint8 port, uint8 *pBuf, uint8 len);
-void HalI2cRead(uint8 port, uint8 *pBuf, uint8 len);
-void HalI2cClose(void);
+int HalI2cInit(const char *devpath);
+int HalI2cWrite(uint8 port, uint8 *pBuf, uint8 len);
+int HalI2cRead(uint8 port, uint8 *pBuf, uint8 len);
+int HalI2cClose(void);
 
 #endif  // #if (defined HAL_I2C) && (HAL_I2C == TRUE)
 

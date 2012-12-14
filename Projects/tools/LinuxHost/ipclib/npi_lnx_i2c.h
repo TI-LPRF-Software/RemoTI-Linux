@@ -132,10 +132,10 @@ extern void NPI_I2C_CloseDevice(void);
  *
  * None.
  *
- * @return      None.
+ * @return      STATUS
  **************************************************************************************************
  */
-extern void NPI_I2C_SendAsynchData(npiMsgData_t *pMsg);
+extern int NPI_I2C_SendAsynchData(npiMsgData_t *pMsg);
 
 /**************************************************************************************************
  * @fn          NPI_I2C_SendSynchData
@@ -153,10 +153,10 @@ extern void NPI_I2C_SendAsynchData(npiMsgData_t *pMsg);
  *
  * @param *pMsg  - Pointer to replay data (i.e. the SRSP).
  *
- * @return      None.
+ * @return      STATUS
  **************************************************************************************************
  */
-extern void NPI_I2C_SendSynchData(npiMsgData_t *pMsg);
+extern int NPI_I2C_SendSynchData(npiMsgData_t *pMsg);
 
 /**************************************************************************************************
  * @fn          NPI_I2C_ResetSlave
@@ -171,10 +171,10 @@ extern void NPI_I2C_SendSynchData(npiMsgData_t *pMsg);
  *
  * None.
  *
- * @return      None.
+ * @return      STATUS
  **************************************************************************************************
  */
-extern void NPI_I2C_ResetSlave( void );
+extern int NPI_I2C_ResetSlave( void );
 
 #ifdef __cplusplus
 }

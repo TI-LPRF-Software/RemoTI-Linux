@@ -88,10 +88,10 @@ typedef void (*npi_tracehook_t)(uint8 subsystem, uint8 cmd, uint8 *data, uint8 l
 // NOTE: Fields are position dependent. Do not rearrange!
 typedef struct ATTR_PACKED
 {
-  uint8 len;
-  uint8 subSys;
-  uint8 cmdId;
-  uint8 pData[AP_MAX_BUF_LEN];
+	uint8 len;
+	uint8 subSys;
+	uint8 cmdId;
+	uint8 pData[AP_MAX_BUF_LEN];
 } npiMsgData_t;
 
 #ifdef _MSC_VER
@@ -188,7 +188,7 @@ extern const pNPI_CloseDeviceFn NPI_CloseDeviceFnArr[];
  * @return      None.
  **************************************************************************************************
  */
-typedef void (*pNPI_SendAsynchDataFn) ( npiMsgData_t *pMsg );
+typedef int (*pNPI_SendAsynchDataFn) ( npiMsgData_t *pMsg );
 extern const pNPI_SendAsynchDataFn NPI_SendAsynchDataFnArr[];
 
 
@@ -211,7 +211,7 @@ extern const pNPI_SendAsynchDataFn NPI_SendAsynchDataFnArr[];
  * @return      None.
  **************************************************************************************************
  */
-typedef void (*pNPI_SendSynchDataFn) ( npiMsgData_t *pMsg );
+typedef int (*pNPI_SendSynchDataFn) ( npiMsgData_t *pMsg );
 extern const pNPI_SendSynchDataFn NPI_SendSynchDataFnArr[];
 
 /**************************************************************************************************
@@ -235,7 +235,7 @@ extern const pNPI_SendSynchDataFn NPI_SendSynchDataFnArr[];
  * @return      None.
  **************************************************************************************************
  */
-extern void NPI_AsynchMsgCback ( npiMsgData_t *pMsg );
+extern int NPI_AsynchMsgCback ( npiMsgData_t *pMsg );
 
 /**************************************************************************************************
  * @fn          NPI_ResetSlave
@@ -253,7 +253,7 @@ extern void NPI_AsynchMsgCback ( npiMsgData_t *pMsg );
  * @return      None.
  **************************************************************************************************
  */
-typedef void (*pNPI_ResetSlaveFn) ( void );
+typedef int (*pNPI_ResetSlaveFn) ( void );
 extern const pNPI_ResetSlaveFn NPI_ResetSlaveFnArr[];
 
 /**************************************************************************************************
@@ -273,7 +273,7 @@ extern const pNPI_ResetSlaveFn NPI_ResetSlaveFnArr[];
  * @return      None.
  **************************************************************************************************
  */
-typedef void (*pNPI_SynchSlaveFn) ( void );
+typedef int (*pNPI_SynchSlaveFn) ( void );
 extern const pNPI_SynchSlaveFn NPI_SynchSlaveFnArr[];
 
 /**************************************************************************************************

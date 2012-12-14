@@ -63,12 +63,12 @@
 #include <netinet/in.h>
 #endif
 
-#if (defined __STRESS_TEST__) || (defined __DEBUG_TIME__)
 #include <sys/time.h>
-#endif // __STRESS_TEST__  OR  __DEBUG_TIME__
 
 /* NPI includes */
 #include "npi_lnx.h"
+#include "npi_lnx_error.h"
+#include "npi_lnx_ipc_rpc.h"
 
 //#if (defined HAL_SPI) && (HAL_SPI == TRUE)
 #include "npi_lnx_spi.h"
@@ -89,32 +89,49 @@
 #ifdef __BIG_DEBUG__
 #define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #else
-#define debug_printf(fmt, ...)
+#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
 #endif
+
+#define time_printf(fmt, ...) st (if (__DEBUG_TIME_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
 
 /**************************************************************************************************
  *                                        Externals
  **************************************************************************************************/
 
-
 /**************************************************************************************************
  *                                        Defines
  **************************************************************************************************/
-#define NPI_SERVER_CONNECTION_QUEUE_SIZE                                           20
+#define NPI_SERVER_CONNECTION_QUEUE_SIZE        20
+
+#define MAX(a,b)								((a > b) ? a : b)
 
 /**************************************************************************************************
  *                                           Constant
  **************************************************************************************************/
 
-const char* sectionNamesArray[3][2] = { { "GPIO_SRDY.GPIO",
-		"GPIO_SRDY.LEVEL_SHIFTER", }, { "GPIO_MRDY.GPIO",
-				"GPIO_MRDY.LEVEL_SHIFTER", }, { "GPIO_RESET.GPIO",
-						"GPIO_RESET.LEVEL_SHIFTER", }, };
+const char* sectionNamesArray[3][2] =
+{
+	{
+		"GPIO_SRDY.GPIO",
+		"GPIO_SRDY.LEVEL_SHIFTER"
+	},
+	{
+		"GPIO_MRDY.GPIO",
+		"GPIO_MRDY.LEVEL_SHIFTER"
+	},
+	{
+		"GPIO_RESET.GPIO",
+		"GPIO_RESET.LEVEL_SHIFTER"
+	},
+};
 
 //const char *port = "";
 char port[128];
 
-const pNPI_OpenDeviceFn NPI_OpenDeviceFnArr[] = { NPI_UART_OpenDevice,
+
+const pNPI_OpenDeviceFn NPI_OpenDeviceFnArr[] =
+{
+		NPI_UART_OpenDevice,
 #if (defined HAL_SPI) && (HAL_SPI == TRUE)
 		NPI_SPI_OpenDevice,
 #endif
@@ -122,7 +139,9 @@ const pNPI_OpenDeviceFn NPI_OpenDeviceFnArr[] = { NPI_UART_OpenDevice,
 		NPI_I2C_OpenDevice
 #endif
 };
-const pNPI_CloseDeviceFn NPI_CloseDeviceFnArr[] = { NPI_UART_CloseDevice,
+const pNPI_CloseDeviceFn NPI_CloseDeviceFnArr[] =
+{
+		NPI_UART_CloseDevice,
 #if (defined HAL_SPI) && (HAL_SPI == TRUE)
 		NPI_SPI_CloseDevice,
 #endif
@@ -130,7 +149,8 @@ const pNPI_CloseDeviceFn NPI_CloseDeviceFnArr[] = { NPI_UART_CloseDevice,
 		NPI_I2C_CloseDevice
 #endif
 };
-const pNPI_SendAsynchDataFn NPI_SendAsynchDataFnArr[] = {
+const pNPI_SendAsynchDataFn NPI_SendAsynchDataFnArr[] =
+{
 		NPI_UART_SendAsynchData,
 #if (defined HAL_SPI) && (HAL_SPI == TRUE)
 		NPI_SPI_SendAsynchData,
@@ -139,7 +159,9 @@ const pNPI_SendAsynchDataFn NPI_SendAsynchDataFnArr[] = {
 		NPI_I2C_SendAsynchData
 #endif
 };
-const pNPI_SendSynchDataFn NPI_SendSynchDataFnArr[] = { NPI_UART_SendSynchData,
+const pNPI_SendSynchDataFn NPI_SendSynchDataFnArr[] =
+{
+		NPI_UART_SendSynchData,
 #if (defined HAL_SPI) && (HAL_SPI == TRUE)
 		NPI_SPI_SendSynchData,
 #endif
@@ -148,7 +170,9 @@ const pNPI_SendSynchDataFn NPI_SendSynchDataFnArr[] = { NPI_UART_SendSynchData,
 #endif
 };
 
-const pNPI_ResetSlaveFn NPI_ResetSlaveFnArr[] = { NULL,
+const pNPI_ResetSlaveFn NPI_ResetSlaveFnArr[] =
+{
+		NULL,
 #if (defined HAL_SPI) && (HAL_SPI == TRUE)
 		NPI_SPI_ResetSlave,
 #endif
@@ -157,7 +181,9 @@ const pNPI_ResetSlaveFn NPI_ResetSlaveFnArr[] = { NULL,
 #endif
 };
 
-const pNPI_SynchSlaveFn NPI_SynchSlaveFnArr[] = { NULL,
+const pNPI_SynchSlaveFn NPI_SynchSlaveFnArr[] =
+{
+		NULL,
 #if (defined HAL_SPI) && (HAL_SPI == TRUE)
 		NPI_SPI_SynchSlave,
 #endif
@@ -174,6 +200,10 @@ const pNPI_SynchSlaveFn NPI_SynchSlaveFnArr[] = { NULL,
  *                                        Global Variables
  **************************************************************************************************/
 
+int npi_ipc_errno;
+int __BIG_DEBUG_ACTIVE = FALSE;
+int __DEBUG_TIME_ACTIVE = FALSE;		// Do not enable by default.
+
 /**************************************************************************************************
  *                                        Local Variables
  **************************************************************************************************/
@@ -184,7 +214,8 @@ uint32 sNPIlisten;
 // Socket connection file descriptors
 fd_set activeConnectionsFDs;
 int fdmax;
-struct {
+struct
+{
 	int list[NPI_SERVER_CONNECTION_QUEUE_SIZE];
 	int size;
 } activeConnections;
@@ -192,16 +223,22 @@ struct {
 // NPI IPC Server buffers
 char npi_ipc_buf[2][sizeof(npiMsgData_t)];
 
+// Variables for Configuration
+FILE *serialCfgFd;
+char* pStrBufRoot;
+char* devPath;
+halGpioCfg_t** gpioCfg;
 
-#ifdef __DEBUG_TIME__
+#if (defined __DEBUG_TIME__) || (__STRESS_TEST__)
 struct timeval curTime, startTime, prevTimeSend, prevTimeRec;
-#endif
+#endif //__DEBUG_TIME__
+
 #ifdef __STRESS_TEST__
 #define TIMING_STATS_SIZE                                                     500
-#define TIMING_STATS_MS_DIV                                                             10
+#define TIMING_STATS_MS_DIV                                                    10
 unsigned int timingStats[2][TIMING_STATS_SIZE + 1];
 FILE *fpStressTestData;
-#define STRESS_TEST_SUPPORTED_NUM_PAIRING_ENTRIES                                    10
+#define STRESS_TEST_SUPPORTED_NUM_PAIRING_ENTRIES                              10
 struct
 {
 	uint32 currentSeqNumber[STRESS_TEST_SUPPORTED_NUM_PAIRING_ENTRIES];
@@ -225,44 +262,23 @@ struct
  *                                     Local Function Prototypes
  **************************************************************************************************/
 
- // NPI Callback Related
- void NPI_AsynchMsgCback(npiMsgData_t *pMsg);
+// NPI Callback Related
+int NPI_AsynchMsgCback(npiMsgData_t *pMsg);
 
-char* SerialConfigParser(FILE* serialCfgFd, const char* section,
+int SerialConfigParser(FILE* serialCfgFd, const char* section,
 		const char* key, char* resString);
+
+void NPI_LNX_IPC_Exit(int ret);
 
 static uint8 devIdx = 0;
 
-void NPI_LNX_IPC_SendData(uint8 len, int connection);
+int NPI_LNX_IPC_SendData(uint8 len, int connection);
 int NPI_LNX_IPC_ConnectionHandle(int connection);
 
 int removeFromActiveList(int c);
 int addToActiveList(int c);
 
-void npiSynchSlave(void) {
-	// This function is specific to SPI
-	//#if (defined HAL_SPI) && (HAL_SPI == TRUE)
-	//  NPI_SynchSlave();
-	//#endif
-}
-
-void halResetSlave(void) {
-	// This function is specific to SPI and I2C
-	//#if ( (defined HAL_SPI) && (HAL_SPI == TRUE) ) || ( (defined HAL_I2C) && (HAL_I2C == TRUE))
-	//  NPI_ResetSlave();
-	//#endif
-}
-
-// memcpy routine
-void *msg_memcpy(void *dst, const void *src, uint16 len) {
-	return memcpy(dst, src, (size_t) len);
-}
-
-// TODO: relocate this
-void rtisFatalError(uint8 status) {
-	// Do nothing for now
-	//  assert(0);
-}
+void writeToNpiLnxLog(const char* str);
 
 /**************************************************************************************************
  * @fn          halDelay
@@ -287,10 +303,62 @@ void rtisFatalError(uint8 status) {
  * @return      None.
  **************************************************************************************************
  */
-void halDelay(uint8 msecs, uint8 sleep) {
-	if (sleep) {
+void halDelay(uint8 msecs, uint8 sleep)
+{
+	if (sleep)
+	{
 		//    usleep(msecs * 1000);
 	}
+}
+
+void writeToNpiLnxLog(const char* str)
+{
+	int npiLnxLogFd, i = 0;
+	char *fullStr = (char *)malloc(255);
+	char *inStr = (char *)malloc(255);
+
+	time_t timeNow;
+	struct tm * timeNowinfo;
+
+	time ( &timeNow );
+	timeNowinfo = localtime ( &timeNow );
+
+	sprintf(fullStr, "[%s", asctime(timeNowinfo));
+	sprintf(inStr, "%s", str);
+	// Remove \n characters
+	fullStr[strlen(fullStr) - 2] = 0;
+	for (i = strlen(str) - 1; i > MAX(strlen(str), 4); i--)
+	{
+		if (inStr[i] == '\n')
+			inStr[i] = 0;
+	}
+	sprintf(fullStr, "%s] %s", fullStr, inStr);
+
+	// Add global error code
+	sprintf(fullStr, "%s. Error: %.8X\n", fullStr, npi_ipc_errno);
+
+	// Write error message to /dev/npiLnxLog
+	npiLnxLogFd = open("/var/npiLnxLog.log",  O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+	if (npiLnxLogFd > 0)
+	{
+		write(npiLnxLogFd, fullStr, strlen(fullStr) + 1);
+//		printf("Wrote:\n%s\n to npiLnxLog.log\n", fullStr, errno);
+	}
+	else
+	{
+		printf("Could not write \n%s\n to npiLnxLog. Error: %.8X\n", str, errno);
+		perror("open");
+	}
+	close(npiLnxLogFd);
+	free(fullStr);
+	free(inStr);
+}
+
+static void print_usage(const char *prog)
+{
+	printf("Usage: %s [config_file_name]\n", prog);
+	puts("  config_file_name: the name of the config file to use, if not set, the default is ./RemoTI_RNP.cfg \n");
+	exit(1);
 }
 
 /**************************************************************************************************
@@ -309,64 +377,87 @@ void halDelay(uint8 msecs, uint8 sleep) {
  *
  *
  **************************************************************************************************/
-
-int main(void) {
-	int res = FALSE;
-	//            char i;
+int main(int argc, char ** argv)
+{
+	int ret = NPI_LNX_SUCCESS;
 
 	/**********************************************************************
 	 * First step is to Configure the serial interface
 	 **********************************************************************/
 
-	// Variables for Configuration
-	FILE *serialCfgFd;
+	// Variables for Configuration. Some are declared global to be used in unified graceful
+	// exit function.
 	char* strBuf;
-	char* pStrBufRoot;
-	char* devPath;
 	uint8 gpioIdx = 0;
-	halGpioCfg_t** gpioCfg;
+	char* configFilePath;
 
-	//            halGpioCfg_t gpioCfgArr[3];
-	//            gpioCfg = (halGpioCfg_t** )&gpioCfgArr;
+	if (argc==1)
+	{
+		configFilePath = "./RemoTI_RNP.cfg";
+	}
+	else if (argc==2)
+	{
+		configFilePath = argv[1];
+	}
+	else
+	{
+		printf(" too many Arguments)");
+		print_usage(argv[0]);
+	}
+
 
 	// Allocate memory for string buffer and configuration buffer
 	strBuf = (char*) malloc(128);
+	memset(strBuf, 0, 128);
 	pStrBufRoot = strBuf;
 	devPath = (char*) malloc(128);
+	memset(devPath, 0, 128);
 	gpioCfg = (halGpioCfg_t**) malloc(3 * sizeof(halGpioCfg_t*));
 	debug_printf("gpioCfg \t\t\t\t@0x%.8X\n",
 			(unsigned int)&(gpioCfg));
-	for (gpioIdx = 0; gpioIdx < 3; gpioIdx++) {
+	for (gpioIdx = 0; gpioIdx < 3; gpioIdx++)
+	{
 		gpioCfg[gpioIdx] = (halGpioCfg_t*) malloc(sizeof(halGpioCfg_t));
+		memset(gpioCfg[gpioIdx], 0, sizeof(halGpioCfg_t));
 		debug_printf("gpioCfg[%d] \t\t\t\t@0x%.8X\n",
-				gpioIdx,
-				(unsigned int)&(gpioCfg[gpioIdx])); debug_printf("gpioCfg[%d].gpio \t\t\t@0x%.8X\n",
-						gpioIdx,
-						(unsigned int)&(gpioCfg[gpioIdx]->gpio)); debug_printf("gpioCfg[%d].levelshifter \t\t@0x%.8X\n",
-								gpioIdx,
-								(unsigned int)&(gpioCfg[gpioIdx]->levelshifter));
+				gpioIdx, (unsigned int)&(gpioCfg[gpioIdx]));
+		debug_printf("gpioCfg[%d].gpio \t\t\t@0x%.8X\n",
+				gpioIdx, (unsigned int)&(gpioCfg[gpioIdx]->gpio));
+		debug_printf("gpioCfg[%d].levelshifter \t\t@0x%.8X\n",
+				gpioIdx, (unsigned int)&(gpioCfg[gpioIdx]->levelshifter));
 	}
 
 	// Open file for parsing
-	const char* configFilePath = "./RemoTI_RNP.cfg";
 	serialCfgFd = fopen(configFilePath, "r");
-	if (serialCfgFd == NULL) {
+	if (serialCfgFd == NULL)
+	{
 		//                            debug_
 		printf("Could not open file '%s'\n", configFilePath);
-		return res;
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_OPEN_REMOTI_RNP_CFG;
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
 	}
 
 	// Get device type
-	strBuf = SerialConfigParser(serialCfgFd, "DEVICE", "deviceKey", strBuf);
+	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "DEVICE", "deviceKey", strBuf)))
+	{
+		printf("Could not find 'deviceKey' inside config file '%s'\n", configFilePath);
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_KEY;
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+	}
 
 	// Copy from buffer to variable
 	devIdx = strBuf[0] - '0';
 	//            debug_
-	printf("deviceKey = %i\n", devIdx);
+	printf("deviceKey = %i  (%s)\n", devIdx, strBuf);
 
 	// Get path to the device
 	strBuf = pStrBufRoot;
-	strBuf = SerialConfigParser(serialCfgFd, "DEVICE", "devPath", strBuf);
+	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "DEVICE", "devPath", strBuf)))
+	{
+		printf("Could not find 'devPath' inside config file '%s'\n", configFilePath);
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_PATH;
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+	}
 	// Copy from buffer to variable
 	memcpy(devPath, strBuf, strlen(strBuf));
 	//            debug_
@@ -380,98 +471,163 @@ int main(void) {
 	//            printf("<\n");
 
 	// GPIO configuration
-	if ((devIdx == 1) || (devIdx == 2)) {
+	if ((devIdx == 1) || (devIdx == 2))
+	{
 		for (gpioIdx = 0; gpioIdx < 3; gpioIdx++) {
 			// Get SRDY, MRDY or RESET GPIO
-			debug_printf("gpioCfg[gpioIdx]->gpio \t\t\t@ 0x%.8X\n", (unsigned int)&(gpioCfg[gpioIdx]->gpio));
+			debug_printf("gpioCfg[gpioIdx]->gpio \t\t\t@ 0x%.8X\n",
+					(unsigned int)&(gpioCfg[gpioIdx]->gpio));
 
 			// Get SRDY, MRDY or RESET GPIO value
 			strBuf = pStrBufRoot;
-			strBuf = SerialConfigParser(serialCfgFd,
-					sectionNamesArray[gpioIdx][0], "value", strBuf);
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][0],
+					"value", strBuf)))
+			{
 			// Copy from buffer to variable
-			debug_printf("strBuf \t\t\t\t\t@ 0x%.8X\n", (unsigned int)&strBuf); debug_printf("gpioCfg[gpioIdx]->gpio.value \t\t@ 0x%.8X\n", (unsigned int)&(gpioCfg[gpioIdx]->gpio.value));
-			memcpy(gpioCfg[gpioIdx]->gpio.value, strBuf, strlen(strBuf));
-			debug_printf("gpioCfg[%i]->gpio.value = '%s'\n",
-					gpioIdx,
-					gpioCfg[gpioIdx]->gpio.value);
-			//                                                                            strlen(strBuf));
+				debug_printf("strBuf \t\t\t\t\t@ 0x%.8X\n",
+						(unsigned int)&strBuf);
+				debug_printf("gpioCfg[gpioIdx]->gpio.value \t\t@ 0x%.8X\n",
+						(unsigned int)&(gpioCfg[gpioIdx]->gpio.value));
+				memcpy(gpioCfg[gpioIdx]->gpio.value, strBuf, strlen(strBuf));
+				debug_printf("gpioCfg[%i]->gpio.value = '%s'\n",
+						gpioIdx, gpioCfg[gpioIdx]->gpio.value);
+			}
+			else
+			{
+				printf("[CONFIG] ERROR , key 'value' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][0]);
+				npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO(gpioIdx, 0, devIdx);
+				NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+			}
 
 			// Get SRDY, MRDY or RESET GPIO direction
 			strBuf = pStrBufRoot;
-			strBuf = SerialConfigParser(serialCfgFd,
-					sectionNamesArray[gpioIdx][0], "direction", strBuf);
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][0],
+					"direction", strBuf)))
+			{
 			// Copy from buffer to variable
-			debug_printf("strBuf \t\t\t\t\t@ 0x%.8X\n", (unsigned int)&strBuf); debug_printf("gpioCfg[gpioIdx]->gpio.direction \t@ 0x%.8X\n", (unsigned int)&(gpioCfg[gpioIdx]->gpio.direction));
-			memcpy(gpioCfg[gpioIdx]->gpio.direction, strBuf, strlen(strBuf));
-			debug_printf("gpioCfg[%i]->gpio.direction = '%s'\n",
-					gpioIdx,
-					gpioCfg[gpioIdx]->gpio.direction);
+				debug_printf("strBuf \t\t\t\t\t@ 0x%.8X\n",
+						(unsigned int)&strBuf);
+				debug_printf("gpioCfg[gpioIdx]->gpio.direction \t@ 0x%.8X\n",
+						(unsigned int)&(gpioCfg[gpioIdx]->gpio.direction));
+				memcpy(gpioCfg[gpioIdx]->gpio.direction, strBuf,
+						strlen(strBuf));
+				debug_printf("gpioCfg[%i]->gpio.direction = '%s'\n",
+						gpioIdx, gpioCfg[gpioIdx]->gpio.direction);
+			}
+			else
+			{
+				printf("[CONFIG] ERROR , key 'direction' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][0]);
+				npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO(gpioIdx, 0, devIdx);
+				NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+			}
 
+#ifdef SRDY_INTERRUPT
+			// Get SRDY, MRDY or RESET GPIO edge
+			if (gpioIdx == 0)
+			{
+				strBuf = pStrBufRoot;
+				if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][0],
+						"edge", strBuf)))
+				{
+					// Copy from buffer to variable
+					debug_printf("strBuf \t\t\t\t\t@ 0x%.8X\n",
+							(unsigned int)&strBuf);
+					debug_printf("gpioCfg[gpioIdx]->gpio.edge \t@ 0x%.8X\n",
+							(unsigned int)&(gpioCfg[gpioIdx]->gpio.edge));
+					memcpy(gpioCfg[gpioIdx]->gpio.edge, strBuf, strlen(strBuf));
+					debug_printf("gpioCfg[%i]->gpio.edge = '%s'\n",
+							gpioIdx, gpioCfg[gpioIdx]->gpio.edge);
+				}
+				else
+				{
+					printf("[CONFIG] ERROR , key 'edge' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][0]);
+					npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO(gpioIdx, 0, devIdx);
+					NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+				}
+			}
+#endif
 			// Get SRDY, MRDY or RESET GPIO Active High/Low
 			strBuf = pStrBufRoot;
-			strBuf = SerialConfigParser(serialCfgFd,
-					sectionNamesArray[gpioIdx][0], "active_high_low", strBuf);
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd,
+					sectionNamesArray[gpioIdx][1], "active_high_low",
+					strBuf))) {
 			// Copy from buffer to variable
 			gpioCfg[gpioIdx]->gpio.active_high_low = strBuf[0] - '0';
 			debug_printf("gpioCfg[%i]->gpio.active_high_low = %d\n",
-					gpioIdx,
-					gpioCfg[gpioIdx]->gpio.active_high_low);
+							gpioIdx, gpioCfg[gpioIdx]->gpio.active_high_low);
+			}
+			else
+				printf("[CONFIG] Warning , key 'active_high_low' is missing for optionnal GPIO %s\n", sectionNamesArray[gpioIdx][0]);
 
 			// Get SRDY, MRDY or RESET Level Shifter
-			debug_printf("gpioCfg[gpioIdx]->levelshifter \t\t\t@ 0x%.8X\n", (unsigned int)&(gpioCfg[gpioIdx]->levelshifter));
+			debug_printf("gpioCfg[gpioIdx]->levelshifter \t\t\t@ 0x%.8X\n",
+					(unsigned int)&(gpioCfg[gpioIdx]->levelshifter));
 
 			// Get SRDY, MRDY or RESET Level Shifter value
 			strBuf = pStrBufRoot;
-			strBuf = SerialConfigParser(serialCfgFd,
-					sectionNamesArray[gpioIdx][1], "value", strBuf);
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd,
+					sectionNamesArray[gpioIdx][1], "value", strBuf)))
+			{
 			// Copy from buffer to variable
 			memcpy(gpioCfg[gpioIdx]->levelshifter.value, strBuf,
 					strlen(strBuf));
 			debug_printf("gpioCfg[%i]->levelshifter.value = '%s'\n",
-					gpioIdx,
-					gpioCfg[gpioIdx]->levelshifter.value);
+						gpioIdx, gpioCfg[gpioIdx]->levelshifter.value);
+			}
+			else
+				printf("[CONFIG] Warning , key 'value' is missing for optionnal GPIO %s\n", sectionNamesArray[gpioIdx][1]);
 
 			// Get SRDY, MRDY or RESET Level Shifter direction
 			strBuf = pStrBufRoot;
-			strBuf = SerialConfigParser(serialCfgFd,
-					sectionNamesArray[gpioIdx][1], "direction", strBuf);
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd,
+					sectionNamesArray[gpioIdx][1], "direction", strBuf)))
+			{
 			// Copy from buffer to variable
 			memcpy(gpioCfg[gpioIdx]->levelshifter.direction, strBuf,
 					strlen(strBuf));
 			debug_printf("gpioCfg[%i]->levelshifter.direction = '%s'\n",
-					gpioIdx,
-					gpioCfg[gpioIdx]->levelshifter.direction);
+						gpioIdx, gpioCfg[gpioIdx]->levelshifter.direction);
+			}
+			else
+				printf("[CONFIG] Warning , key 'direction' is missing for optionnal GPIO %s\n", sectionNamesArray[gpioIdx][1]);
+
 
 			// Get SRDY, MRDY or RESET Level Shifter Active High/Low
 			strBuf = pStrBufRoot;
-			strBuf = SerialConfigParser(serialCfgFd,
-					sectionNamesArray[gpioIdx][1], "active_high_low", strBuf);
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd,
+					sectionNamesArray[gpioIdx][1], "active_high_low", strBuf)))
+			{
 			// Copy from buffer to variable
 			gpioCfg[gpioIdx]->levelshifter.active_high_low = atoi(strBuf);
 			debug_printf("gpioCfg[%i]->levelshifter.active_high_low = %d\n",
-					gpioIdx,
-					gpioCfg[gpioIdx]->levelshifter.active_high_low);
+					gpioIdx, gpioCfg[gpioIdx]->levelshifter.active_high_low);
+			}
+			else
+				printf("[CONFIG] Warning , key 'active_high_low' is missing for optionnal GPIO %s\n", sectionNamesArray[gpioIdx][1]);
 		}
 	}
 
-	//#if (defined HAL_UART) && (HAL_UART == TRUE)
 
 	/**********************************************************************
 	 * Now open the serial interface
 	 */
 
-	if (devIdx == 0) {
-		res = (NPI_OpenDeviceFnArr[devIdx])(devPath, NULL);
-	} else if (devIdx == 1) {
+	if (devIdx == 0)
+	{
+		ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, NULL);
+	}
+	else if (devIdx == 1)
+	{
 		npiSpiCfg_t spiCfg;
 		strBuf = pStrBufRoot;
-		strBuf = SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf);
-		spiCfg.speed = atoi(strBuf);
+		if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
+			spiCfg.speed = atoi(strBuf);
+		else
+			spiCfg.speed=500000;
 		spiCfg.gpioCfg = gpioCfg;
 
 		// Now open device for processing
-		res = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiSpiCfg_t *) &spiCfg);
+		ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiSpiCfg_t *) &spiCfg);
 
 		// Perform Reset of the RNP
 		(NPI_ResetSlaveFnArr[devIdx])();
@@ -479,44 +635,32 @@ int main(void) {
 		// Do the Hw Handshake
 		(NPI_SynchSlaveFnArr[devIdx])();
 	}
-	if (devIdx == 2) {
+	if (devIdx == 2)
+	{
 		npiI2cCfg_t i2cCfg;
 		i2cCfg.gpioCfg = gpioCfg;
 
 		// Open the Device and perform a reset
-		res = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiI2cCfg_t *) &i2cCfg);
+		ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiI2cCfg_t *) &i2cCfg);
 	}
 
 	// Get port from configuration file
-	strBuf = SerialConfigParser(serialCfgFd, "PORT", "port", strBuf);
-	if (strBuf == NULL) {
+	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "PORT", "port", strBuf)))
+	{
 		// Fall back to default if port was not found in the configuration file
-		//                            port = NPI_PORT;
 		strncpy(port, NPI_PORT, 128);
 		printf(
 				"Warning! Port not found in configuration file. Will use default port: %s\n",
 				port);
-	} else {
-		//                            port = strBuf;
+	} 
+	else 
+	{
 		strncpy(port, strBuf, 128);
 	}
 
-	// Close file for parsing
-	fclose(serialCfgFd);
 
-	// Free memory for configuration buffers
-	free(pStrBufRoot);
-	free(devPath);
-	for (gpioIdx = 0; gpioIdx < 3; gpioIdx++) {
-		free(gpioCfg[gpioIdx]);
-	}
-	free(gpioCfg);
-
-	if (res == FALSE) {
-		// Don't even bother open a socket; device opening failed..
-		printf("Could not open device... exiting\n");
-		return res;
-	}
+	// The following will exit if ret != SUCCESS
+	NPI_LNX_IPC_Exit(ret);
 
 
 #ifdef __STRESS_TEST__
@@ -526,7 +670,8 @@ int main(void) {
 
 	int i = 0, fdStressTestData, done=0;
 	char pathName[128];
-	do {
+	do
+	{
 		sprintf(pathName, "results/stressTestData%.4d.txt", i++);
 		printf("%s\n", pathName);
 		fdStressTestData = open( pathName , O_CREAT | O_EXCL | O_WRONLY, S_IWRITE | S_IREAD );
@@ -574,13 +719,15 @@ int main(void) {
 		//                port = NPI_PORT;
 		strncpy(port, NPI_PORT, 128);
 		printf("Trying default port: %s instead\n", port);
-		if ((status = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
+		if ((status = getaddrinfo(NULL, port, &hints, &servinfo)) != 0)
+		{
 			fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
-			exit(1);
+			npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_GET_ADDRESS_INFO;
+			NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
 		}
 	}
 
-	printf("Following IP adresses are available:\n\n");
+	printf("Following IP addresses are available:\n\n");
 	{
 		struct ifaddrs * ifAddrStruct=NULL;
 		struct ifaddrs * ifa=NULL;
@@ -611,9 +758,6 @@ int main(void) {
 	}
 
 	printf("The socket will listen on the following IP addresses:\n\n");
-
-
-
 
 
 	struct addrinfo *p;
@@ -657,7 +801,8 @@ int main(void) {
 	if (bind(sNPIlisten, (struct sockaddr *)&local, len) == -1)
 	{
 		perror("bind");
-		res = FALSE;
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_BIND;
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
 	}
 
 #else
@@ -667,115 +812,172 @@ int main(void) {
 	int yes = 1;
 	// avoid "Address already in use" error message
 	if (setsockopt(sNPIlisten, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int))
-			== -1) {
+			== -1)
+	{
 		perror("setsockopt");
-		res = FALSE;
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_SET_REUSE_ADDRESS;
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
 	}
 
 	// Bind socket
-	if (bind(sNPIlisten, servinfo->ai_addr, servinfo->ai_addrlen) == -1) {
+	if (bind(sNPIlisten, servinfo->ai_addr, servinfo->ai_addrlen) == -1)
+	{
 		perror("bind");
-		res = FALSE;
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_BIND;
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
 	}
 
 #endif
 
 	// Listen, allow 4 connections in the queue
-	if (listen(sNPIlisten, NPI_SERVER_CONNECTION_QUEUE_SIZE) == -1) {
+	if (listen(sNPIlisten, NPI_SERVER_CONNECTION_QUEUE_SIZE) == -1)
+	{
 		perror("listen");
-		res = FALSE;
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_LISTEN;
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
 	}
 
 	fd_set activeConnectionsFDsSafeCopy;
 	int justConnected, c;
 
+	// Connection main loop. Cannot get here with ret != SUCCESS
 
-	// Connection main loop
-	if (res == TRUE) {
-		// Clear file descriptor sets
-		FD_ZERO(&activeConnectionsFDs);
-		FD_ZERO(&activeConnectionsFDsSafeCopy);
+	char *toNpiLnxLog = (char *)malloc(AP_MAX_BUF_LEN);
 
-		// Add the listener to the set
-		FD_SET(sNPIlisten, &activeConnectionsFDs);
-		fdmax = sNPIlisten;
+	// Clear file descriptor sets
+	FD_ZERO(&activeConnectionsFDs);
+	FD_ZERO(&activeConnectionsFDsSafeCopy);
 
-#ifdef __DEBUG_TIME__
-		gettimeofday(&startTime, NULL);
-#endif //__DEBUG_TIME__
-		//                                            debug_
-		printf("waiting for first connection on %d...\n", sNPIlisten);
+	// Add the listener to the set
+	FD_SET(sNPIlisten, &activeConnectionsFDs);
+	fdmax = sNPIlisten;
 
-		for (;;) {
+#if (defined __DEBUG_TIME__) || (__STRESS_TEST__)
+	gettimeofday(&startTime, NULL);
+#endif // (defined __DEBUG_TIME__) || (__STRESS_TEST__)
+	//                                            debug_
+	printf("waiting for first connection on %d...\n", sNPIlisten);
 
-			activeConnectionsFDsSafeCopy = activeConnectionsFDs;
+	while (ret == NPI_LNX_SUCCESS)
+	{
+		activeConnectionsFDsSafeCopy = activeConnectionsFDs;
 
-			// First use select to find activity on the sockets
-			if (select (fdmax + 1, &activeConnectionsFDsSafeCopy, NULL, NULL, NULL) == -1)
+		// First use select to find activity on the sockets
+		if (select (fdmax + 1, &activeConnectionsFDsSafeCopy, NULL, NULL, NULL) == -1)
+		{
+			if (errno != EINTR)
 			{
-				if (errno != EINTR)
-				{
-					perror("select");
-					res = FALSE;
-					break;
-				}
-				continue;
+				perror("select");
+				npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_SELECT_CHECK_ERRNO;
+				ret = NPI_LNX_FAILURE;
+				break;
 			}
+			continue;
+		}
 
-			// Then process this activity
-			for (c = 0; c <= fdmax; c++)
+		// Then process this activity
+		for (c = 0; c <= fdmax; c++)
+		{
+			if (FD_ISSET(c, &activeConnectionsFDsSafeCopy))
 			{
-				if (FD_ISSET(c, &activeConnectionsFDsSafeCopy))
+				if (c == sNPIlisten)
 				{
-					if (c == sNPIlisten)
-					{
-						int addrLen = 0;
-						// Accept a connection from a client.
-						addrLen = sizeof(their_addr);
-						justConnected = accept(sNPIlisten,
-								(struct sockaddr *) &their_addr,
-								(socklen_t *) &addrLen);
+					int addrLen = 0;
+					// Accept a connection from a client.
+					addrLen = sizeof(their_addr);
+					justConnected = accept(sNPIlisten,
+							(struct sockaddr *) &their_addr,
+							(socklen_t *) &addrLen);
 
-						if (justConnected == -1)
-						{
-							perror("accept");
-						}
-						else
-						{
-							char ipstr[INET6_ADDRSTRLEN];
-							char ipstr2[INET6_ADDRSTRLEN];
-							FD_SET(justConnected, &activeConnectionsFDs);
-							if (justConnected > fdmax)
-								fdmax = justConnected;
-							//                                            debug_
-							inet_ntop(AF_INET, &((struct sockaddr_in *) &their_addr)->sin_addr, ipstr, sizeof ipstr);
-							inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&their_addr)->sin6_addr, ipstr2, sizeof ipstr2);
-							printf("Connected to %d.(%s / %s)\n", justConnected, ipstr, ipstr2);
-							addToActiveList(justConnected);
-#ifdef __DEBUG_TIME__
-							gettimeofday(&startTime, NULL);
-#endif //__DEBUG_TIME__
-						}
+					if (justConnected == -1)
+					{
+						perror("accept");
+						npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_ACCEPT;
+						ret = NPI_LNX_FAILURE;
+						break;
 					}
 					else
 					{
-						if (NPI_LNX_IPC_ConnectionHandle(c) < 0)
+						char ipstr[INET6_ADDRSTRLEN];
+						char ipstr2[INET6_ADDRSTRLEN];
+						FD_SET(justConnected, &activeConnectionsFDs);
+						if (justConnected > fdmax)
+							fdmax = justConnected;
+						//                                            debug_
+						inet_ntop(AF_INET, &((struct sockaddr_in *) &their_addr)->sin_addr, ipstr, sizeof ipstr);
+						inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&their_addr)->sin6_addr, ipstr2, sizeof ipstr2);
+						sprintf(toNpiLnxLog, "Connected to %d.(%s / %s)", justConnected, ipstr, ipstr2);
+						printf("%s\n", toNpiLnxLog);
+						writeToNpiLnxLog(toNpiLnxLog);
+						ret = addToActiveList(justConnected);
+
+#ifdef __DEBUG_TIME__
+  						if (__DEBUG_TIME_ACTIVE == TRUE)
 						{
-							// Everything is ok
+							gettimeofday(&startTime, NULL);
 						}
-						else
+#endif //__DEBUG_TIME__
+					}
+				}
+				else
+				{
+					ret = NPI_LNX_IPC_ConnectionHandle(c);
+					if (ret == NPI_LNX_SUCCESS)
+					{
+						// Everything is ok
+					}
+					else
+					{
+						uint8 childThread;
+						switch (npi_ipc_errno)
 						{
+						case NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT:
+						case NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT:
+							// This may be caused by an unexpected reset. Write it to the log,
+							// but keep going.
+							// Everything about the error can be found in the message, and in npi_ipc_errno:
+							childThread = ((npiMsgData_t *) npi_ipc_buf[0])->cmdId;
+							sprintf(toNpiLnxLog, "Child thread with ID %d in module %d reported error:\t%s",
+									NPI_LNX_ERROR_THREAD(childThread),
+									NPI_LNX_ERROR_MODULE(childThread),
+									(char *)(((npiMsgData_t *) npi_ipc_buf[0])->pData));
+							//							printf("%s\n", toNpiLnxLog);
+							writeToNpiLnxLog(toNpiLnxLog);
+							// Force continuation
+							ret = NPI_LNX_SUCCESS;
+							break;
+						case NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT:
 							close(c);
 							printf("Removing connection %d\n", c);
 							// Connection closed. Remove from set
 							FD_CLR(c, &activeConnectionsFDs);
-							removeFromActiveList(c);
+							// We should now set ret to NPI_SUCCESS, but there is still one fatal error
+							// possibility so simply set ret = to return value from removeFromActiveList().
+							ret = removeFromActiveList(c);
+							sprintf(toNpiLnxLog, "Removed connection %d", c);
+							//							printf("%s\n", toNpiLnxLog);
+							writeToNpiLnxLog(toNpiLnxLog);
+							break;
+						default:
+							//							debug_
+							printf("[ERR] npi_ipc_errno 0x%.8X\n", npi_ipc_errno);
+							// Everything about the error can be found in the message, and in npi_ipc_errno:
+							childThread = ((npiMsgData_t *) npi_ipc_buf[0])->cmdId;
+							sprintf(toNpiLnxLog, "Child thread with ID %d in module %d reported error:\t%s",
+									NPI_LNX_ERROR_THREAD(childThread),
+									NPI_LNX_ERROR_MODULE(childThread),
+									(char *)(((npiMsgData_t *) npi_ipc_buf[0])->pData));
+							//							printf("%s\n", toNpiLnxLog);
+							writeToNpiLnxLog(toNpiLnxLog);
+							break;
 						}
 					}
 				}
 			}
 		}
 	}
+	free(toNpiLnxLog);
+
 
 	/**********************************************************************
 	 * Remember to close down all connections
@@ -791,7 +993,7 @@ int main(void) {
 	//            close(fdStressTestData);
 #endif //(defined __STRESS_TEST__) && (__STRESS_TEST__ == TRUE)
 
-	return !res;
+	return ret;
 }
 
 
@@ -823,18 +1025,19 @@ int addToActiveList(int c)
 		// Increment size
 		activeConnections.size++;
 
-		return 0;
+		return NPI_LNX_SUCCESS;
 	}
 	else
 	{
 		// There's no more room in the list
-		return -1;
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_ADD_TO_ACTIVE_LIST_NO_ROOM;
+		return NPI_LNX_FAILURE;
 	}
 }
 
 /**************************************************************************************************
  *
- * @fn          addToActiveList
+ * @fn          removeFromActiveList
  *
  * @brief       Manage active connections, remove from list. Re organize so list is full
  * 				up to its declared size
@@ -860,21 +1063,7 @@ int removeFromActiveList(int c)
 		if (activeConnections.list[i] == c)
 			break;
 	}
-	if (i < activeConnections.size)
-	{
-		// Found our entry, replace this entry by the last entry
-		activeConnections.list[i] = activeConnections.list[activeConnections.size - 1];
 
-		// Decrement size
-		activeConnections.size--;
-
-		return 0;
-	}
-	else
-	{
-		// Could not find entry
-		return -1;
-	}
 #ifdef __BIG_DEBUG__
 	printf("Active Connections: %d", activeConnections.list[0]);
 	// Send data to all connections, except listener
@@ -884,6 +1073,23 @@ int removeFromActiveList(int c)
 	}
 	printf("\n");
 #endif //__BIG_DEBUG__
+
+	if (i < activeConnections.size)
+	{
+		// Found our entry, replace this entry by the last entry
+		activeConnections.list[i] = activeConnections.list[activeConnections.size - 1];
+
+		// Decrement size
+		activeConnections.size--;
+
+		return NPI_LNX_SUCCESS;
+	}
+	else
+	{
+		// Could not find entry
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOVE_FROM_ACTIVE_LIST_NOT_FOUND;
+		return NPI_LNX_FAILURE;
+	}
 }
 
 /**************************************************************************************************
@@ -900,13 +1106,12 @@ int removeFromActiveList(int c)
  *
  * None.
  *
- * @return      -1 if no connection was closed, otherwise return connection which was closed
+ * @return      STATUS
  *
  **************************************************************************************************/
 int NPI_LNX_IPC_ConnectionHandle(int connection)
 {
-	int connectionDone, n, i;
-	connectionDone = -1;
+	int n, i, ret = NPI_LNX_SUCCESS;
 
 	// Handle the connection
 	debug_printf("Receive message...\n");
@@ -918,13 +1123,15 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 		if (n < 0)
 		{
 			perror("recv");
+			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_CHECK_ERRNO;
+			ret = NPI_LNX_FAILURE;
 		}
 		else
 		{
 			debug_printf("Will disconnect %d\n", connection);
+			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT;
+			ret = NPI_LNX_FAILURE;
 		}
-		// Disconnect this
-		connectionDone = connection;
 	}
 	else if (n == RPC_FRAME_HDR_SZ)
 	{
@@ -936,62 +1143,74 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			{
 				printf("[ERR] Could not read out the NPI payload. Requested %d, but read %d!\n",
 						((npiMsgData_t *) npi_ipc_buf[0])->len, n);
+				npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_TOO_FEW_BYTES;
+				ret = NPI_LNX_FAILURE;
 				if (n < 0)
 				{
 					perror("recv");
 					// Disconnect this
-					connectionDone = connection;
-					debug_printf("Will disconnect %d\n", connection);
+					npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT;
+					ret = NPI_LNX_FAILURE;
 				}
 			}
+			else
+			{
+				ret = NPI_LNX_SUCCESS;
+			}
+			// n is only used by debug traces from here on, but add header length
+			// so the whole message is written out
+			n += RPC_FRAME_HDR_SZ;
 		}
 		/*
 		 * Take the message from the client and pass it to the NPI
 		 */
 #ifdef __DEBUG_TIME__
-		//            debug_
-		gettimeofday(&curTime, NULL);
-		long int diffPrev;
-		int t = 0;
-		if (curTime.tv_usec >= prevTimeRec.tv_usec)
+		if (__DEBUG_TIME_ACTIVE == TRUE)
 		{
-			diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
-		}
-		else
-		{
-			diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
-			t = 1;
-		}
+			//            debug_
+			gettimeofday(&curTime, NULL);
+			long int diffPrev;
+			int t = 0;
+			if (curTime.tv_usec >= prevTimeRec.tv_usec)
+			{
+				diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
+			}
+			else
+			{
+				diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
+				t = 1;
+			}
 
 #ifdef __STRESS_TEST__
-		if (diffPrev < 500000)
-			timingStats[0][diffPrev % 1000]++;
-		else
-			timingStats[0][500]++;
+			if (diffPrev < 500000)
+				timingStats[0][diffPrev % 1000]++;
+			else
+				timingStats[0][500]++;
 #endif //__STRESS_TEST__
-		int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-		int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		//            debug_
-		printf("[<-- %.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] %.2d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData: \040 ",
-				hours,											// hours
-				minutes,										// minutes
-				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-				curTime.tv_usec,
-				curTime.tv_sec - prevTimeRec.tv_sec - t,
-				diffPrev,
-				((npiMsgData_t *) npi_ipc_buf[0])->len,
-				((npiMsgData_t *) npi_ipc_buf[0])->subSys,
-				((npiMsgData_t *) npi_ipc_buf[0])->cmdId);
-		prevTimeRec = curTime;
+			int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+			int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+			//            debug_
+			time_printf("[<-- %.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] %.2d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData: \040 ",
+					hours,											// hours
+					minutes,										// minutes
+					(int)(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+					(long int)curTime.tv_usec,
+					curTime.tv_sec - prevTimeRec.tv_sec - t,
+					diffPrev,
+					((npiMsgData_t *) npi_ipc_buf[0])->len,
+					((npiMsgData_t *) npi_ipc_buf[0])->subSys,
+					((npiMsgData_t *) npi_ipc_buf[0])->cmdId);
+			prevTimeRec = curTime;
 
-		for (i = 0; i < ((npiMsgData_t *) npi_ipc_buf[0])->len; i++)
-		{
-//			debug_
-			printf(" 0x%.2X",
-					((npiMsgData_t *) npi_ipc_buf[0])->pData[i]);
+			for (i = 0; i < ((npiMsgData_t *) npi_ipc_buf[0])->len; i++)
+			{
+				//			debug_
+				time_printf(" 0x%.2X",
+						((npiMsgData_t *) npi_ipc_buf[0])->pData[i]);
+			}
+			//            debug_
+			time_printf("\n");
 		}
-		//            debug_
-		printf("\n");
 #endif //__DEBUG_TIME__
 
 
@@ -1004,66 +1223,167 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			}
 			debug_printf("\n");
 
-			// Synchronous request requires an answer...
-			(NPI_SendSynchDataFnArr[devIdx])(
-					(npiMsgData_t *) npi_ipc_buf[0]);
-
-			//0x22 = RTIS_CMD_ID_RTI_WRITE_ITEM_EX
-			// 0x80 is bitmask for response, e.g. for the Serial Bootloader. In order not to exclude response
-			if ( ((((npiMsgData_t *) npi_ipc_buf[0])->cmdId & 0x7F) > 0) &&
-			     ((((npiMsgData_t *) npi_ipc_buf[0])->cmdId & 0x7F) <= 0x22) )
+			if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
 			{
-				n = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
+				// If more APIs are activated, move handling to function.
+				if (((uint8) ((npiMsgData_t *) npi_ipc_buf[0])->cmdId) == NPI_LNX_CMD_ID_CTRL_TIME_PRINT)
+				{
+#ifdef __DEBUG_TIME__
+					__DEBUG_TIME_ACTIVE = ((npiMsgData_t *) npi_ipc_buf[0])->pData[0];
+					if (__DEBUG_TIME_ACTIVE == FALSE)
+					{
+						printf("__DEBUG_TIME_ACTIVE set to FALSE\n");
+					}
+					else
+					{
+						printf("__DEBUG_TIME_ACTIVE set to TRUE\n");
+					}
+					// Set return status
+					((npiMsgData_t *) npi_ipc_buf[0])->len = 1;
+					((npiMsgData_t *) npi_ipc_buf[0])->pData[0] = NPI_LNX_SUCCESS;
+#else //__DEBUG_TIME__
+					printf("NPI_Server not compiled to support time stamps\n");
+					// Set return status
+					((npiMsgData_t *) npi_ipc_buf[0])->len = 1;
+					((npiMsgData_t *) npi_ipc_buf[0])->pData[0] = NPI_LNX_FAILURE;
+#endif //__DEBUG_TIME__
+					((npiMsgData_t *) npi_ipc_buf[0])->subSys = RPC_SYS_SRV_CTRL;
+					ret = NPI_LNX_SUCCESS;
+				}
+				else if (((uint8) ((npiMsgData_t *) npi_ipc_buf[0])->cmdId) == NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT)
+				{
+					__BIG_DEBUG_ACTIVE = ((npiMsgData_t *) npi_ipc_buf[0])->pData[0];
+					if (__BIG_DEBUG_ACTIVE == FALSE)
+					{
+						printf("__BIG_DEBUG_ACTIVE set to FALSE\n");
+					}
+					else
+					{
+						printf("__BIG_DEBUG_ACTIVE set to TRUE\n");
+					}
+					// Set return status
+					((npiMsgData_t *) npi_ipc_buf[0])->len = 1;
+					((npiMsgData_t *) npi_ipc_buf[0])->pData[0] = NPI_LNX_SUCCESS;
+					ret = NPI_LNX_SUCCESS;
+				}
+				else
+				{
+					npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INVALID_SREQ;
+					ret = NPI_LNX_FAILURE;
+				}
 			}
 			else
 			{
-				n = 0;
-				int tmpSize = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
-				//				debug_
-				printf("[ERR] NPI SRSP: (len %d)", tmpSize);
-				for (i = 0; i < tmpSize; i++)
-				{
-					//					debug_
-					printf(" 0x%.2X", (uint8)npi_ipc_buf[0][i]);
-				}
-				//				debug_
-				printf("\n");
+				// Synchronous request requires an answer...
+				ret = (NPI_SendSynchDataFnArr[devIdx])(
+						(npiMsgData_t *) npi_ipc_buf[0]);
 			}
 
-			// Copy response into transmission buffer
-			memcpy(npi_ipc_buf[1], npi_ipc_buf[0], n);
-
-			// Command type is not set, so set it here
-			((npiMsgData_t *) npi_ipc_buf[1])->subSys |= RPC_CMD_SRSP;
-
-			if (n > 0)
+			if (ret == NPI_LNX_SUCCESS)
 			{
-				debug_printf("NPI SRSP: (len %d)", n);
-				for (i = 0; i < n; i++)
+				//0x22 = RTIS_CMD_ID_RTI_WRITE_ITEM_EX
+				// 0x80 is bitmask for response, e.g. for the Serial Bootloader. In order not to exclude response
+				if ( ((((npiMsgData_t *) npi_ipc_buf[0])->cmdId & 0x7F) > 0) &&
+						((((npiMsgData_t *) npi_ipc_buf[0])->cmdId & 0x7F) <= 0x22) )
 				{
-					debug_printf(" 0x%.2X", (uint8)npi_ipc_buf[1][i]);
+					n = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
 				}
-				debug_printf("\n");
+				else
+				{
+					n = 0;
+					int tmpSize = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
+					//				debug_
+					printf("[ERR] NPI SRSP: (len %d)", tmpSize);
+					for (i = 0; i < tmpSize; i++)
+					{
+						//					debug_
+						printf(" 0x%.2X", (uint8)npi_ipc_buf[0][i]);
+					}
+					//				debug_
+					printf("\n");
+				}
+
+				// Copy response into transmission buffer
+				memcpy(npi_ipc_buf[1], npi_ipc_buf[0], n);
+
+				// Command type is not set, so set it here
+				((npiMsgData_t *) npi_ipc_buf[1])->subSys |= RPC_CMD_SRSP;
+
+				if (n > 0)
+				{
+					debug_printf("NPI SRSP: (len %d)", n);
+					for (i = 0; i < n; i++)
+					{
+						debug_printf(" 0x%.2X", (uint8)npi_ipc_buf[1][i]);
+					}
+					debug_printf("\n");
+				}
+				else
+				{
+					printf("[ERR] SRSP is 0!\n");
+				}
+
+				//			pthread_mutex_lock(&npiSyncRespLock);
+				// Send bytes
+				ret = NPI_LNX_IPC_SendData(n, connection);
 			}
 			else
 			{
-				printf("[ERR] SRSP is 0!\n");
+				// Keep status from NPI_SendSynchDataFnArr
+				debug_printf("[ERR] SRSP: npi_ipc_errno 0x%.8X\n", npi_ipc_errno);
 			}
-
-//			pthread_mutex_lock(&npiSyncRespLock);
-			// Send bytes
-			NPI_LNX_IPC_SendData(n, connection);
 		}
 		else if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ)
 		{
 			debug_printf("NPI AREQ: (len %d)", n);
-			for (i = 0; i < n; i++) {
+			for (i = 0; i < n; i++)
+			{
 				debug_printf(" 0x%.2X", (uint8)npi_ipc_buf[0][i]);
 			} debug_printf("\n");
 
-			// Asynchronous request may just be sent
-			(NPI_SendAsynchDataFnArr[devIdx])(
-					(npiMsgData_t *) npi_ipc_buf[0]);
+			if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
+			{
+				// If more APIs are activated, move handling to function.
+				if (((uint8) ((npiMsgData_t *) npi_ipc_buf[0])->cmdId) == NPI_LNX_CMD_ID_CTRL_TIME_PRINT)
+				{
+#ifdef __DEBUG_TIME__
+					__DEBUG_TIME_ACTIVE = ((npiMsgData_t *) npi_ipc_buf[0])->pData[0];
+					if (__DEBUG_TIME_ACTIVE == FALSE)
+					{
+						printf("__DEBUG_TIME_ACTIVE set to FALSE\n");
+					}
+					else
+					{
+						printf("__DEBUG_TIME_ACTIVE set to TRUE\n");
+					}
+#else //__DEBUG_TIME__
+					printf("NPI_Server not compiled to support time stamps\n");
+#endif //__DEBUG_TIME__
+				}
+				else if (((uint8) ((npiMsgData_t *) npi_ipc_buf[0])->cmdId) == NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT)
+				{
+					__BIG_DEBUG_ACTIVE = ((npiMsgData_t *) npi_ipc_buf[0])->pData[0];
+					if (__BIG_DEBUG_ACTIVE == FALSE)
+					{
+						printf("__BIG_DEBUG_ACTIVE set to FALSE\n");
+					}
+					else
+					{
+						printf("__BIG_DEBUG_ACTIVE set to TRUE\n");
+					}
+				}
+			}
+			else
+			{
+				// Asynchronous request may just be sent
+				ret = (NPI_SendAsynchDataFnArr[devIdx])(
+						(npiMsgData_t *) npi_ipc_buf[0]);
+			}
+		}
+		else if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_CMD_TYPE_MASK)  == RPC_CMD_NOTIFY_ERR)
+		{
+			// An error occurred in a child thread.
+			ret = NPI_LNX_FAILURE;
 		}
 		else
 		{
@@ -1074,6 +1394,9 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 				printf(" 0x%.2X", (uint8)npi_ipc_buf[0][i]);
 			}
 			printf("\n");
+
+			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INCOMPATIBLE_CMD_TYPE;
+			ret = NPI_LNX_FAILURE;
 		}
 	}
 
@@ -1082,12 +1405,16 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 	memcpy(npi_ipc_buf[1], npi_ipc_buf[0], sizeof(npiMsgData_t));
 #endif
 
-	if (connectionDone)
+	if ((ret == NPI_LNX_FAILURE) && (npi_ipc_errno == NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT))
+	{
 		debug_printf("Done with %d\n", connection);
+	}
 	else
+	{
 		debug_printf("!Done\n");
+	}
 
-	return connectionDone;
+	return ret;
 }
 
 /**************************************************************************************************
@@ -1105,77 +1432,80 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
  *
  * None.
  *
- * @return      None.
+ * @return      STATUS
  *
  **************************************************************************************************/
-void NPI_LNX_IPC_SendData(uint8 len, int connection)
+int NPI_LNX_IPC_SendData(uint8 len, int connection)
 {
-	int bytesSent = 0, i;
+	int bytesSent = 0, i, ret = NPI_LNX_SUCCESS;
 
 #ifdef __DEBUG_TIME__
-
-	gettimeofday(&curTime, NULL);
-	long int diffPrev;
-	int t = 0;
-	if (curTime.tv_usec >= prevTimeSend.tv_usec)
+	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		diffPrev = curTime.tv_usec - prevTimeSend.tv_usec;
-	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTimeSend.tv_usec;
-		t = 1;
-	}
+		gettimeofday(&curTime, NULL);
+		long int diffPrev;
+		int t = 0;
+		if (curTime.tv_usec >= prevTimeSend.tv_usec)
+		{
+			diffPrev = curTime.tv_usec - prevTimeSend.tv_usec;
+		}
+		else
+		{
+			diffPrev = (curTime.tv_usec + 1000000) - prevTimeSend.tv_usec;
+			t = 1;
+		}
 
 #ifdef __STRESS_TEST__
-	if (diffPrev < (TIMING_STATS_SIZE * 1000))
-		timingStats[1][diffPrev / (1000 * TIMING_STATS_MS_DIV)]++;
-	else
-		timingStats[1][TIMING_STATS_SIZE]++;
+		if (diffPrev < (TIMING_STATS_SIZE * 1000))
+			timingStats[1][diffPrev / (1000 * TIMING_STATS_MS_DIV)]++;
+		else
+			timingStats[1][TIMING_STATS_SIZE]++;
 
-	// Save timingStats if inactive for > 10 seconds
-	if ((curTime.tv_sec - prevTimeSend.tv_sec) > 10)
-	{
-		time_t rawTime;
-		time(&rawTime);
-		printf("\nTiming Statistics as of %s:\n", ctime(&rawTime));
-		fprintf(fpStressTestData, "\nTiming Statistics as of %s:\n", ctime(&rawTime));
-		for (i = 0; i < (TIMING_STATS_SIZE / TIMING_STATS_MS_DIV); i++ )
+		// Save timingStats if inactive for > 10 seconds
+		if ((curTime.tv_sec - prevTimeSend.tv_sec) > 10)
 		{
-			printf(" %4d: \t %8d\n", i * TIMING_STATS_MS_DIV, timingStats[1][i]);
-			fprintf(fpStressTestData, " %4d: \t %8d\n", i * TIMING_STATS_MS_DIV, timingStats[1][i]);
-		}
-		printf(" More than %u: \t %8u\n", TIMING_STATS_SIZE, timingStats[1][TIMING_STATS_SIZE]);
-		fprintf(fpStressTestData, " More than %u: \t %8u\n", TIMING_STATS_SIZE, timingStats[1][TIMING_STATS_SIZE]);
+			time_t rawTime;
+			time(&rawTime);
+			printf("\nTiming Statistics as of %s:\n", ctime(&rawTime));
+			fprintf(fpStressTestData, "\nTiming Statistics as of %s:\n", ctime(&rawTime));
+			for (i = 0; i < (TIMING_STATS_SIZE / TIMING_STATS_MS_DIV); i++ )
+			{
+				printf(" %4d: \t %8d\n", i * TIMING_STATS_MS_DIV, timingStats[1][i]);
+				fprintf(fpStressTestData, " %4d: \t %8d\n", i * TIMING_STATS_MS_DIV, timingStats[1][i]);
+			}
+			printf(" More than %u: \t %8u\n", TIMING_STATS_SIZE, timingStats[1][TIMING_STATS_SIZE]);
+			fprintf(fpStressTestData, " More than %u: \t %8u\n", TIMING_STATS_SIZE, timingStats[1][TIMING_STATS_SIZE]);
 
-		// Then clear statistics for next set.
-		memset(timingStats[1], 0, TIMING_STATS_SIZE + 1);
-	}
+			// Then clear statistics for next set.
+			memset(timingStats[1], 0, TIMING_STATS_SIZE + 1);
+		}
 
 #endif //__STRESS_TEST__
 
-	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-	//            debug_
-	printf("[--> %.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] %.2d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData: \040 ",
-			hours,											// hours
-			minutes,										// minutes
-			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-			curTime.tv_usec,
-			curTime.tv_sec - prevTimeSend.tv_sec - t,
-			diffPrev,
-			((npiMsgData_t *) npi_ipc_buf[1])->len,
-			((npiMsgData_t *) npi_ipc_buf[1])->subSys,
-			((npiMsgData_t *) npi_ipc_buf[1])->cmdId);
+		int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+		int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+		//            debug_
+		time_printf("[--> %.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] %.2d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData: \040 ",
+				hours,											// hours
+				minutes,										// minutes
+				(int)(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+				(long int) curTime.tv_usec,
+				curTime.tv_sec - prevTimeSend.tv_sec - t,
+				diffPrev,
+				((npiMsgData_t *) npi_ipc_buf[1])->len,
+				((npiMsgData_t *) npi_ipc_buf[1])->subSys,
+				((npiMsgData_t *) npi_ipc_buf[1])->cmdId);
 
-	for (i = 0; i < ((npiMsgData_t *) npi_ipc_buf[1])->len; i++) {
-		//                            debug_
-		printf(" 0x%.2X", ((npiMsgData_t *) npi_ipc_buf[1])->pData[i]);
+		for (i = 0; i < ((npiMsgData_t *) npi_ipc_buf[1])->len; i++)
+		{
+			//                            debug_
+			time_printf(" 0x%.2X", ((npiMsgData_t *) npi_ipc_buf[1])->pData[i]);
+		}
+		//            debug_
+		time_printf("\n");
+
+		prevTimeSend = curTime;
 	}
-	//            debug_
-	printf("\n");
-
-	prevTimeSend = curTime;
 #endif //__DEBUG_TIME__
 
 	if (connection < 0)
@@ -1195,7 +1525,8 @@ void NPI_LNX_IPC_SendData(uint8 len, int connection)
 			if (activeConnections.list[i] != sNPIlisten)
 			{
 				bytesSent = send(activeConnections.list[i], npi_ipc_buf[1], len, MSG_NOSIGNAL);
-				if (bytesSent < 0) {
+				if (bytesSent < 0)
+				{
 					if (errno != ENOTSOCK)
 					{
 						char *errorStr = (char *)malloc(30);
@@ -1208,7 +1539,12 @@ void NPI_LNX_IPC_SendData(uint8 len, int connection)
 							close(activeConnections.list[i]);
 							// Connection closed. Remove from set
 							FD_CLR(activeConnections.list[i], &activeConnectionsFDs);
-							removeFromActiveList(activeConnections.list[i]);
+							ret = removeFromActiveList(activeConnections.list[i]);
+						}
+						else
+						{
+							npi_ipc_errno = NPI_LNX_ERROR_IPC_SEND_DATA_ALL;
+							ret = NPI_LNX_FAILURE;
 						}
 					}
 				}
@@ -1222,7 +1558,8 @@ void NPI_LNX_IPC_SendData(uint8 len, int connection)
 
 		debug_printf("...sent %d bytes to Client\n", bytesSent);
 
-		if (bytesSent < 0) {
+		if (bytesSent < 0)
+		{
 			perror("send");
 			// Remove from list if detected bad file descriptor
 			if (errno == EBADF)
@@ -1231,10 +1568,22 @@ void NPI_LNX_IPC_SendData(uint8 len, int connection)
 				close(connection);
 				// Connection closed. Remove from set
 				FD_CLR(connection, &activeConnectionsFDs);
-				removeFromActiveList(connection);
+				ret = removeFromActiveList(connection);
+				if (ret == NPI_LNX_SUCCESS)
+				{
+					npi_ipc_errno = NPI_LNX_ERROR_IPC_SEND_DATA_SPECIFIC_CONNECTION_REMOVED;
+					ret = NPI_LNX_FAILURE;
+				}
+			}
+			else
+			{
+				npi_ipc_errno = NPI_LNX_ERROR_IPC_SEND_DATA_SPECIFIC;
+				ret = NPI_LNX_FAILURE;
 			}
 		}
 	}
+
+	return ret;
 }
 
 /**************************************************************************************************
@@ -1246,7 +1595,7 @@ void NPI_LNX_IPC_SendData(uint8 len, int connection)
  * input parameters
  *
  * @param          configFilePath   - path to configuration file
- * @param          section                                 - section to search for
+ * @param          section          - section to search for
  * @param          key                                                         - key to return value of within section
  *
  * output parameters
@@ -1256,64 +1605,92 @@ void NPI_LNX_IPC_SendData(uint8 len, int connection)
  * @return      None.
  *
  **************************************************************************************************/
-char* SerialConfigParser(FILE* serialCfgFd, const char* section,
-		const char* key, char* resString) {
+int SerialConfigParser(FILE* serialCfgFd, const char* section,
+		const char* key, char* resultString)
+{
 	uint8 sectionFound = FALSE, invalidLineLen = FALSE;
+	char* resString = NULL;
+	char* resStringToFree = NULL;
 	char* psStr; // Processing string pointer
-	//            psStr = (char*)malloc(128);
+	int res = NPI_LNX_FAILURE;
 
-	debug_printf("------------------------------------------------------\n"); debug_printf("Serial Config Parsing:\n"); debug_printf("- \tSection \t%s:\n", section); debug_printf("- \tKey \t\t%s:\n", key);
+
+	resString = malloc (128);
+	if (resString == NULL)
+	{
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_GENERIC;
+		return NPI_LNX_FAILURE;
+	}
+	resStringToFree = resString;
+	debug_printf("------------------------------------------------------\n");
+	debug_printf("Serial Config Parsing:\n");
+	debug_printf("- \tSection \t%s:\n", section);
+	debug_printf("- \tKey \t\t%s:\n", key);
 
 	// Do nothing if the file doesn't exist
-	if (serialCfgFd != NULL) {
+	if (serialCfgFd != NULL)
+	{
 		// Make sure we start search from the beginning of the file
 		fseek(serialCfgFd, 0, SEEK_SET);
 
 		// Search through the configuration file for the wanted
-		while ((resString = fgets(resString, 128, serialCfgFd)) != NULL) {
+		while ((resString = fgets(resString, 128, serialCfgFd)) != NULL)
+		{
 			// Check if we have a valid line, i.e. begins with [.
 			// Note! No valid line can span more than 128 bytes. Hence we
 			// must hold off parsing until we hit a newline.
-			if (strlen(resString) == 128) {
+			if (strlen(resString) == 128)
+			{
 				invalidLineLen = TRUE;
 				debug_printf("Found line > 128 bytes\r");
 				fflush(stdout);
-			} else {
+			}
+			else
+			{
 				// First time we find a valid line length after having
 				// found invalid line length may be the end of the
 				// invalid line. Hence, do not process this string.
 				// We set the invalidLineLen parameter to FALSE after
 				// the processing logic.
-				if (invalidLineLen == FALSE) {
+				if (invalidLineLen == FALSE)
+				{
 					// Remove the newline character (ok even if line had length 128)
 					resString[strlen(resString) - 1] = '\0';
 
 					debug_printf("Found line < 128 bytes\r");
 					fflush(stdout);
-					if (resString[0] == '[') {
+					if (resString[0] == '[')
+					{
 						debug_printf("Found section %s\n", resString);
 						// Search for wanted section
 						psStr = strstr(resString, section);
-						if (psStr != NULL) {
+						if (psStr != NULL)
+						{
 							resString = psStr;
 							// We found our wanted section. Now search for wanted key.
 							sectionFound = TRUE;
 							debug_printf("Found wanted section!\n");
-						} else {
+						}
+						else
+						{
 							// We found another section.
 							sectionFound = FALSE;
 						}
-					} else if (sectionFound == TRUE) {
+					}
+					else if (sectionFound == TRUE)
+					{
 						debug_printf("Line to process %s (strlen=%d)\n",
 								resString,
 								strlen(resString));
 						// We have found our section, now we search for wanted key
 						// Check for commented lines, tagged with '#', and
 						// lines > 0 in length
-						if ((resString[0] != '#') && (strlen(resString) > 0)) {
+						if ((resString[0] != '#') && (strlen(resString) > 0))
+						{
 							// Search for wanted section
 							psStr = strstr(resString, key);
-							if (psStr != NULL) {
+							if (psStr != NULL)
+							{
 								debug_printf("Found key \t'%s' in \t'%s'\n", key, resString);
 								// We found our key. The value is located after the '='
 								// after the key.
@@ -1324,37 +1701,39 @@ char* SerialConfigParser(FILE* serialCfgFd, const char* section,
 								//                                                                                                                            printf("%s\n", psStr);
 
 								resString = psStr;
+								res = NPI_LNX_SUCCESS;
 								debug_printf("Found value '%s'\n", resString);
-
+								strcpy(resultString, resString);
+								debug_printf("Found value2 '%s'\n", resultString);
 								// We can return this string to the calling function
 								break;
 							}
 						}
 					}
-				} else {
+				}
+				else
+				{
 					debug_printf("Found end of line > 128 bytes\n");
 					invalidLineLen = FALSE;
 				}
 			}
 		}
 	}
+	else
+	{
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_SERIAL_CFG_FILE_DOES_NOT_EXIST;
+		free(resStringToFree);
+		return NPI_LNX_FAILURE;
+	}
 
-	//            free(psStr);
-
-	//            int i;
-	//            for (i = 0; i < strlen(resString); i++)
-	//            {
-	//                            printf("_");
-	//            }
-	//            printf("<\n");
-	// Return status of parsing
-	return resString;
+	free(resStringToFree);
+	return res;
 }
 
 /**************************************************************************************************
  * @fn          NPI_AsynchMsgCback
  *
- * @brief       This function is a NPI callback to the client that inidcates an
+ * @brief       This function is a NPI callback to the client that indicates an
  *              asynchronous message has been received. The client software is
  *              expected to complete this call.
  *
@@ -1363,22 +1742,26 @@ char* SerialConfigParser(FILE* serialCfgFd, const char* section,
  *
  * input parameters
  *
- * @param       *pMsg - A pointer to an asychronously received message.
+ * @param       *pMsg - A pointer to an asynchronously received message.
  *
  * output parameters
  *
  * None.
  *
- * @return      None.
+ * @return      STATUS
  **************************************************************************************************
  */
-void NPI_AsynchMsgCback(npiMsgData_t *pMsg) {
+int NPI_AsynchMsgCback(npiMsgData_t *pMsg)
+{
 	int i;
+	//	int ret = NPI_LNX_SUCCESS;
+
 	debug_printf("[-->] %d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData:",
 			pMsg->len,
 			pMsg->subSys,
 			pMsg->cmdId);
-	for (i = 0; i < pMsg->len; i++) {
+	for (i = 0; i < pMsg->len; i++)
+	{
 		debug_printf(" 0x%.2X", pMsg->pData[i]);
 	} debug_printf("\n");
 
@@ -1422,833 +1805,204 @@ void NPI_AsynchMsgCback(npiMsgData_t *pMsg) {
 	// Command type is not set, so set it here
 	((npiMsgData_t *) npi_ipc_buf[1])->subSys |= RPC_CMD_AREQ;
 
-	NPI_LNX_IPC_SendData(pMsg->len + RPC_FRAME_HDR_SZ, -1);
+	return NPI_LNX_IPC_SendData(pMsg->len + RPC_FRAME_HDR_SZ, -1);
 }
 
-///**************************************************************************************************
-// *
-// * @fn          RTIS_Close
-// *
-// * @brief       This function stops RTI surrogate module
-// *
-// * input parameters
-// *
-// * None.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//void RTIS_Close(void)
-//{
-//  (NPI_CloseDeviceFnArr[devIdx])();
-//}
-//
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_Init
-// *
-// * @brief       This is the RemoTI task initialization called by OSAL.
-// *
-// * input parameters
-// *
-// * @param       task_id - Task identifier assigned after RTI was added in the
-// *                        OSAL task queue.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//void RTI_Init( uint8 task_id )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // set task Id if one is needed
-//  (void)task_id;
-//
-//  // determine endianness
-//  rtisBE = rtisIsBE();
-//
-//  // set state during initialization
-//  rtisState = RTIS_STATE_INIT;
-//
-//  // initialize the AP Network Processor Interface (NPI)
-////  NPI_Init();
-//
-//  // reset the slave hardware
-//  halResetSlave();
-//
-//  // synchronize with the slave
-//  npiSynchSlave();
-//
-//  // ping NP; ping request will be discarded
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_TEST_PING_REQ;
-//  pMsg.len      = 2;
-//  pMsg.pData[0] = 0xAA;
-//  pMsg.pData[1] = 0xCC;
-//
-//  // send command to slave
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//
-//  // the RTIS is ready to go
-//  rtisState = RTIS_STATE_READY;
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_ReadItemEx
-// *
-// * @brief       This API is used to read an item from a Profile's Configuration Interface.
-// *
-// * input parameters
-// *
-// * @param       profileId - The Profile identifier.
-// * @param       itemId - The Configuration Interface item identifier.
-// * @param       len - The length in bytes of the item identifier's data.
-// *
-// * output parameters
-// *
-// * @param       *pValue - Pointer to buffer where read data is placed.
-// *
-// * @return      RTI_SUCCESS, RTI_ERROR_NOT_PERMITTED, RTI_ERROR_INVALID_INDEX,
-// *              RTI_ERROR_INVALID_PARAMETER, RTI_ERROR_UNKNOWN_PARAMETER,
-// *              RTI_ERROR_UNSUPPORTED_ATTRIBUTE, RTI_ERROR_OSAL_NV_OPER_FAILED,
-// *              RTI_ERROR_OSAL_NV_ITEM_UNINIT, RTI_ERROR_OSAL_NV_BAD_ITEM_LEN
-// *
-// **************************************************************************************************/
-//rStatus_t RTI_ReadItemEx( uint8 profileId, uint8 itemId, uint8 len, uint8 *pValue )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Read Item request
-//  // Note: no need to send pValue over the NPI
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_ITEM_EX;
-//  pMsg.len      = 3;
-//  pMsg.pData[0] = profileId;
-//  pMsg.pData[1] = itemId;
-//  pMsg.pData[2] = len;
-//
-//  // send Read Item request to NP RTIS synchronously
-//  (NPI_SendSynchDataFnArr[devIdx])( &pMsg );
-//
-//  // DEBUG
-//  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
-//  {
-//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
-//  }
-//
-//  // copy the reply data to the client's buffer
-//  // Note: the first byte of the payload is reserved for the status
-//  msg_memcpy( pValue, &pMsg.pData[1], len );
-//
-//  // perform endianness change
-//  rtisAttribEConv( itemId, len, pValue );
-//
-//  // return the status, which is stored is the first byte of the payload
-//  return( (rStatus_t)pMsg.pData[0] );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_ReadItem
-// *
-// * @brief       This API is used to read the RTI Configuration Interface item
-// *              from the Configuration Parameters table, the State Attributes
-// *              table, or the Constants table.
-// *
-// * input parameters
-// *
-// * @param       itemId - The Configuration Interface item identifier.
-// * @param       len - The length in bytes of the item identifier's data.
-// *
-// * output parameters
-// *
-// * @param       *pValue - Pointer to buffer where read data is placed.
-// *
-// * @return      RTI_SUCCESS, RTI_ERROR_NOT_PERMITTED, RTI_ERROR_INVALID_INDEX,
-// *              RTI_ERROR_INVALID_PARAMETER, RTI_ERROR_UNKNOWN_PARAMETER,
-// *              RTI_ERROR_UNSUPPORTED_ATTRIBUTE, RTI_ERROR_OSAL_NV_OPER_FAILED,
-// *              RTI_ERROR_OSAL_NV_ITEM_UNINIT, RTI_ERROR_OSAL_NV_BAD_ITEM_LEN
-// *
-// **************************************************************************************************/
-//rStatus_t RTI_ReadItem( uint8 itemId, uint8 len, uint8 *pValue )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Read Item request
-//  // Note: no need to send pValue over the NPI
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_ITEM;
-//  pMsg.len      = 2;
-//  pMsg.pData[0] = itemId;
-//  pMsg.pData[1] = len;
-//
-//  // send Read Item request to NP RTIS synchronously
-//  (NPI_SendSynchDataFnArr[devIdx])( &pMsg );
-//
-//  // DEBUG
-//  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
-//  {
-//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
-//  }
-//
-//  // copy the reply data to the client's buffer
-//  // Note: the first byte of the payload is reserved for the status
-//  msg_memcpy( pValue, &pMsg.pData[1], len );
-//
-//  // perform endianness change
-//  rtisAttribEConv( itemId, len, pValue );
-//
-//  // return the status, which is stored is the first byte of the payload
-//  return( (rStatus_t)pMsg.pData[0] );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_WriteItemEx
-// *
-// * @brief       This API is used to write an item to a Profile's Configuration Interface.
-// *
-// * input parameters
-// *
-// * @param       profileId - The Profile identifier.
-// * @param       itemId - The Configuration Interface item identifier.
-// * @param       len - The length in bytes of the item identifier's data.
-// * @param       *pValue - Pointer to buffer where write data is stored.
-// *
-// * input parameters
-// *
-// * None.
-// *
-// * @return      RTI_SUCCESS, RTI_ERROR_NOT_PERMITTED, RTI_ERROR_INVALID_INDEX,
-// *              RTI_ERROR_INVALID_PARAMETER, RTI_ERROR_UNKNOWN_PARAMETER,
-// *              RTI_ERROR_UNSUPPORTED_ATTRIBUTE, RTI_ERROR_OSAL_NV_OPER_FAILED,
-// *              RTI_ERROR_OSAL_NV_ITEM_UNINIT, RTI_ERROR_OSAL_NV_BAD_ITEM_LEN
-// *
-// **************************************************************************************************/
-//rStatus_t RTI_WriteItemEx( uint8 profileId, uint8 itemId, uint8 len, uint8 *pValue )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Write Item request
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_ITEM_EX;
-//  pMsg.len      = 3+len;
-//  pMsg.pData[0] = profileId;
-//  pMsg.pData[1] = itemId;
-//  pMsg.pData[2] = len;
-//
-//  // copy the client's data to be sent
-//  msg_memcpy( &pMsg.pData[3], pValue, len );
-//
-//  // perform endianness change
-//  rtisAttribEConv( itemId, len, &pMsg.pData[3] );
-//
-//  // send Write Item request to NP RTIS synchronously
-//  (NPI_SendSynchDataFnArr[devIdx])( &pMsg );
-//
-//  // DEBUG
-//  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
-//  {
-//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
-//  }
-//
-//  // return the status, which is stored is the first byte of the payload
-//  return( (rStatus_t)pMsg.pData[0] );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_WriteItem
-// *
-// * @brief       This API is used to write RTI Configuration Interface parameters
-// *              to the Configuration Parameters table, and permitted attributes
-// *              to the State Attributes table.
-// *
-// * input parameters
-// *
-// * @param       itemId  - The Configuration Interface item identifier.
-// * @param       len - The length in bytes of the item identifier's data.
-// * @param       *pValue - Pointer to buffer where write data is stored.
-// *
-// * input parameters
-// *
-// * None.
-// *
-// * @return      RTI_SUCCESS, RTI_ERROR_NOT_PERMITTED, RTI_ERROR_INVALID_INDEX,
-// *              RTI_ERROR_INVALID_PARAMETER, RTI_ERROR_UNKNOWN_PARAMETER,
-// *              RTI_ERROR_UNSUPPORTED_ATTRIBUTE, RTI_ERROR_OSAL_NV_OPER_FAILED,
-// *              RTI_ERROR_OSAL_NV_ITEM_UNINIT, RTI_ERROR_OSAL_NV_BAD_ITEM_LEN
-// *
-// **************************************************************************************************/
-//rStatus_t RTI_WriteItem( uint8 itemId, uint8 len, uint8 *pValue )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Write Item request
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_ITEM;
-//  pMsg.len      = 2+len;
-//  pMsg.pData[0] = itemId;
-//  pMsg.pData[1] = len;
-//
-//  // copy the client's data to be sent
-//  msg_memcpy( &pMsg.pData[2], pValue, len );
-//
-//  // perform endianness change
-//  rtisAttribEConv( itemId, len, &pMsg.pData[2] );
-//
-//  // send Write Item request to NP RTIS synchronously
-//  (NPI_SendSynchDataFnArr[devIdx])( &pMsg );
-//
-//  // DEBUG
-//  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
-//  {
-//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
-//  }
-//  // DEBUG, test if RNP not lock in boot mode
-//  if ( pMsg.subSys == RPC_SYS_BOOT )
-//  {
-//    return( 1 );
-//  }
-//
-//  // return the status, which is stored is the first byte of the payload
-//  return( (rStatus_t)pMsg.pData[0] );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_InitReq
-// *
-// * @brief       This API is used to initialize the RemoTI stack and begin
-// *              network operation. A RemoTI confirmation callback is generated
-// *              and handled by the client.
-// *
-// *              The first thing this function does is take a snapshot of the
-// *              Configuration Parameters (CP) table stored in NV memory, and
-// *              only the snapshot will be used by RTI until another call is made
-// *              to this function (presumably due to a reset). Therefore, any
-// *              changes to the CP table must be made prior to calling this
-// *              function. Once the RTI is started, subsequent changes by the
-// *              client to the CP table can be made, but they will have no affect
-// *              on RTI operation. The CP table is stored in NV memory and will
-// *              persist across a device reset. The client can restore the
-// *              the CP table to its default settings by setting the Startup
-// *              Option parameter accordingly.
-// *
-// *              The client's confirm callback will provide a status, which can
-// *              be one of the following:
-// *
-// *              RTI_SUCCESS
-// *              RTI_ERROR_INVALID_PARAMTER
-// *              RTI_ERROR_UNSUPPORTED_ATTRIBUTE
-// *              RTI_ERROR_INVALID_INDEX
-// *
-// * input parameters
-// *
-// * None.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_InitReq( void )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Init request
-//  pMsg.subSys = RPC_SYS_RCAF;
-//  pMsg.cmdId  = RTIS_CMD_ID_RTI_INIT_REQ;
-//  pMsg.len    = 0;
-//
-//  // send Init request to NP RTIS asynchronously as a confirm is due back
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_PairReq
-// *
-// * @brief       This API is used to initiate a pairing process. Note that this
-// *              call actually consists of a discovery followed by pairing. That
-// *              is a NLME-DISCOVERY.request followed by NLME-PAIR.request.
-// *
-// * input parameters
-// *
-// * None.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_PairReq( void )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Pair request
-//  pMsg.subSys = RPC_SYS_RCAF;
-//  pMsg.cmdId  = RTIS_CMD_ID_RTI_PAIR_REQ;
-//  pMsg.len    = 0;
-//
-//  // send Pair request to NP RTIS asynchronously as a confirm is due back
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_PairAbortReq
-// *
-// * @brief       This API is used to abort an on-going pairing process.
-// *
-// *              The client's confirm callback will provide a status, which can
-// *              be one of the following:
-// *
-// *              RTI_SUCCESS
-// *              RTI_ERROR_PAIR_COMPLETE
-// *
-// * input parameters
-// *
-// * None.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_PairAbortReq( void )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Pair request
-//  pMsg.subSys = RPC_SYS_RCAF;
-//  pMsg.cmdId  = RTIS_CMD_ID_RTI_PAIR_ABORT_REQ;
-//  pMsg.len    = 0;
-//
-//  // send Pair request to NP RTIS asynchronously as a confirm is due back
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_AllowPairReq
-// *
-// * @brief       This function is used by the Target application to ready the
-// *              node for a pairing request, and thereby allow this node to
-// *              respond.
-// *
-// *              The client's confirm callback will provide a status, which can
-// *              be one of the following:
-// *
-// *              RTI_SUCCESS
-// *              RTI_ERROR_OSAL_NO_TIMER_AVAIL
-// *              RTI_ERROR_ALLOW_PAIRING_TIMEOUT
-// *
-// * input parameters
-// *
-// * None.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_AllowPairReq( void )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Pair request
-//  pMsg.subSys = RPC_SYS_RCAF;
-//  pMsg.cmdId  = RTIS_CMD_ID_RTI_ALLOW_PAIR_REQ;
-//  pMsg.len    = 0;
-//
-//  // send Pair request to NP RTIS asynchronously as a confirm is due back
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_AllowPairAbortReq
-// *
-// * @brief       This API is used to attempt to abort an on-going allow-pairing process.
-// *
-// *              It is possible that allow pair is at a state of no return (no aborting).
-// *              There is no callback associated to this function call.
-// *
-// * input parameters
-// *
-// * None.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_AllowPairAbortReq( void )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Pair request
-//  pMsg.subSys = RPC_SYS_RCAF;
-//  pMsg.cmdId  = RTIS_CMD_ID_RTI_ALLOW_PAIR_ABORT_REQ;
-//  pMsg.len    = 0;
-//
-//  // send Pair request to NP RTIS asynchronously as a confirm is due back
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_UnpairReq
-// *
-// * @brief       This API is used to trigger un-pairing of a pair entry
-// *
-// * input parameters
-// *
-// * @param      dstIndex - destination index
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_UnpairReq( uint8 dstIndex )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Pair request
-//  pMsg.subSys = RPC_SYS_RCAF;
-//  pMsg.cmdId  = RTIS_CMD_ID_RTI_UNPAIR_REQ;
-//  pMsg.len    = 1;
-//  pMsg.pData[0] = dstIndex;
-//
-//  // send Pair request to NP RTIS asynchronously as a confirm is due back
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_SendDataReq
-// *
-// * @brief       This function sends data to the destination specified by the
-// *              pairing table index.
-// *
-// * input parameters
-// *
-// * @param       dstIndex  - Pairing table index.
-// * @param       profileId - Profile identifier.
-// * @param       vendorId  - Vendor identifier.
-// * @param       txOptions - Transmission options, as specified in Table 2 of the
-// *                          RF4CE specification.
-// * @param       len       - Number of bytes to send.
-// * @param       *pData    - Pointer to buffer of data to be sent.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_SendDataReq( uint8 dstIndex, uint8 profileId, uint16 vendorId, uint8 txOptions, uint8 len, uint8 *pData )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Send Data request
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_RTI_SEND_DATA_REQ;
-//  pMsg.len      = 6+len;
-//  pMsg.pData[0] = dstIndex;
-//  pMsg.pData[1] = profileId;
-//  RTI_SET_ITEM_HALFWORD( &pMsg.pData[2], vendorId );
-//  pMsg.pData[4] = txOptions;
-//  pMsg.pData[5] = len;
-//
-//  // copy the client's data to be sent
-//  msg_memcpy( &pMsg.pData[6], pData, len );
-//
-//  // send Send Data request to NP RTIS synchronously
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_StandbyReq
-// *
-// * @brief       This API is used by the Target client to place this node into
-// *              standby mode. Th properties of the standby consist of the active
-// *              period and the duty cycle. These values are set in the
-// *              Configuration Parameters table using the RTI_WriteItemReq API,
-// *              and go into effect when standby is enabled for this node.
-// *
-// * input parameters
-// *
-// * @param       mode - RTI_STANDBY_ON, RTI_STANDBY_OFF
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_StandbyReq( uint8 mode )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Standby request
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_RTI_STANDBY_REQ;
-//  pMsg.len      = 1;
-//  pMsg.pData[0] = mode;
-//
-//  // send Standby request to NP RTIS asynchronously as a confirm is due back
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_RxEnableReq
-// *
-// * @brief       This API is used to enable the radio receiver, enable the radio
-// *              receiver for a specified amount of time, or disable the radio
-// *              receiver.
-// *
-// * input parameters
-// *
-// * @param       duration - RTI_RX_ENABLE_ON, RTI_RX_ENABLE_OFF, 1..0xFFFE
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_RxEnableReq( uint16 duration )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Rx Enable request
-//  pMsg.subSys = RPC_SYS_RCAF;
-//  pMsg.cmdId  = RTIS_CMD_ID_RTI_RX_ENABLE_REQ;
-//  pMsg.len    = 4;
-//  RTI_SET_ITEM_WORD( &pMsg.pData[0], (duration & 0x00FFFFFF) ); // max duration is 0x00FF_FFFF
-//
-//  // send Rx Enable request to NP RTIS asynchronously as a confirm is due back
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_EnableSleepReq
-// *
-// * @brief       This API is used to enable sleep on the target.
-// *
-// * input parameters
-// *
-// * None.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_EnableSleepReq( void )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // prep Enable Sleep request
-//  pMsg.subSys = RPC_SYS_RCAF;
-//  pMsg.cmdId  = RTIS_CMD_ID_RTI_ENABLE_SLEEP_REQ;
-//  pMsg.len    = 0;
-//
-//  // send Enable Sleep request to NP RTIS asynchronously
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_DisableSleepReq
-// *
-// * @brief       This API is used to disable sleep on the target.
-// *
-// *              Note: When used from the RTIS, no actual message is sent to the
-// *                    RTI, but wakeup bytes are sent instead. The RTI will
-// *                    disable sleep as a result.
-// *
-// * input parameters
-// *
-// * None.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_DisableSleepReq( void )
-//{
-//  npiMsgData_t pMsg;
-//
-//  // ping NP; ping request will be discarded
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_RTI_DISABLE_SLEEP_REQ; //RTIS_CMD_ID_TEST_PING_REQ;
-//  pMsg.len      = 2;
-//  pMsg.pData[0] = 0xAA;
-//  pMsg.pData[1] = 0xCC;
-//
-//  // send command to slave
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_SwResetReq
-// *
-// * @brief       This function resets the radio processor CPU by way of software triggering.
-// *              Implementation of this function is target (CPU) dependent.
-// *              Note that in production platform, the reset could be done by chip reset signal
-// *              (halResetSlave) and hence use of this function should be restricted to development
-// *              phase.
-// *
-// * input parameters
-// * None.
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_SwResetReq( void )
-//{
-//  npiMsgData_t pMsg;
-//
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_RTI_SW_RESET_REQ;
-//  pMsg.len      = 0;
-//
-//  // send command to slave
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//
-//  // wait for 200ms.
-//  halDelay(200, 1);
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_TestModeReq
-// *
-// * @brief       This function is used to place the radio in test modes.
-// *              Note that implementation is chip dependent. HAL is not used to reduce code
-// *              size overhead.
-// *
-// * input parameters
-// *
-// * @param       mode - test mode: RTI_TEST_MODE_TX_RAW_CARRIER, RTI_TEST_MODE_TX_RANDOM_DATA
-// *                     or RTI_TEST_MODE_RX_AT_FREQ
-// * @param       txPower - transmit power as negative dBm value. That is, 20 implies -20dBm.
-// * @param       channel - MAC channel number
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      None.
-// *
-// **************************************************************************************************/
-//RTILIB_API void RTI_TestModeReq( uint8 mode, int8 txPower, uint8 channel )
-//{
-//  npiMsgData_t pMsg;
-//
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_RTI_TEST_MODE_REQ;
-//  pMsg.len      = 3;
-//  pMsg.pData[0] = mode;
-//  pMsg.pData[1] = (uint8) txPower;
-//  pMsg.pData[2] = channel;
-//
-//  // send command to slave
-//  (NPI_SendAsynchDataFnArr[devIdx])( &pMsg );
-//}
-//
-///**************************************************************************************************
-// *
-// * @fn          RTI_TestRxCounterGetReq
-// *
-// * @brief       This function is used to obtain received packet counter value.
-// *
-// * input parameters
-// *
-// * @param       resetFlag - whether or not to reset the counter after reading the value
-// *
-// * output parameters
-// *
-// * None.
-// *
-// * @return      counter value
-// *
-// **************************************************************************************************/
-//RTILIB_API uint16 RTI_TestRxCounterGetReq(uint8 resetFlag)
-//{
-//  npiMsgData_t pMsg;
-//
-//  // serialize the request
-//  pMsg.subSys   = RPC_SYS_RCAF;
-//  pMsg.cmdId    = RTIS_CMD_ID_RTI_RX_COUNTER_GET_REQ;
-//  pMsg.len      = 1;
-//  pMsg.pData[0] = resetFlag;
-//
-//  // send serialized request to NP RTIS synchronously
-//  (NPI_SendSynchDataFnArr[devIdx])( &pMsg );
-//
-//  // return the status, which is stored is the first byte of the payload
-//  return (pMsg.pData[0] + ((uint16)pMsg.pData[1] << 8));
-//}
 
-// -- utility porting --
+/**************************************************************************************************
+ * @fn          NPI_LNX_IPC_Exit
+ *
+ * @brief       This function will exit gracefully
+ *
+ *
+ * input parameters
+ *
+ * @param       ret	-	exit condition. Return on Success, exit on Failure
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None
+ **************************************************************************************************
+ */
+void NPI_LNX_IPC_Exit(int ret)
+{
+	// Close file for parsing
+	if (serialCfgFd != NULL)
+		fclose(serialCfgFd);
 
-// These utility functions are called from RTI surrogate module
+	// Free memory for configuration buffers
+	if (pStrBufRoot != NULL)
+		free(pStrBufRoot);
+	if (devPath != NULL)
+		free(devPath);
 
-// -- dummy functions --
+	uint8 gpioIdx;
+	for (gpioIdx = 0; gpioIdx < 3; gpioIdx++)
+	{
+		if (gpioCfg[gpioIdx] != NULL)
+			free(gpioCfg[gpioIdx]);
+	}
+	if (gpioCfg != NULL)
+		free(gpioCfg);
 
-// These dummies are called by RTIS module, but they are irrelevant in windows
-// environment.
-void NPI_Init(void) {
-	// NPI_Init() is a function supposed to be called in OSAL environment
-	// Application processor RTIS module calls this function directly
-	// to make NPI work for non-OSAL application processor but
-	// in case of Windows port of NPI module, this function call is not
-	// implemented.
+	if (ret != NPI_LNX_SUCCESS)
+	{
+		// Don't even bother open a socket; device opening failed..
+		printf("Could not open device... exiting\n");
+
+		// Write error message to /dev/npiLnxLog
+		writeToNpiLnxLog("Could not open device");
+
+		exit(npi_ipc_errno);
+	}
 }
 
+/**************************************************************************************************
+ * @fn          NPI_LNX_IPC_NotifyError
+ *
+ * @brief       This function allows other threads to notify of error conditions.
+ *
+ *
+ * input parameters
+ *
+ * @param       source		- source identifier
+ * @param       *errorMsg 	- A string containing the error message.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None
+ **************************************************************************************************
+ */
+int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg)
+{
+	int ret = NPI_LNX_SUCCESS;
+	int sNPIconnected;
+	struct addrinfo *resAddr;
+
+	const char *ipAddress = "127.0.0.1";
+
+
+	/**********************************************************************
+	 * Connect to the NPI server
+	 **********************************************************************/
+
+#ifdef NPI_UNIX
+	int len;
+	struct sockaddr_un remote;
+
+	if ((sNPIconnected = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+	{
+		perror("socket");
+		ret = NPI_LNX_ERROR_IPC_NOTIFY_ERR_CREATE_SOCKET;
+	}
+#else
+	struct addrinfo hints;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+
+	//    ipAddress = "192.168.128.133";
+	//    if ((res = getaddrinfo(NULL, ipAddress, &hints, &resAddr)) != 0)
+	if (port == NULL)
+	{
+		// Fall back to default if port was not found in the configuration file
+		printf("Warning! Port not sent to NPI_LNX_IPC_NotifyError. Will use default port: %s", NPI_PORT);
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ret));
+		ret = NPI_LNX_ERROR_IPC_NOTIFY_ERR_GET_ADDR_INFO;
+	}
+	else
+	{
+		debug_printf("Port: %s\n\n", port);
+		if ((ret = getaddrinfo(ipAddress, port, &hints, &resAddr)) != 0)
+		{
+			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ret));
+			ret = NPI_LNX_ERROR_IPC_NOTIFY_ERR_GET_ADDR_INFO;
+		}
+		else
+		{
+			ret = NPI_LNX_SUCCESS;
+		}
+	}
+
+
+	if ((sNPIconnected = socket(resAddr->ai_family, resAddr->ai_socktype, resAddr->ai_protocol)) == -1)
+	{
+		perror("socket");
+		ret = NPI_LNX_ERROR_IPC_NOTIFY_ERR_CREATE_SOCKET;
+	}
+#endif
+
+	debug_printf("[NOTIFY_ERROR] Trying to connect...\n");
+
+#ifdef NPI_UNIX
+	remote.sun_family = AF_UNIX;
+	strcpy(remote.sun_path, ipAddress);
+	len = strlen(remote.sun_path) + sizeof(remote.sun_family);
+	if (connect(sNPIconnected, (struct sockaddr *)&remote, len) == -1)
+	{
+		perror("connect");
+		ret = NPI_LNX_ERROR_IPC_NOTIFY_ERR_CONNECT;
+	}
+#else
+	if (connect(sNPIconnected, resAddr->ai_addr, resAddr->ai_addrlen) == -1)
+	{
+		perror("connect");
+		ret = NPI_LNX_ERROR_IPC_NOTIFY_ERR_CONNECT;
+	}
+#endif
+
+	if (ret == NPI_LNX_SUCCESS)
+		debug_printf("[NOTIFY_ERROR] Connected.\n");
+
+
+	int no = 0;
+	// allow out-of-band data
+	if (setsockopt(sNPIconnected, SOL_SOCKET, SO_OOBINLINE, &no, sizeof(int)) == -1)
+	{
+		perror("setsockopt");
+		ret = NPI_LNX_ERROR_IPC_NOTIFY_ERR_SET_SOCKET_OPTIONS;
+	}
+
+	npiMsgData_t msg;
+
+	if (strlen(errorMsg) <= AP_MAX_BUF_LEN)
+	{
+		memcpy(msg.pData, errorMsg, strlen(errorMsg));
+	}
+	else
+	{
+		errorMsg = "Default msg. Requested msg too long.\n";
+		memcpy(msg.pData, errorMsg, strlen(errorMsg));
+		debug_printf("[NOTIFY_ERROR] Size of error message too long (%d, max %d).\n",
+				strlen(errorMsg),
+				AP_MAX_BUF_LEN);
+	}
+	// If last character is \n then remove it.
+	if ((msg.pData[strlen(errorMsg) - 1]) == '\n')
+	{
+		msg.pData[strlen(errorMsg) - 1] = 0;
+		msg.len = strlen(errorMsg);
+	}
+	else
+	{
+		msg.pData[strlen(errorMsg)] = 0;
+		msg.len = strlen(errorMsg) + 1;
+	}
+
+	// For now the only required info here is command type.
+	msg.subSys = RPC_CMD_NOTIFY_ERR;
+	// CmdId is filled with the source identifier.
+	msg.cmdId = source;
+
+	send(sNPIconnected, &msg, msg.len + RPC_FRAME_HDR_SZ, MSG_NOSIGNAL);
+
+	return ret;
+}
 /**************************************************************************************************
  **************************************************************************************************/
 

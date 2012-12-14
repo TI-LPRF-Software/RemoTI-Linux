@@ -56,6 +56,8 @@
 #include "npi_lnx.h"
 #include "npi_lnx_uart.h"
 
+#include "npi_lnx_error.h"
+
 // -- macros --
 
 #ifndef TRUE
@@ -69,8 +71,14 @@
 #ifdef __BIG_DEBUG__
 #define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #else
-#define debug_printf(fmt, ...)
+#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
 #endif
+
+#define time_printf(fmt, ...) st (if (__DEBUG_TIME_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
+
+#if (defined __DEBUG_TIME__)
+struct timeval curTime, startTime, prevTimeSend, prevTimeRec, targetDelayTime;
+#endif //__DEBUG_TIME__
 
 // -- Constants --
 
@@ -83,7 +91,7 @@
 #define NPI_CBACK_BUF_HDR_LEN (sizeof(npiAsyncDataHdr_t) + NPI_MSG_DATA_HDR_LEN)
 
 // Time out value for response from RNP
-#define NPI_RNP_TIMEOUT 3 // 3 seconds
+#define NPI_RNP_TIMEOUT 6 // 6 seconds
 
 // UART Baud rate
 #define NPI_BAUDRATE B115200
@@ -176,9 +184,9 @@ static void npi_termrx(void);
 static int npi_opentty(const char *devpath);
 static void npi_closetty(void);
 static int npi_write(const void *buf, size_t count);
-static void npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len);
-static void npi_parseframe(const unsigned char *buf, int len);
-static void npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf, uint8 length);
+static int npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len);
+static int npi_parseframe(const unsigned char *buf, int len);
+static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf, uint8 length);
 static uint8 npi_calcfcs(uint8 len, uint8 cmd0, uint8 cmd1, uint8 *data);
 static void npi_iohandler(int status);
 static void npi_installsig(void);
@@ -218,7 +226,8 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
 
   if (npiOpenFlag)
   {
-    return FALSE;
+	npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_ALREADY_OPEN;
+	return NPI_LNX_FAILURE;
   }
 
   npiOpenFlag = TRUE;
@@ -245,7 +254,8 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
 
     npi_delsyncres();
 
-    return FALSE;
+	npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_FAILED_ASYNCH_CB_THREAD;
+	return NPI_LNX_FAILURE;
   }
 
 
@@ -255,28 +265,34 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
     npi_termasync();
     npiOpenFlag = FALSE;
 
-    return FALSE;
+	npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_FAILED_PORT;
+	return NPI_LNX_FAILURE;
   }
 
 
   // create UART receive thread
 
-  // TODO: it is ideal to make this thread higher priority
-  // but linux does not allow realtime of FIFO scheduling policy for
-  // non-priviledged threads.
-  if (pthread_create(&npiRxThread, NULL, npi_rx_entry, NULL)) {
-    // thread creation failed
-    npi_termasync();
-    npi_closetty();
+#if (defined __DEBUG_TIME__)
+	gettimeofday(&startTime, NULL);
+#endif // (defined __DEBUG_TIME__)
 
-    npi_delsyncres();
+	// TODO: it is ideal to make this thread higher priority
+	// but linux does not allow realtime of FIFO scheduling policy for
+	// non-priviledged threads.
+	if (pthread_create(&npiRxThread, NULL, npi_rx_entry, NULL)) {
+		// thread creation failed
+		npi_termasync();
+		npi_closetty();
 
-    npiOpenFlag = FALSE;
+		npi_delsyncres();
 
-    return FALSE;
-  }
+		npiOpenFlag = FALSE;
 
-  return TRUE;
+		npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_FAILED_RX_THREAD;
+		return NPI_LNX_FAILURE;
+	}
+
+	return NPI_LNX_SUCCESS;
 }
 
 /******************************************************************************
@@ -292,7 +308,7 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
  *
  * None.
  *
- * @return     None
+ * @return     STATUS
  ******************************************************************************
  */
 void NPI_UART_CloseDevice(void)
@@ -304,6 +320,7 @@ void NPI_UART_CloseDevice(void)
   npi_delsyncres();
 
   npiOpenFlag = FALSE;
+
 }
 
 /**************************************************************************************************
@@ -321,12 +338,12 @@ void NPI_UART_CloseDevice(void)
  *
  * None.
  *
- * @return      None.
+ * @return      STATUS
  **************************************************************************************************
  */
-void NPI_UART_SendAsynchData( npiMsgData_t *pMsg )
+int NPI_UART_SendAsynchData( npiMsgData_t *pMsg )
 {
-  npi_sendframe(pMsg->subSys | RPC_CMD_AREQ, pMsg->cmdId, pMsg->pData, pMsg->len);
+  return npi_sendframe(pMsg->subSys | RPC_CMD_AREQ, pMsg->cmdId, pMsg->pData, pMsg->len);
 }
 
 
@@ -349,33 +366,42 @@ void NPI_UART_SendAsynchData( npiMsgData_t *pMsg )
  * @return      None.
  **************************************************************************************************
  */
-void NPI_UART_SendSynchData( npiMsgData_t *pMsg )
+int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 {
-  int result;
-  struct timespec expirytime;
-  struct timeval curtime;
+	int result, ret = NPI_LNX_SUCCESS;
+	struct timespec expirytime;
+	struct timeval curtime;
 
-  pthread_mutex_lock(&npiSyncRespLock);
-  pNpiSyncData = pMsg;
-  npi_sendframe(pMsg->subSys | RPC_CMD_SREQ, pMsg->cmdId, pMsg->pData, pMsg->len);
-  gettimeofday(&curtime, NULL);
-  expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
-  expirytime.tv_nsec = curtime.tv_usec * 1000;
-  debug_printf("[UART] (synch data) Conditional wait %d ns\n", NPI_RNP_TIMEOUT);
-  result = pthread_cond_timedwait(&npiSyncRespCond, &npiSyncRespLock, &expirytime);
-  if (ETIMEDOUT == result)
-  {
-    // TODO: Indicate synchronous transaction error
-    // Uncommenting the following line will cause assert when connection is not there
-    // Uncomment it only during debugging.
+	pthread_mutex_lock(&npiSyncRespLock);
+	pNpiSyncData = pMsg;
+	ret = npi_sendframe(pMsg->subSys | RPC_CMD_SREQ, pMsg->cmdId, pMsg->pData, pMsg->len);
+
+	if (ret == NPI_LNX_SUCCESS)
+	{
+		gettimeofday(&curtime, NULL);
+		expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
+		expirytime.tv_nsec = curtime.tv_usec * 1000;
+		debug_printf("[UART] (synch data) Conditional wait %d ns\n", NPI_RNP_TIMEOUT);
+		result = pthread_cond_timedwait(&npiSyncRespCond, &npiSyncRespLock, &expirytime);
+		if (ETIMEDOUT == result)
+		{
+			// TODO: Indicate synchronous transaction error
+			// Uncommenting the following line will cause assert when connection is not there
+			// Uncomment it only during debugging.
 #ifdef __BIG_DEBUG__
-    pMsg->pData[0] = 0xff;
-    printf("[UART] Send synch data timed out\n");
+			pMsg->pData[0] = 0xff;
 #endif //__BIG_DEBUG__
-  }
-  // Clear the pointer.
-  pNpiSyncData = NULL;
-  pthread_mutex_unlock(&npiSyncRespLock);
+			debug_printf("[UART] Send synch data timed out\n");
+
+			npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_SYNCH_TIMEDOUT;
+			ret = NPI_LNX_FAILURE;
+		}
+	}
+	// Clear the pointer.
+	pNpiSyncData = NULL;
+	pthread_mutex_unlock(&npiSyncRespLock);
+
+	return ret;
 }
 
 /**************************************************************************************************
@@ -465,55 +491,76 @@ static void npi_delsyncres(void)
 // NPI function.
 static void *npiAsyncCbackProc(void *ptr)
 {
-  npiAsyncDataHdr_t *pElement;
+	npiAsyncDataHdr_t *pElement;
+	int ret = NPI_LNX_SUCCESS;
 
-  pthread_mutex_lock(&npiAsyncLock);
-  for (;;) {
-    do {
-      if (npiAsyncTerminate) {
-        // termination was signalled
-        break;
-      }
-      pElement = pNpiAsyncQueueTail;
-      if (pElement) {
-        pNpiAsyncQueueTail = pElement->pNext;
-        if (!pNpiAsyncQueueTail) {
-          pNpiAsyncQueueHead = pNpiAsyncQueueTail;
-        }
-        // unlock mutex so that UART thread can still signal conditional variable
-        // and does not get blocked till NPI async callback function returns.
-        pthread_mutex_unlock(&npiAsyncLock);
+	pthread_mutex_lock(&npiAsyncLock);
+	for (;;)
+	{
+		do
+		{
+			if (npiAsyncTerminate)
+			{
+				// termination was signalled
+				break;
+			}
+			pElement = pNpiAsyncQueueTail;
+			if (pElement)
+			{
+				pNpiAsyncQueueTail = pElement->pNext;
+				if (!pNpiAsyncQueueTail)
+				{
+					pNpiAsyncQueueHead = pNpiAsyncQueueTail;
+				}
+				// unlock mutex so that UART thread can still signal conditional variable
+				// and does not get blocked till NPI async callback function returns.
+				pthread_mutex_unlock(&npiAsyncLock);
 
-        // callback
-        NPI_AsynchMsgCback((npiMsgData_t *)(pElement + 1));
-        free(pElement);
+				// callback
+				ret = NPI_AsynchMsgCback((npiMsgData_t *)(pElement + 1));
+				free(pElement);
+				pElement = NULL;
 
-        // lock the mutext again before checking the terminate condition and queue
-        // so that it is OK to miss conditional variable signal while the mutex was
-        // unlocked.
-        pthread_mutex_lock(&npiAsyncLock);
-      }
-    } while (pElement);
+				// lock the mutext again before checking the terminate condition and queue
+				// so that it is OK to miss conditional variable signal while the mutex was
+				// unlocked.
+				pthread_mutex_lock(&npiAsyncLock);
 
-    if (npiAsyncTerminate) {
-      // break out of outer loop, too.
-      break;
-    }
+				if (ret != NPI_LNX_SUCCESS)
+					npiAsyncTerminate = 1;
+			}
+		} while (pNpiAsyncQueueTail);
 
-    // wait for signal
-    pthread_cond_wait(&npiAsyncCond, &npiAsyncLock);
-  }
+		if (npiAsyncTerminate)
+		{
+			// break out of outer loop, too.
+			break;
+		}
 
-  // thread is to be terminated
-  pthread_mutex_unlock(&npiAsyncLock);
+		// wait for signal
+		pthread_cond_wait(&npiAsyncCond, &npiAsyncLock);
+	}
 
-  return NULL;
+	// thread is to be terminated
+	pthread_mutex_unlock(&npiAsyncLock);
+
+
+	char *errorMsg;
+	if (ret == NPI_LNX_FAILURE)
+		errorMsg = "UART Asynch call back thread exited with error. Please check global error message\n";
+	else
+		errorMsg = "UART Asynch call back thread exited without error\n";
+
+	NPI_LNX_IPC_NotifyError(NPI_LNX_ERROR_MODULE_MASK(NPI_LNX_ERROR_UART_ASYNCH_CB_PROC_THREAD), errorMsg);
+
+	return NULL;
 }
 
 /* UART RX thread entry routine */
 static void *npi_rx_entry(void *ptr)
 {
 	unsigned char readbuf[255];
+	int ret = NPI_LNX_SUCCESS;
 
 	/* install signal handler */
 	//npi_installsig();
@@ -522,49 +569,74 @@ static void *npi_rx_entry(void *ptr)
 	pthread_mutex_lock(&npi_rx_mutex);
 
 	/* thread loop */
-	while (!npi_rx_terminate) {
+	while (!npi_rx_terminate)
+	{
 		int readcount;
 
-		do {
+		do
+		{
 			debug_printf("[UART] Ready to read from npi_fd:%d\n", npi_fd);
 			readcount = read(npi_fd, readbuf, sizeof(readbuf));
 			debug_printf("[UART] read %d bytes from npi_fd:%d\n", readcount, npi_fd);
-			if (readcount > 0) {
-				npi_parseframe(readbuf, readcount);
+			if (readcount > 0)
+			{
+				ret = npi_parseframe(readbuf, readcount);
+				if (ret == NPI_LNX_FAILURE)
+					break;
 			}
 			else if (readcount < 0)
 			{
 				// Ignore error EAGAIN; Resource temporarily unavailable.
-				// Simply let it try again
+				// Try again if this was the first attempt after the conditional signal npi_rx_cond.
 				if (errno != EAGAIN)
-					perror("read npi_fd");
+				{
+					perror("read npi_fd (1)");
+					npi_ipc_errno = NPI_LNX_ERROR_UART_RX_THREAD;
+					ret = NPI_LNX_FAILURE;
+				}
 			}
 		} while (readcount > 0);
 
-#ifdef NPI_UNRELIABLE_SIGACTION
-		/* In some system, sigaction is not reliable hence poll reading even without signal. */
+		if (ret == NPI_LNX_FAILURE)
 		{
-			struct timespec expirytime;
-			struct timeval curtime;
-
-			int waitTime = 10000000;
-			gettimeofday(&curtime, NULL);
-			expirytime.tv_sec = curtime.tv_sec;
-			expirytime.tv_nsec = (curtime.tv_usec * 1000) + waitTime;
-			if (expirytime.tv_nsec >= 1000000000) {
-				expirytime.tv_nsec -= 1000000000;
-				expirytime.tv_sec++;
-			}
-			debug_printf("[UART] (read loop) Conditional wait %d ns\n", waitTime);
-			pthread_cond_timedwait(&npi_rx_cond, &npi_rx_mutex, &expirytime);
+			npi_rx_terminate = 1;
+			break;
 		}
+		else
+		{
+#ifdef NPI_UNRELIABLE_SIGACTION
+			/* In some system, sigaction is not reliable hence poll reading even without signal. */
+			{
+				struct timespec expirytime;
+				struct timeval curtime;
+
+				int waitTime = 10000000;
+				gettimeofday(&curtime, NULL);
+				expirytime.tv_sec = curtime.tv_sec;
+				expirytime.tv_nsec = (curtime.tv_usec * 1000) + waitTime;
+				if (expirytime.tv_nsec >= 1000000000) {
+					expirytime.tv_nsec -= 1000000000;
+					expirytime.tv_sec++;
+				}
+				debug_printf("[UART] (read loop) Conditional wait %d ns\n", waitTime);
+				pthread_cond_timedwait(&npi_rx_cond, &npi_rx_mutex, &expirytime);
+			}
 #else
-		debug_printf("[UART] (read loop) Conditional wait\n");
-		pthread_cond_wait(&npi_rx_cond, &npi_rx_mutex);
+			debug_printf("[UART] (read loop) Conditional wait\n");
+			pthread_cond_wait(&npi_rx_cond, &npi_rx_mutex);
 #endif
+		}
 	}
 	debug_printf("[UART] npi_rx_terminate == %d, unlocking mutex\n", npi_rx_terminate);
 	pthread_mutex_unlock(&npi_rx_mutex);
+
+	char *errorMsg;
+	if (ret == NPI_LNX_FAILURE)
+		errorMsg = "UART Rx thread exited with error. Please check global error message\n";
+	else
+		errorMsg = "UART Rx thread exited without error\n";
+
+	NPI_LNX_IPC_NotifyError(NPI_LNX_ERROR_MODULE_MASK(NPI_LNX_ERROR_UART_RX_THREAD), errorMsg);
 
 	return NULL;
 }
@@ -676,7 +748,7 @@ static int npi_write(const void *buf, size_t count)
 
 /* build and send an NPI frame
  */
-static void npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len)
+static int npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len)
 {
   // Build a frame from the primitive ID and primitive content
 
@@ -686,7 +758,10 @@ static void npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len)
   pBuf = (unsigned char *) malloc(frlen);
 
   if (!pBuf)
-    return;
+  {
+	npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_FRAME_FAILED_TO_ALLOCATE;
+	return NPI_LNX_FAILURE;
+  }
 
   pBuf[0] = AIC_UART_SOF;
   pBuf[1 + AIC_POS_LEN] = len;
@@ -699,7 +774,8 @@ static void npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len)
   if (npi_write(pBuf, frlen) < 0) {
 	  perror("ERR:");
 	  free(pBuf);
-	  return;
+	  npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_FRAME_FAILED_TO_WRITE;
+	  return NPI_LNX_FAILURE;
   }
 
   // Trace the sent data
@@ -708,22 +784,27 @@ static void npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len)
   }
 
   free(pBuf);
+
+  return NPI_LNX_SUCCESS;
 }
 
 /* Parse an NPI frame */
-static void npi_parseframe(const unsigned char *buf, int len)
+static int npi_parseframe(const unsigned char *buf, int len)
 {
+	int ret = NPI_LNX_SUCCESS;
 	uint8 ch;
 	int  bytesInRxBuffer;
 
-	if (len) {
+	if (len)
+	{
 		// fire UART wakeup signal
 		pthread_mutex_lock(&npiUartWakeupLock);
 		pthread_cond_signal(&npiUartWakeupCond);
 		pthread_mutex_unlock(&npiUartWakeupLock);
 	}
 
-	while (len) {
+	while (len)
+	{
 		ch = *buf++;
 		len--;
 
@@ -828,7 +909,7 @@ static void npi_parseframe(const unsigned char *buf, int len)
 
 				debug_printf("[UART] npi_parseframe: found frame, going to npi_procframe\n");
 				// process the received frame
-				npi_procframe(npi_parseinfo.CMD0_Token, npi_parseinfo.CMD1_Token,
+				ret = npi_procframe(npi_parseinfo.CMD0_Token, npi_parseinfo.CMD1_Token,
 						npi_parseinfo.pMsg, npi_parseinfo.LEN_Token);
 			}
 			else
@@ -852,70 +933,75 @@ static void npi_parseframe(const unsigned char *buf, int len)
 			break;
 		}
 	}
+
+	return ret;
 }
 
 /* Process received frame */
-static void npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
+static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
 		uint8 length)
 {
-  if ( ((subsystemId & RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP) ||
-       ((subsystemId & RPC_SYS_BOOT) == RPC_SYS_BOOT))
-  {
-    // synchronous response
+	int ret = NPI_LNX_SUCCESS;
+	if ( ((subsystemId & RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP) ||
+			((subsystemId & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT))
+	{
+		// synchronous response
 
-    pthread_mutex_lock(&npiSyncRespLock);
-    npiMsgData_t *pMsg = pNpiSyncData;
-    if (pMsg)
-    {
-      // Fill in the synchronous response buffer
-      memcpy(&pMsg->pData, pBuf + NPI_CBACK_BUF_HDR_LEN, length);
-      pMsg->len = length;
-      pMsg->subSys = subsystemId & RPC_SUBSYSTEM_MASK;
-      pMsg->cmdId = commandId;
-    }
-    // if pointer is NULL, no action should be taken
+		pthread_mutex_lock(&npiSyncRespLock);
+		npiMsgData_t *pMsg = pNpiSyncData;
+		if (pMsg)
+		{
+			// Fill in the synchronous response buffer
+			memcpy(&pMsg->pData, pBuf + NPI_CBACK_BUF_HDR_LEN, length);
+			pMsg->len = length;
+			pMsg->subSys = subsystemId & RPC_SUBSYSTEM_MASK;
+			pMsg->cmdId = commandId;
+		}
+		// if pointer is NULL, no action should be taken
 
-    // the buffer usage is done, no more use expected
-    free(pBuf);
+		// the buffer usage is done, no more use expected
+		free(pBuf);
 
-	debug_printf("[UART] npi_procframe signal synch response received (invoked by read loop) \n");
-    // Unblock the synchronous request call
-    pthread_cond_signal(&npiSyncRespCond);
-    pthread_mutex_unlock(&npiSyncRespLock);
-  }
-  else
-  {
-    // must be an asynchronous message
+		debug_printf("[UART] npi_procframe signal synch response received (invoked by read loop) \n");
+		// Unblock the synchronous request call
+		pthread_cond_signal(&npiSyncRespCond);
+		pthread_mutex_unlock(&npiSyncRespLock);
+	}
+	else
+	{
+		// must be an asynchronous message
 
-    // type cast to asynchornous message queue element data structure
-    npiAsyncDataHdr_t *pElement = (npiAsyncDataHdr_t *) pBuf;
+		// type cast to asynchornous message queue element data structure
+		npiAsyncDataHdr_t *pElement = (npiAsyncDataHdr_t *) pBuf;
 
-    // type cast the message structure
-    npiMsgData_t *pMsg = (npiMsgData_t *) (pBuf + sizeof(npiAsyncDataHdr_t));
+		// type cast the message structure
+		npiMsgData_t *pMsg = (npiMsgData_t *) (pBuf + sizeof(npiAsyncDataHdr_t));
 
-    // Fill in the message structure
-    pMsg->len = length;
-    pMsg->subSys = subsystemId & RPC_SUBSYSTEM_MASK;
-    pMsg->cmdId = commandId;
-    pElement->pNext = NULL;
+		// Fill in the message structure
+		pMsg->len = length;
+		pMsg->subSys = subsystemId & RPC_SUBSYSTEM_MASK;
+		pMsg->cmdId = commandId;
+		pElement->pNext = NULL;
 
-    // queue the message
-    pthread_mutex_lock(&npiAsyncLock);
-    if (pNpiAsyncQueueHead)
-    {
-      pNpiAsyncQueueHead->pNext = pElement;
-    }
-    else
-    {
-      pNpiAsyncQueueTail = pElement;
-    }
-    pNpiAsyncQueueHead = pElement;
+		// queue the message
+		pthread_mutex_lock(&npiAsyncLock);
+		if (pNpiAsyncQueueHead)
+		{
+			pNpiAsyncQueueHead->pNext = pElement;
+		}
+		else
+		{
+			pNpiAsyncQueueTail = pElement;
+		}
+		pNpiAsyncQueueHead = pElement;
 
-	debug_printf("[UART] npi_procframe signal areq callback thread (invoked by read loop) \n");
-    /* wake up the asynchronous callback thread */
-    pthread_cond_signal(&npiAsyncCond);
-    pthread_mutex_unlock(&npiAsyncLock);
-  }
+		debug_printf("[UART] npi_procframe signal areq callback thread (invoked by read loop) \n");
+		/* wake up the asynchronous callback thread */
+		pthread_cond_signal(&npiAsyncCond);
+		pthread_mutex_unlock(&npiAsyncLock);
+	}
+
+	return ret;
 }
 
 /* Calculate NPI frame FCS */

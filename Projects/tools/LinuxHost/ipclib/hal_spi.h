@@ -120,9 +120,9 @@ st ( \
  */
 
 void HalSpiFlush(uint8 port, uint8 len);
-void HalSpiInit(const char *devpath, uint32 speed);
+int HalSpiInit(const char *devpath, uint32 speed);
 void HalSpiPoll(void);
-void HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len);
+int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len);
 void HalSpiClose( void );
 
 

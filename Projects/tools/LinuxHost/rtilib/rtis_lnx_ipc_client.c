@@ -163,9 +163,6 @@ static uint8 rtisBE; // big endian machine flag
 //void   RTI_Init( uint8 taskId );
 //uint16 RTI_ProcessEvent( uint8 taskId, uint16 events );
 
-// NPI Callback Related
-void NPI_AsynchMsgCback( npiMsgData_t *pMsg );
-
 // Endianness conversion
 static void rtisAttribEConv( uint8 attrib, uint8 len, uint8 *pValue );
 
@@ -244,7 +241,8 @@ int RTIS_Init(const char *devPath)
     int len;
     struct sockaddr_un remote;
 
-    if ((sNPIconnected = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+    if ((sNPIconnected = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+    {
         perror("socket");
         exit(1);
     }
@@ -292,7 +290,8 @@ int RTIS_Init(const char *devPath)
 
     struct addrinfo *p;
     char ipstr[INET6_ADDRSTRLEN];
-    for(p = resAddr;p != NULL; p = p->ai_next) {
+    for(p = resAddr;p != NULL; p = p->ai_next)
+    {
         void *addr;
         char *ipver;
 
@@ -314,7 +313,8 @@ int RTIS_Init(const char *devPath)
     }
 
 
-    if ((sNPIconnected = socket(resAddr->ai_family, resAddr->ai_socktype, resAddr->ai_protocol)) == -1) {
+    if ((sNPIconnected = socket(resAddr->ai_family, resAddr->ai_socktype, resAddr->ai_protocol)) == -1)
+    {
         perror("socket");
         exit(1);
     }
@@ -326,19 +326,23 @@ int RTIS_Init(const char *devPath)
     remote.sun_family = AF_UNIX;
     strcpy(remote.sun_path, ipAddress);
     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
-    if (connect(sNPIconnected, (struct sockaddr *)&remote, len) == -1) {
+    if (connect(sNPIconnected, (struct sockaddr *)&remote, len) == -1)
+    {
         perror("connect");
         res = FALSE;
     }
 #else
-    if (connect(sNPIconnected, resAddr->ai_addr, resAddr->ai_addrlen) == -1) {
+    if (connect(sNPIconnected, resAddr->ai_addr, resAddr->ai_addrlen) == -1)
+    {
         perror("connect");
         res = FALSE;
     }
 #endif
 
     if (res == TRUE)
+    {
     	printf("Connected.\n");
+    }
 
 
 	int no = 0;
@@ -509,8 +513,13 @@ static void *rtis_lnx_ipc_readThreadFunc (void *ptr)
 		// To be able to continue processing previous AREQ we need to perform a non-blocking read of the socket,
 		// this is solved by using poll() to see if there are bytes to read.
 
-		// TODO: Maybe only poll in case there are AREQ messages to process?
-		pollRet = poll((struct pollfd*)&ufds, 1, 1);
+		if (rtis_ipc_areq_rec_buf != NULL)
+			// In case there are messages received yet to be processed allow processing by timing out after 1ms.
+			pollRet = poll((struct pollfd*)&ufds, 1, 1);
+		else
+			// In case there are no messages received to be processed wait forever.
+			pollRet = poll((struct pollfd*)&ufds, 1, -1);
+
 		if (pollRet == -1)
 		{
 			// Error occured in poll()
@@ -540,13 +549,23 @@ static void *rtis_lnx_ipc_readThreadFunc (void *ptr)
 					perror("recv");
 				done = 1;
 			}
-			else if (n == 3)
+			else if (n == RPC_FRAME_HDR_SZ)
 			{
-				// We have received the header, now read out length byte and process it
+				// We have received the header, now read out length bytes and process it,
+				// if there are bytes to receive.
+				if (((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len > 0)
+				{
 				n = recv(sNPIconnected,
 						(uint8*)&(rtis_ipc_buf[0][RPC_FRAME_HDR_SZ]),
 						((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len,
 						0);
+				}
+				else
+				{
+					// There are no payload bytes; which is also valid.
+					n = ((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len;
+				}
+
 				if (n == ((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len)
 				{
 					int i;
@@ -577,7 +596,7 @@ static void *rtis_lnx_ipc_readThreadFunc (void *ptr)
 					}
 					else if ( ( (uint8)(((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->subSys) & (uint8)RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ )
 					{
-						debug_printf("RPC_CMD_AREQ cmdId: 0x%.2X, %.6d\n", ((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->cmdId, counter++);
+						debug_printf("RPC_CMD_AREQ cmdId: 0x%.2X\n", ((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->cmdId);
 						// Verify the size of the incoming message before passing it
 						if ( (((npiMsgData_t *)&(rtis_ipc_buf[0][0]))->len + RPC_FRAME_HDR_SZ) <= sizeof(npiMsgData_t) )
 						{
@@ -990,7 +1009,8 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 void NPI_SendAsynchData (npiMsgData_t *pMsg)
 {
 	// Add Proper RPC type to header
-	((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_AREQ;
+	if ((((uint8*)pMsg)[RPC_POS_CMD0] & RPC_CMD_TYPE_MASK) == 0)
+		((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_AREQ;
 
 	int i;
 	debug_printf("trying to send %d bytes,\t subSys 0x%.2X, cmdId 0x%.2X, pData:",
@@ -1765,11 +1785,11 @@ RTILIB_API uint16 RTI_TestRxCounterGetReq(uint8 resetFlag)
  * @return      None.
  **************************************************************************************************
  */
-void NPI_AsynchMsgCback( npiMsgData_t *pMsg )
+int NPI_AsynchMsgCback( npiMsgData_t *pMsg )
 {
 	if (rtisState != RTIS_STATE_READY)
 	{
-		return;
+		return -1;
 	}
 
 	if (pMsg->subSys == RPC_SYS_RCAF)
@@ -1854,6 +1874,7 @@ void NPI_AsynchMsgCback( npiMsgData_t *pMsg )
 		RCNS_AsynchMsgCback(pMsg);
 #endif
 	}
+	return 0;
 }
 
 
