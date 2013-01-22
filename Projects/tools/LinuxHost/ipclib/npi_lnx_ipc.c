@@ -70,21 +70,30 @@
 #include "npi_lnx_error.h"
 #include "npi_lnx_ipc_rpc.h"
 
-//#if (defined HAL_SPI) && (HAL_SPI == TRUE)
+#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 #include "npi_lnx_spi.h"
 #include "hal_spi.h"
-//#endif
+#endif
 
-//#if (defined HAL_I2C) && (HAL_I2C == TRUE)
+#if (defined NPI_I2C) && (NPI_I2C == TRUE)
 #include "npi_lnx_i2c.h"
 #include "hal_i2c.h"
-//#endif
+#endif
 
-//#if (defined HAL_UART) && (HAL_UART == TRUE)
+#if (defined NPI_UART) && (NPI_UART == TRUE)
 #include "npi_lnx_uart.h"
+#endif
+
 // The following is only necessary because we always read out GPIO configuration
 #include "hal_gpio.h"
-//#endif
+
+#if (!defined NPI_SPI) || (NPI_SPI == FALSE)
+#if (!defined NPI_I2C) || (NPI_I2C == FALSE)
+#if (!defined NPI_UART) || (NPI_UART == FALSE)
+#error "neither NPI_I2C, NPI_SPI, NPI_UART defined to TRUE, at least one mandatory. verify your makefile"
+#endif
+#endif
+#endif
 
 #ifdef __BIG_DEBUG__
 #define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
@@ -128,66 +137,113 @@ const char* sectionNamesArray[3][2] =
 //const char *port = "";
 char port[128];
 
+enum
+{
+	NPI_UART_FN_ARR_IDX,  	//0
+	NPI_SPI_FN_ARR_IDX,		//1
+	NPI_I2C_FN_ARR_IDX,		//2
+};
 
 const pNPI_OpenDeviceFn NPI_OpenDeviceFnArr[] =
 {
+#if (defined NPI_UART) && (NPI_UART == TRUE)
 		NPI_UART_OpenDevice,
-#if (defined HAL_SPI) && (HAL_SPI == TRUE)
-		NPI_SPI_OpenDevice,
+#else
+		NULL,
 #endif
-#if (defined HAL_I2C) && (HAL_I2C == TRUE)
+#if (defined NPI_SPI) && (NPIL_SPI == TRUE)
+		NPI_SPI_OpenDevice,
+#else
+		NULL,
+#endif
+#if (defined NPI_I2C) && (NPI_I2C == TRUE)
 		NPI_I2C_OpenDevice
+#else
+		NULL,
 #endif
 };
+
 const pNPI_CloseDeviceFn NPI_CloseDeviceFnArr[] =
 {
+#if (defined NPI_UART) && (NPI_UART == TRUE)
 		NPI_UART_CloseDevice,
-#if (defined HAL_SPI) && (HAL_SPI == TRUE)
-		NPI_SPI_CloseDevice,
+#else
+		NULL,
 #endif
-#if (defined HAL_I2C) && (HAL_I2C == TRUE)
+#if (defined NPI_SPI) && (NPI_SPI == TRUE)
+		NPI_SPI_CloseDevice,
+#else
+		NULL,
+#endif
+#if (defined NPI_I2C) && (NPI_I2C == TRUE)
 		NPI_I2C_CloseDevice
+#else
+		NULL,
 #endif
 };
 const pNPI_SendAsynchDataFn NPI_SendAsynchDataFnArr[] =
 {
+#if (defined NPI_UART) && (NPI_UART == TRUE)
 		NPI_UART_SendAsynchData,
-#if (defined HAL_SPI) && (HAL_SPI == TRUE)
-		NPI_SPI_SendAsynchData,
+#else
+		NULL,
 #endif
-#if (defined HAL_I2C) && (HAL_I2C == TRUE)
+#if (defined NPI_SPI) && (NPI_SPI == TRUE)
+		NPI_SPI_SendAsynchData,
+#else
+		NULL,
+#endif
+#if (defined NPI_I2C) && (NPI_I2C == TRUE)
 		NPI_I2C_SendAsynchData
+#else
+		NULL,
 #endif
 };
 const pNPI_SendSynchDataFn NPI_SendSynchDataFnArr[] =
 {
+#if (defined NPI_UART) && (NPI_UART == TRUE)
 		NPI_UART_SendSynchData,
-#if (defined HAL_SPI) && (HAL_SPI == TRUE)
-		NPI_SPI_SendSynchData,
+#else
+		NULL,
 #endif
-#if (defined HAL_I2C) && (HAL_I2C == TRUE)
+#if (defined NPI_SPI) && (NPI_SPI == TRUE)
+		NPI_SPI_SendSynchData,
+#else
+		NULL,
+#endif
+#if (defined NPI_I2C) && (NPI_I2C == TRUE)
 		NPI_I2C_SendSynchData
+#else
+		NULL,
 #endif
 };
 
 const pNPI_ResetSlaveFn NPI_ResetSlaveFnArr[] =
 {
 		NULL,
-#if (defined HAL_SPI) && (HAL_SPI == TRUE)
+#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 		NPI_SPI_ResetSlave,
+#else
+		NULL,
 #endif
-#if (defined HAL_I2C) && (HAL_I2C == TRUE)
+#if (defined NPI_I2C) && (NPI_I2C == TRUE)
 		NPI_I2C_ResetSlave,
+#else
+		NULL,
 #endif
 };
 
 const pNPI_SynchSlaveFn NPI_SynchSlaveFnArr[] =
 {
 		NULL,
-#if (defined HAL_SPI) && (HAL_SPI == TRUE)
+#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 		NPI_SPI_SynchSlave,
+#else
+		NULL,
 #endif
-#if (defined HAL_I2C) && (HAL_I2C == TRUE)
+#if (defined NPI_I2C) && (NPI_I2C == TRUE)
+		NULL,
+#else
 		NULL,
 #endif
 };
@@ -227,6 +283,7 @@ char npi_ipc_buf[2][sizeof(npiMsgData_t)];
 FILE *serialCfgFd;
 char* pStrBufRoot;
 char* devPath;
+char* logPath;
 halGpioCfg_t** gpioCfg;
 
 #if (defined __DEBUG_TIME__) || (__STRESS_TEST__)
@@ -279,6 +336,8 @@ int removeFromActiveList(int c);
 int addToActiveList(int c);
 
 void writeToNpiLnxLog(const char* str);
+
+static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf);
 
 /**************************************************************************************************
  * @fn          halDelay
@@ -338,7 +397,7 @@ void writeToNpiLnxLog(const char* str)
 	sprintf(fullStr, "%s. Error: %.8X\n", fullStr, npi_ipc_errno);
 
 	// Write error message to /dev/npiLnxLog
-	npiLnxLogFd = open("/var/npiLnxLog.log",  O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+	npiLnxLogFd = open(logPath,  O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
 	if (npiLnxLogFd > 0)
 	{
 		write(npiLnxLogFd, fullStr, strlen(fullStr) + 1);
@@ -411,7 +470,9 @@ int main(int argc, char ** argv)
 	memset(strBuf, 0, 128);
 	pStrBufRoot = strBuf;
 	devPath = (char*) malloc(128);
+	logPath = (char*) malloc(128);
 	memset(devPath, 0, 128);
+	memset(logPath, 0, 128);
 	gpioCfg = (halGpioCfg_t**) malloc(3 * sizeof(halGpioCfg_t*));
 	debug_printf("gpioCfg \t\t\t\t@0x%.8X\n",
 			(unsigned int)&(gpioCfg));
@@ -469,6 +530,19 @@ int main(int argc, char ** argv)
 	//                            printf("_");
 	//            }
 	//            printf("<\n");
+	// Get path to the log file
+	strBuf = pStrBufRoot;
+	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "LOG", "log", strBuf)))
+	{
+		printf("Could not find 'log' inside config file '%s'\n", configFilePath);
+		npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_LOG_PATH;
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+	}
+	// Copy from buffer to variable
+	memcpy(logPath, strBuf, strlen(strBuf));
+	//            debug_
+	printf("logPath = '%s'\n", logPath);
+
 
 	// GPIO configuration
 	if ((devIdx == 1) || (devIdx == 2))
@@ -611,37 +685,52 @@ int main(int argc, char ** argv)
 	/**********************************************************************
 	 * Now open the serial interface
 	 */
-
-	if (devIdx == 0)
+	switch(devIdx)
 	{
-		ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, NULL);
-	}
-	else if (devIdx == 1)
-	{
-		npiSpiCfg_t spiCfg;
-		strBuf = pStrBufRoot;
-		if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
-			spiCfg.speed = atoi(strBuf);
-		else
-			spiCfg.speed=500000;
-		spiCfg.gpioCfg = gpioCfg;
+		case NPI_UART_FN_ARR_IDX:
+		#if (defined NPI_UART) && (NPI_UART == TRUE)
+		{
+			ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, NULL);
+		}
+		#endif
+		break;
+	case NPI_SPI_FN_ARR_IDX:
+		#if (defined NPI_SPI) && (NPI_SPI == TRUE)
+		{
+			npiSpiCfg_t spiCfg;
+			strBuf = pStrBufRoot;
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
+				spiCfg.speed = atoi(strBuf);
+			else
+				spiCfg.speed=500000;
+			spiCfg.gpioCfg = gpioCfg;
 
-		// Now open device for processing
-		ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiSpiCfg_t *) &spiCfg);
+			// Now open device for processing
+			ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiSpiCfg_t *) &spiCfg);
 
-		// Perform Reset of the RNP
-		(NPI_ResetSlaveFnArr[devIdx])();
+			// Perform Reset of the RNP
+			(NPI_ResetSlaveFnArr[devIdx])();
 
-		// Do the Hw Handshake
-		(NPI_SynchSlaveFnArr[devIdx])();
-	}
-	if (devIdx == 2)
-	{
-		npiI2cCfg_t i2cCfg;
-		i2cCfg.gpioCfg = gpioCfg;
+			// Do the Hw Handshake
+			(NPI_SynchSlaveFnArr[devIdx])();
+		}
+		#endif
+		break;
 
-		// Open the Device and perform a reset
-		ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiI2cCfg_t *) &i2cCfg);
+	case NPI_I2C_FN_ARR_IDX:
+		#if (defined NPI_I2C) && (NPI_I2C == TRUE)
+			{
+				npiI2cCfg_t i2cCfg;
+				i2cCfg.gpioCfg = gpioCfg;
+
+				// Open the Device and perform a reset
+				ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiI2cCfg_t *) &i2cCfg);
+			}
+		#endif
+		break;
+	default:
+		ret = NPI_LNX_FAILURE;
+		break;
 	}
 
 	// Get port from configuration file
@@ -856,7 +945,7 @@ int main(int argc, char ** argv)
 	gettimeofday(&startTime, NULL);
 #endif // (defined __DEBUG_TIME__) || (__STRESS_TEST__)
 	//                                            debug_
-	printf("waiting for first connection on %d...\n", sNPIlisten);
+	printf("waiting for first connection on #%d...\n", sNPIlisten);
 
 	while (ret == NPI_LNX_SUCCESS)
 	{
@@ -906,13 +995,13 @@ int main(int argc, char ** argv)
 						//                                            debug_
 						inet_ntop(AF_INET, &((struct sockaddr_in *) &their_addr)->sin_addr, ipstr, sizeof ipstr);
 						inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&their_addr)->sin6_addr, ipstr2, sizeof ipstr2);
-						sprintf(toNpiLnxLog, "Connected to %d.(%s / %s)", justConnected, ipstr, ipstr2);
+						sprintf(toNpiLnxLog, "Connected to #%d.(%s / %s)", justConnected, ipstr, ipstr2);
 						printf("%s\n", toNpiLnxLog);
 						writeToNpiLnxLog(toNpiLnxLog);
 						ret = addToActiveList(justConnected);
 
 #ifdef __DEBUG_TIME__
-  						if (__DEBUG_TIME_ACTIVE == TRUE)
+						if (__DEBUG_TIME_ACTIVE == TRUE)
 						{
 							gettimeofday(&startTime, NULL);
 						}
@@ -948,15 +1037,27 @@ int main(int argc, char ** argv)
 							break;
 						case NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT:
 							close(c);
-							printf("Removing connection %d\n", c);
+							printf("Removing connection #%d\n", c);
 							// Connection closed. Remove from set
 							FD_CLR(c, &activeConnectionsFDs);
 							// We should now set ret to NPI_SUCCESS, but there is still one fatal error
 							// possibility so simply set ret = to return value from removeFromActiveList().
 							ret = removeFromActiveList(c);
-							sprintf(toNpiLnxLog, "Removed connection %d", c);
+							sprintf(toNpiLnxLog, "Removed connection #%d", c);
 							//							printf("%s\n", toNpiLnxLog);
 							writeToNpiLnxLog(toNpiLnxLog);
+							break;
+						case NPI_LNX_ERROR_UART_SEND_SYNCH_TIMEDOUT:
+							//This case can happen in some particular condition:
+							// if the network is in BOOT mode, it will not answer any synchronous request other than SYS_BOOT request.
+							// if we exit immedialty, we will never be able to recover the NP device.
+							// This may be replace in the futureby anupdate of the RNP behavior
+							printf("Synchronous Request Timeout...");
+							sprintf(toNpiLnxLog, "Removed connection #%d", c);
+							//							printf("%s\n", toNpiLnxLog);
+							writeToNpiLnxLog(toNpiLnxLog);
+							ret = NPI_LNX_SUCCESS;
+							npi_ipc_errno = NPI_LNX_SUCCESS;
 							break;
 						default:
 							//							debug_
@@ -979,6 +1080,7 @@ int main(int argc, char ** argv)
 	free(toNpiLnxLog);
 
 
+	printf("Exit socket while loop\n");
 	/**********************************************************************
 	 * Remember to close down all connections
 	 *********************************************************************/
@@ -1064,24 +1166,35 @@ int removeFromActiveList(int c)
 			break;
 	}
 
-#ifdef __BIG_DEBUG__
-	printf("Active Connections: %d", activeConnections.list[0]);
-	// Send data to all connections, except listener
-	for (i = 1; i < activeConnections.size; i++)
-	{
-		printf(", %d", activeConnections.list[i]);
-	}
-	printf("\n");
-#endif //__BIG_DEBUG__
 
 	if (i < activeConnections.size)
 	{
-		// Found our entry, replace this entry by the last entry
-		activeConnections.list[i] = activeConnections.list[activeConnections.size - 1];
+		//Check if the last active conection has been removed
+		if (activeConnections.size == 1)
+		{
+			//continue to wait for new connection
+			activeConnections.size = 0;
+			activeConnections.list[0] = 0;
+			debug_printf("No  Active Connections");
+		}
+		else
+		{
 
-		// Decrement size
-		activeConnections.size--;
+			// Found our entry, replace this entry by the last entry
+			activeConnections.list[i] = activeConnections.list[activeConnections.size - 1];
 
+			// Decrement size
+			activeConnections.size--;
+#ifdef __BIG_DEBUG__
+			printf("Remaining Active Connections: #%d", activeConnections.list[0]);
+			// Send data to all connections, except listener
+			for (i = 1; i < activeConnections.size; i++)
+			{
+				printf(", #%d", activeConnections.list[i]);
+			}
+			printf("\n");
+#endif //__BIG_DEBUG__
+		}
 		return NPI_LNX_SUCCESS;
 	}
 	else
@@ -1225,52 +1338,9 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 
 			if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
 			{
-				// If more APIs are activated, move handling to function.
-				if (((uint8) ((npiMsgData_t *) npi_ipc_buf[0])->cmdId) == NPI_LNX_CMD_ID_CTRL_TIME_PRINT)
-				{
-#ifdef __DEBUG_TIME__
-					__DEBUG_TIME_ACTIVE = ((npiMsgData_t *) npi_ipc_buf[0])->pData[0];
-					if (__DEBUG_TIME_ACTIVE == FALSE)
-					{
-						printf("__DEBUG_TIME_ACTIVE set to FALSE\n");
-					}
-					else
-					{
-						printf("__DEBUG_TIME_ACTIVE set to TRUE\n");
-					}
-					// Set return status
-					((npiMsgData_t *) npi_ipc_buf[0])->len = 1;
-					((npiMsgData_t *) npi_ipc_buf[0])->pData[0] = NPI_LNX_SUCCESS;
-#else //__DEBUG_TIME__
-					printf("NPI_Server not compiled to support time stamps\n");
-					// Set return status
-					((npiMsgData_t *) npi_ipc_buf[0])->len = 1;
-					((npiMsgData_t *) npi_ipc_buf[0])->pData[0] = NPI_LNX_FAILURE;
-#endif //__DEBUG_TIME__
-					((npiMsgData_t *) npi_ipc_buf[0])->subSys = RPC_SYS_SRV_CTRL;
-					ret = NPI_LNX_SUCCESS;
-				}
-				else if (((uint8) ((npiMsgData_t *) npi_ipc_buf[0])->cmdId) == NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT)
-				{
-					__BIG_DEBUG_ACTIVE = ((npiMsgData_t *) npi_ipc_buf[0])->pData[0];
-					if (__BIG_DEBUG_ACTIVE == FALSE)
-					{
-						printf("__BIG_DEBUG_ACTIVE set to FALSE\n");
-					}
-					else
-					{
-						printf("__BIG_DEBUG_ACTIVE set to TRUE\n");
-					}
-					// Set return status
-					((npiMsgData_t *) npi_ipc_buf[0])->len = 1;
-					((npiMsgData_t *) npi_ipc_buf[0])->pData[0] = NPI_LNX_SUCCESS;
-					ret = NPI_LNX_SUCCESS;
-				}
-				else
-				{
-					npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INVALID_SREQ;
-					ret = NPI_LNX_FAILURE;
-				}
+
+				//SREQ Command send to this server.
+				ret = npi_ServerCmdHandle((npiMsgData_t *)npi_ipc_buf[0]);
 			}
 			else
 			{
@@ -1281,27 +1351,7 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 
 			if (ret == NPI_LNX_SUCCESS)
 			{
-				//0x22 = RTIS_CMD_ID_RTI_WRITE_ITEM_EX
-				// 0x80 is bitmask for response, e.g. for the Serial Bootloader. In order not to exclude response
-				if ( ((((npiMsgData_t *) npi_ipc_buf[0])->cmdId & 0x7F) > 0) &&
-						((((npiMsgData_t *) npi_ipc_buf[0])->cmdId & 0x7F) <= 0x22) )
-				{
-					n = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
-				}
-				else
-				{
-					n = 0;
-					int tmpSize = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
-					//				debug_
-					printf("[ERR] NPI SRSP: (len %d)", tmpSize);
-					for (i = 0; i < tmpSize; i++)
-					{
-						//					debug_
-						printf(" 0x%.2X", (uint8)npi_ipc_buf[0][i]);
-					}
-					//				debug_
-					printf("\n");
-				}
+				n = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
 
 				// Copy response into transmission buffer
 				memcpy(npi_ipc_buf[1], npi_ipc_buf[0], n);
@@ -1343,35 +1393,8 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 
 			if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
 			{
-				// If more APIs are activated, move handling to function.
-				if (((uint8) ((npiMsgData_t *) npi_ipc_buf[0])->cmdId) == NPI_LNX_CMD_ID_CTRL_TIME_PRINT)
-				{
-#ifdef __DEBUG_TIME__
-					__DEBUG_TIME_ACTIVE = ((npiMsgData_t *) npi_ipc_buf[0])->pData[0];
-					if (__DEBUG_TIME_ACTIVE == FALSE)
-					{
-						printf("__DEBUG_TIME_ACTIVE set to FALSE\n");
-					}
-					else
-					{
-						printf("__DEBUG_TIME_ACTIVE set to TRUE\n");
-					}
-#else //__DEBUG_TIME__
-					printf("NPI_Server not compiled to support time stamps\n");
-#endif //__DEBUG_TIME__
-				}
-				else if (((uint8) ((npiMsgData_t *) npi_ipc_buf[0])->cmdId) == NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT)
-				{
-					__BIG_DEBUG_ACTIVE = ((npiMsgData_t *) npi_ipc_buf[0])->pData[0];
-					if (__BIG_DEBUG_ACTIVE == FALSE)
-					{
-						printf("__BIG_DEBUG_ACTIVE set to FALSE\n");
-					}
-					else
-					{
-						printf("__BIG_DEBUG_ACTIVE set to TRUE\n");
-					}
-				}
+				//AREQ Command send to this server.
+				ret = npi_ServerCmdHandle((npiMsgData_t *)npi_ipc_buf[0]);
 			}
 			else
 			{
@@ -1511,13 +1534,13 @@ int NPI_LNX_IPC_SendData(uint8 len, int connection)
 	if (connection < 0)
 	{
 #ifdef __BIG_DEBUG__
-		printf("Active Connections: %d", activeConnections.list[0]);
+		printf("Dispatch AREQ to all active connections: #%d", activeConnections.list[0]);
 		// Send data to all connections, except listener
 		for (i = 1; i < activeConnections.size; i++)
 		{
 			printf(", %d", activeConnections.list[i]);
 		}
-		printf("\n");
+		printf(".\n");
 #endif //__BIG_DEBUG__
 		// Send data to all connections, except listener
 		for (i = 0; i < activeConnections.size; i++)
@@ -1535,7 +1558,7 @@ int NPI_LNX_IPC_SendData(uint8 len, int connection)
 						// Remove from list if detected bad file descriptor
 						if (errno == EBADF)
 						{
-							printf("Removing connection %d\n", activeConnections.list[i]);
+							printf("Removing connection #%d\n", activeConnections.list[i]);
 							close(activeConnections.list[i]);
 							// Connection closed. Remove from set
 							FD_CLR(activeConnections.list[i], &activeConnectionsFDs);
@@ -1564,7 +1587,7 @@ int NPI_LNX_IPC_SendData(uint8 len, int connection)
 			// Remove from list if detected bad file descriptor
 			if (errno == EBADF)
 			{
-				printf("Removing connection %d\n", connection);
+				printf("Removing connection #%d\n", connection);
 				close(connection);
 				// Connection closed. Remove from set
 				FD_CLR(connection, &activeConnectionsFDs);
@@ -1679,7 +1702,7 @@ int SerialConfigParser(FILE* serialCfgFd, const char* section,
 					}
 					else if (sectionFound == TRUE)
 					{
-						debug_printf("Line to process %s (strlen=%d)\n",
+						debug_printf("Line to process %s (strlen=%zd)\n",
 								resString,
 								strlen(resString));
 						// We have found our section, now we search for wanted key
@@ -1978,7 +2001,7 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg)
 	{
 		errorMsg = "Default msg. Requested msg too long.\n";
 		memcpy(msg.pData, errorMsg, strlen(errorMsg));
-		debug_printf("[NOTIFY_ERROR] Size of error message too long (%d, max %d).\n",
+		debug_printf("[NOTIFY_ERROR] Size of error message too long (%zd, max %d).\n",
 				strlen(errorMsg),
 				AP_MAX_BUF_LEN);
 	}
@@ -2003,6 +2026,116 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg)
 
 	return ret;
 }
+
+static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf)
+{
+	int ret = NPI_LNX_SUCCESS;
+
+	switch(npi_ipc_buf->cmdId)
+	{
+		case NPI_LNX_CMD_ID_CTRL_TIME_PRINT_REQ:
+			{
+		#ifdef __DEBUG_TIME__
+				__DEBUG_TIME_ACTIVE = npi_ipc_buf->pData[0];
+				if (__DEBUG_TIME_ACTIVE == FALSE)
+				{
+					printf("__DEBUG_TIME_ACTIVE set to FALSE\n");
+				}
+				else
+				{
+					printf("__DEBUG_TIME_ACTIVE set to TRUE\n");
+				}
+				// Set return status
+				npi_ipc_buf->len = 1;
+				npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+		#else //__DEBUG_TIME__
+				printf("NPI_Server not compiled to support time stamps\n");
+				// Set return status
+				npi_ipc_buf->len = 1;
+				npi_ipc_buf->pData[0] = (uint8) NPI_LNX_FAILURE;
+		#endif //__DEBUG_TIME__
+				npi_ipc_buf->subSys = RPC_SYS_SRV_CTRL;
+				ret = NPI_LNX_SUCCESS;
+		}
+		break;
+		case NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT_REQ:
+		{
+			__BIG_DEBUG_ACTIVE = npi_ipc_buf->pData[0];
+			if (__BIG_DEBUG_ACTIVE == FALSE)
+			{
+				printf("__BIG_DEBUG_ACTIVE set to FALSE\n");
+			}
+			else
+			{
+				printf("__BIG_DEBUG_ACTIVE set to TRUE\n");
+			}
+			// Set return status
+			npi_ipc_buf->len = 1;
+			npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+			ret = NPI_LNX_SUCCESS;
+			break;
+		}
+		case NPI_LNX_CMD_ID_VERSION_REQ:
+		{
+			// Set return status
+			npi_ipc_buf->len = 4;
+			npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+			npi_ipc_buf->pData[1] = NPI_LNX_MAJOR_VERSION;
+			npi_ipc_buf->pData[2] = NPI_LNX_MINOR_VERSION;
+			npi_ipc_buf->pData[3] = NPI_LNX_REVISION;
+			ret = NPI_LNX_SUCCESS;
+		}
+		break;
+		case NPI_LNX_CMD_ID_GET_PARAM_REQ:
+		{
+			// Set return status
+			switch(npi_ipc_buf->pData[0])
+			{
+				case NPI_LNX_PARAM_NB_CONNECTIONS:
+					npi_ipc_buf->len = 3;
+					npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+					//Number of Active Connections
+					npi_ipc_buf->pData[1] = activeConnections.size;
+					//Max number of possible connections.
+					npi_ipc_buf->pData[2] = NPI_SERVER_CONNECTION_QUEUE_SIZE;
+
+					ret = NPI_LNX_SUCCESS;
+					break;
+				case NPI_LNX_PARAM_DEVICE_USED:
+					npi_ipc_buf->len = 2;
+					npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+					//device open and used by the sever
+					npi_ipc_buf->pData[1] = devIdx;
+
+					ret = NPI_LNX_SUCCESS;
+					break;
+
+				default:
+					npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INVALID_GET_PARAM_CMD;
+					ret = NPI_LNX_FAILURE;
+					break;
+
+			}
+		}
+		break;
+		case NPI_LNX_CMD_ID_RESET_DEVICE:
+		{
+			ret = HalGpioResetSet(FALSE);
+			debug_printf("Resetting device\n");
+			usleep(1);
+			ret = HalGpioResetSet(TRUE);
+		}
+		break;
+		default:
+		{
+			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INVALID_SREQ;
+			ret = NPI_LNX_FAILURE;
+			break;
+		}
+	}
+	return ret;
+}
+
 /**************************************************************************************************
  **************************************************************************************************/
 

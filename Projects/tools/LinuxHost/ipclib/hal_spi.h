@@ -53,9 +53,8 @@ extern "C"
 #include "hal_types.h"
 #include "hal_gpio.h"
 
-//#define HAL_SPI TRUE
 
-#if ((defined HAL_SPI) && (HAL_SPI == TRUE))
+#if ((defined NPI_SPI) && (NPI_SPI == TRUE))
 /*********************************************************************
  * MACROS
  */

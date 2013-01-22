@@ -53,9 +53,8 @@ extern "C"
 #include "hal_types.h"
 #include "hal_gpio.h"
 
-//#define HAL_SPI TRUE
 
-#if ((defined HAL_I2C) && (HAL_I2C == TRUE))
+#if ((defined NPI_I2C) && (NPI_I2C == TRUE))
 /*********************************************************************
  * MACROS
  */

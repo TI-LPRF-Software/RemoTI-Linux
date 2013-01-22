@@ -57,15 +57,22 @@ extern "C" {
  * ------------------------------------------------------------------------------------------------
  */
 
-#define NPI_LNX_CMD_ID_CTRL_TIME_PRINT			0x01
-#define NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT		0x02
+#define NPI_LNX_CMD_ID_CTRL_TIME_PRINT_REQ			0x01
+#define NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT_REQ		0x02
+#define NPI_LNX_CMD_ID_VERSION_REQ					0x03
+#define NPI_LNX_CMD_ID_GET_PARAM_REQ				0x04
+#define NPI_LNX_CMD_ID_RESET_DEVICE					0x05
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Common
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+//Version 0.7.0
+#define NPI_LNX_MAJOR_VERSION		0
+#define NPI_LNX_MINOR_VERSION		7
+#define NPI_LNX_REVISION			0
 
-
-
+#define NPI_LNX_PARAM_NB_CONNECTIONS 		1
+#define NPI_LNX_PARAM_DEVICE_USED			2
 /* ------------------------------------------------------------------------------------------------
  *                                           Typedefs
  * ------------------------------------------------------------------------------------------------

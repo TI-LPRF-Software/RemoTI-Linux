@@ -69,7 +69,7 @@
 #define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
 #endif
 
-#if (defined HAL_I2C) && (HAL_I2C == TRUE)
+#if (defined NPI_I2C) && (NPI_I2C == TRUE)
 /**************************************************************************************************
  *                                            CONSTANTS
  **************************************************************************************************/

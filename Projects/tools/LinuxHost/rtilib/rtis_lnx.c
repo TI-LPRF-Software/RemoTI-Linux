@@ -1431,6 +1431,35 @@ RTILIB_API uint16 RTI_TestRxCounterGetReq(uint8 resetFlag)
 }
 
 /**************************************************************************************************
+ *
+ * @fn          RTI_EnterBootModeReq
+ *
+ * @brief       This function is used to place the radio in boot mode.
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_EnterBootModeReq( void )
+{
+  npiMsgData_t pMsg;
+
+  pMsg.subSys   = RPC_SYS_BOOT;
+  pMsg.cmdId    = SB_TGT_BOOTLOAD;
+  pMsg.len      = 0;
+
+  // send command to slave
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
  * @fn          NPI_AsynchMsgCback
  *
  * @brief       This function is a NPI callback to the client that inidcates an

@@ -71,6 +71,8 @@
 #include <sys/time.h>
 #endif // __STRESS_TEST__
 
+#if (defined NPI_I2C) && (NPI_I2C == TRUE)
+
 // -- macros --
 
 #ifndef TRUE
@@ -412,7 +414,7 @@ int npi_i2c_pollData(npiMsgData_t *pMsg)
 	ret = HalGpioWaitSrdyClr();
 
 
-	//Send LEN, CMD0 and CMD1 (comand Header) and payload
+	//Send LEN, CMD0 and CMD1 (command Header) and payload
 	if (ret == NPI_LNX_SUCCESS)
 		ret = HalI2cWrite(0, (uint8*) pMsg, RPC_FRAME_HDR_SZ + (pMsg->len));
 
@@ -1070,6 +1072,8 @@ static void *npi_event_entry(void *ptr)
 
 	return ptr;
 }
-#endif
+#endif //SRDY_INTERRUPT
+
+#endif // NPI_I2C
 /**************************************************************************************************
 */

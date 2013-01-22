@@ -61,7 +61,7 @@
 #include "npi_lnx_error.h"
 
 
-#if (defined HAL_SPI) && (HAL_SPI == TRUE)
+#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 
 #if (defined __DEBUG_TIME__)
 #include <sys/time.h>
@@ -285,7 +285,7 @@ int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 	prevTime = curTime;
 	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-	debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] ----- WRITE SPI LOCK MUTEX ---------\n",
+	debug_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] ----- WRITE SPI LOCK MUTEX ---------\n",
 			hours,											// hours
 			minutes,										// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
@@ -333,7 +333,7 @@ int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 	prevTime = curTime;
 	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-	debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] ----- WRITE SPI DONE ---------------\n",
+	debug_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] ----- WRITE SPI DONE ---------------\n",
 			hours,											// hours
 			minutes,										// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds

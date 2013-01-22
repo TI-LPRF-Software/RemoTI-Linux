@@ -51,6 +51,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <semaphore.h>
 
 #include "aic.h"
 #include "npi_lnx.h"
@@ -58,6 +59,7 @@
 
 #include "npi_lnx_error.h"
 
+#if (defined NPI_UART) && (NPI_UART == TRUE)
 // -- macros --
 
 #ifndef TRUE
@@ -74,7 +76,7 @@
 #define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
 #endif
 
-#define time_printf(fmt, ...) st (if (__DEBUG_TIME_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
+#define time_printf(fmt, ...) st (if ( (__BIG_DEBUG_ACTIVE == TRUE) && (__DEBUG_TIME_ACTIVE == TRUE)) printf( fmt, ##__VA_ARGS__);)
 
 #if (defined __DEBUG_TIME__)
 struct timeval curTime, startTime, prevTimeSend, prevTimeRec, targetDelayTime;
@@ -108,17 +110,17 @@ struct timeval curTime, startTime, prevTimeSend, prevTimeRec, targetDelayTime;
 // -- Typedefs --
 typedef struct _npiAsyncDataHdr_t
 {
-  struct _npiAsyncDataHdr_t *pNext;
+	struct _npiAsyncDataHdr_t *pNext;
 } npiAsyncDataHdr_t;
 
 typedef struct _npi_parseinfo_str {
-  int state;
-  uint8 LEN_Token;
-  uint8 CMD0_Token;
-  uint8 CMD1_Token;
-  uint8 FSC_Token;
-  uint8 tempDataLen;
-  uint8 *pMsg;
+	int state;
+	uint8 LEN_Token;
+	uint8 CMD0_Token;
+	uint8 CMD1_Token;
+	uint8 FSC_Token;
+	uint8 tempDataLen;
+	uint8 *pMsg;
 } npi_parseinfo_t;
 
 // -- Global Variables --
@@ -151,7 +153,7 @@ static pthread_mutex_t npiUartWakeupLock;
 // conditional variable to wake up UART receive thread
 static pthread_cond_t npi_rx_cond;
 static pthread_mutex_t npi_rx_mutex;
-
+static sem_t signal_mutex;
 // callback thread
 static pthread_t npiAsyncCbackThread;
 
@@ -224,53 +226,53 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
 	// in the function pointer array.
 	(void)pCfg;
 
-  if (npiOpenFlag)
-  {
-	npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_ALREADY_OPEN;
-	return NPI_LNX_FAILURE;
-  }
+	if (npiOpenFlag)
+	{
+		npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_ALREADY_OPEN;
+		return NPI_LNX_FAILURE;
+	}
 
-  npiOpenFlag = TRUE;
+	npiOpenFlag = TRUE;
 
-  // initialize thread synchronization resources
-  npi_initsyncres();
+	// initialize thread synchronization resources
+	npi_initsyncres();
 
-  // initialize UART receive thread related variables
-  npi_parseinfo.state = SOP_STATE;
-  npi_rx_terminate = 0;
+	// initialize UART receive thread related variables
+	npi_parseinfo.state = SOP_STATE;
+	npi_rx_terminate = 0;
 
-  // initialize async callback thread variables
-  pNpiAsyncQueueHead = NULL;
-  pNpiAsyncQueueTail = NULL;
-  npiAsyncTerminate = 0;
+	// initialize async callback thread variables
+	pNpiAsyncQueueHead = NULL;
+	pNpiAsyncQueueTail = NULL;
+	npiAsyncTerminate = 0;
 
-  // initialize sync call variable
-  pNpiSyncData = NULL;
+	// initialize sync call variable
+	pNpiSyncData = NULL;
 
-  // create asynchronous callback thread
-  if (pthread_create(&npiAsyncCbackThread, NULL, npiAsyncCbackProc, NULL )) {
-    // thread creation failed
-    npiOpenFlag = FALSE;
+	// create asynchronous callback thread
+	if (pthread_create(&npiAsyncCbackThread, NULL, npiAsyncCbackProc, NULL )) {
+		// thread creation failed
+		npiOpenFlag = FALSE;
 
-    npi_delsyncres();
+		npi_delsyncres();
 
-	npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_FAILED_ASYNCH_CB_THREAD;
-	return NPI_LNX_FAILURE;
-  }
-
-
-  // Open UART port
-  if (npi_opentty(portName)) {
-    // device open failed
-    npi_termasync();
-    npiOpenFlag = FALSE;
-
-	npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_FAILED_PORT;
-	return NPI_LNX_FAILURE;
-  }
+		npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_FAILED_ASYNCH_CB_THREAD;
+		return NPI_LNX_FAILURE;
+	}
 
 
-  // create UART receive thread
+	// Open UART port
+	if (npi_opentty(portName)) {
+		// device open failed
+		npi_termasync();
+		npiOpenFlag = FALSE;
+
+		npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_FAILED_PORT;
+		return NPI_LNX_FAILURE;
+	}
+
+
+	// create UART receive thread
 
 #if (defined __DEBUG_TIME__)
 	gettimeofday(&startTime, NULL);
@@ -313,13 +315,13 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
  */
 void NPI_UART_CloseDevice(void)
 {
-  npi_termrx();
-  npi_closetty();
-  npi_termasync();
+	npi_termrx();
+	npi_closetty();
+	npi_termasync();
 
-  npi_delsyncres();
+	npi_delsyncres();
 
-  npiOpenFlag = FALSE;
+	npiOpenFlag = FALSE;
 
 }
 
@@ -343,7 +345,7 @@ void NPI_UART_CloseDevice(void)
  */
 int NPI_UART_SendAsynchData( npiMsgData_t *pMsg )
 {
-  return npi_sendframe(pMsg->subSys | RPC_CMD_AREQ, pMsg->cmdId, pMsg->pData, pMsg->len);
+	return npi_sendframe(pMsg->subSys | RPC_CMD_AREQ, pMsg->cmdId, pMsg->pData, pMsg->len);
 }
 
 
@@ -372,6 +374,12 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 	struct timespec expirytime;
 	struct timeval curtime;
 
+#ifdef __DEBUG_TIME__
+	long int diffPrev;
+	int t = 0;
+	int hours = 0, minutes = 0;
+#endif //__DEBUG_TIME__
+
 	pthread_mutex_lock(&npiSyncRespLock);
 	pNpiSyncData = pMsg;
 	ret = npi_sendframe(pMsg->subSys | RPC_CMD_SREQ, pMsg->cmdId, pMsg->pData, pMsg->len);
@@ -381,18 +389,44 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 		gettimeofday(&curtime, NULL);
 		expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
 		expirytime.tv_nsec = curtime.tv_usec * 1000;
-		debug_printf("[UART] (synch data) Conditional wait %d ns\n", NPI_RNP_TIMEOUT);
+#ifdef __DEBUG_TIME__
+		if (__DEBUG_TIME_ACTIVE == TRUE)
+		{
+			//            debug_
+			gettimeofday(&curTime, NULL);
+			t = 0;
+			if (curTime.tv_usec >= prevTimeRec.tv_usec)
+			{
+				diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
+			}
+			else
+			{
+				diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
+				t = 1;
+			}
+
+			hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+			minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+			//            debug_
+			time_printf("[<-- %.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] [UART] (synch data) Conditional wait %d s\n",
+					hours,											// hours
+					minutes,										// minutes
+					(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+					curTime.tv_usec,
+					curTime.tv_sec - prevTimeRec.tv_sec - t,
+					diffPrev,
+					NPI_RNP_TIMEOUT);
+			prevTimeRec = curTime;
+		}
+#endif //__DEBUG_TIME__
 		result = pthread_cond_timedwait(&npiSyncRespCond, &npiSyncRespLock, &expirytime);
 		if (ETIMEDOUT == result)
 		{
 			// TODO: Indicate synchronous transaction error
 			// Uncommenting the following line will cause assert when connection is not there
 			// Uncomment it only during debugging.
-#ifdef __BIG_DEBUG__
 			pMsg->pData[0] = 0xff;
-#endif //__BIG_DEBUG__
 			debug_printf("[UART] Send synch data timed out\n");
-
 			npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_SYNCH_TIMEDOUT;
 			ret = NPI_LNX_FAILURE;
 		}
@@ -423,25 +457,25 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
  */
 void npiUartDisableSleep( void )
 {
-  static uint8 pBuf[] = { 0x00 };
-  struct timespec expirytime;
-  struct timeval curtime;
+	static uint8 pBuf[] = { 0x00 };
+	struct timespec expirytime;
+	struct timeval curtime;
 
-  // wait for a signal triggered by a character received only after
-  // sending wakeup character.
-  pthread_mutex_lock(&npiUartWakeupLock);
+	// wait for a signal triggered by a character received only after
+	// sending wakeup character.
+	pthread_mutex_lock(&npiUartWakeupLock);
 
-  // Send wakeup character
-  npi_write(pBuf, sizeof(pBuf));
+	// Send wakeup character
+	npi_write(pBuf, sizeof(pBuf));
 
-  // wait 20 seconds for wakeup
-  // The timeout is handy for the PC host application to move on when RNP goes wrong.
-  gettimeofday(&curtime, NULL);
-  expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
-  expirytime.tv_nsec = curtime.tv_usec * 1000;
-  pthread_cond_timedwait(&npiUartWakeupCond, &npiUartWakeupLock, &expirytime);
+	// wait 20 seconds for wakeup
+	// The timeout is handy for the PC host application to move on when RNP goes wrong.
+	gettimeofday(&curtime, NULL);
+	expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
+	expirytime.tv_nsec = curtime.tv_usec * 1000;
+	pthread_cond_timedwait(&npiUartWakeupCond, &npiUartWakeupLock, &expirytime);
 
-  pthread_mutex_unlock(&npiUartWakeupLock);
+	pthread_mutex_unlock(&npiUartWakeupLock);
 }
 
 // -- private functions --
@@ -449,38 +483,40 @@ void npiUartDisableSleep( void )
 /* Initialize thread synchronization resources */
 static void npi_initsyncres(void)
 {
-  // initialize all mutexes
-  pthread_mutex_init(&npi_write_mutex, NULL);
-  pthread_mutex_init(&npiSyncRespLock, NULL);
-  pthread_mutex_init(&npiAsyncLock, NULL);
-  pthread_mutex_init(&npiUartWakeupLock, NULL);
-  pthread_mutex_init(&npi_rx_mutex, NULL);
+	// initialize all mutexes
+	pthread_mutex_init(&npi_write_mutex, NULL);
+	pthread_mutex_init(&npiSyncRespLock, NULL);
+	pthread_mutex_init(&npiAsyncLock, NULL);
+	pthread_mutex_init(&npiUartWakeupLock, NULL);
+	pthread_mutex_init(&npi_rx_mutex, NULL);
+	sem_init(&signal_mutex,0,1);
 
-  // initialize all conditional variables
-  pthread_cond_init(&npiSyncRespCond, NULL);
-  pthread_cond_init(&npiAsyncCond, NULL);
-  pthread_cond_init(&npiUartWakeupCond, NULL);
-  pthread_cond_init(&npi_rx_cond, NULL);
+	// initialize all conditional variables
+	pthread_cond_init(&npiSyncRespCond, NULL);
+	pthread_cond_init(&npiAsyncCond, NULL);
+	pthread_cond_init(&npiUartWakeupCond, NULL);
+	pthread_cond_init(&npi_rx_cond, NULL);
 }
 
 /* Destroy thread synchronization resources */
 static void npi_delsyncres(void)
 {
-  // In Linux, there is no dynamically allocated resources
-  // and hence the following calls do not actually matter.
+	// In Linux, there is no dynamically allocated resources
+	// and hence the following calls do not actually matter.
 
-  // destroy all conditional variables
-  pthread_cond_destroy(&npiSyncRespCond);
-  pthread_cond_destroy(&npiAsyncCond);
-  pthread_cond_destroy(&npiUartWakeupCond);
-  pthread_cond_destroy(&npi_rx_cond);
+	// destroy all conditional variables
+	pthread_cond_destroy(&npiSyncRespCond);
+	pthread_cond_destroy(&npiAsyncCond);
+	pthread_cond_destroy(&npiUartWakeupCond);
+	pthread_cond_destroy(&npi_rx_cond);
 
-  // destroy all mutexes
-  pthread_mutex_destroy(&npi_write_mutex);
-  pthread_mutex_destroy(&npiSyncRespLock);
-  pthread_mutex_destroy(&npiAsyncLock);
-  pthread_mutex_destroy(&npiUartWakeupLock);
-  pthread_mutex_destroy(&npi_rx_mutex);
+	// destroy all mutexes
+	pthread_mutex_destroy(&npi_write_mutex);
+	pthread_mutex_destroy(&npiSyncRespLock);
+	pthread_mutex_destroy(&npiAsyncLock);
+	pthread_mutex_destroy(&npiUartWakeupLock);
+	pthread_mutex_destroy(&npi_rx_mutex);
+	sem_destroy(&signal_mutex);
 
 }
 
@@ -565,6 +601,8 @@ static void *npi_rx_entry(void *ptr)
 	/* install signal handler */
 	//npi_installsig();
 
+	debug_printf("[UART] Wait for mutex in rx entry:\n");
+	
 	/* lock mutex in order not to lose signal */
 	pthread_mutex_lock(&npi_rx_mutex);
 
@@ -575,9 +613,7 @@ static void *npi_rx_entry(void *ptr)
 
 		do
 		{
-			debug_printf("[UART] Ready to read from npi_fd:%d\n", npi_fd);
 			readcount = read(npi_fd, readbuf, sizeof(readbuf));
-			debug_printf("[UART] read %d bytes from npi_fd:%d\n", readcount, npi_fd);
 			if (readcount > 0)
 			{
 				ret = npi_parseframe(readbuf, readcount);
@@ -622,8 +658,7 @@ static void *npi_rx_entry(void *ptr)
 				pthread_cond_timedwait(&npi_rx_cond, &npi_rx_mutex, &expirytime);
 			}
 #else
-			debug_printf("[UART] (read loop) Conditional wait\n");
-			pthread_cond_wait(&npi_rx_cond, &npi_rx_mutex);
+			sem_wait(&signal_mutex);
 #endif
 		}
 	}
@@ -644,88 +679,88 @@ static void *npi_rx_entry(void *ptr)
 /* Terminate Asynchronous thread */
 static void npi_termasync(void)
 {
-  // send terminate signal
-  pthread_mutex_lock(&npiAsyncLock);
-  npiAsyncTerminate = 1;
-  pthread_cond_signal(&npiAsyncCond);
-  pthread_mutex_unlock(&npiAsyncLock);
+	// send terminate signal
+	pthread_mutex_lock(&npiAsyncLock);
+	npiAsyncTerminate = 1;
+	pthread_cond_signal(&npiAsyncCond);
+	pthread_mutex_unlock(&npiAsyncLock);
 
-  // wait till the thread terminates
-  pthread_join(npiAsyncCbackThread, NULL);
+	// wait till the thread terminates
+	pthread_join(npiAsyncCbackThread, NULL);
 }
 
 /* Terminate UART rx thread */
 static void npi_termrx(void)
 {
-  // send terminate signal
-  pthread_mutex_lock(&npi_rx_mutex);
-  npi_rx_terminate = 1;
-  pthread_cond_signal(&npi_rx_cond);
-  pthread_mutex_unlock(&npi_rx_mutex);
+	// send terminate signal
+	pthread_mutex_lock(&npi_rx_mutex);
+	npi_rx_terminate = 1;
+	pthread_cond_signal(&npi_rx_cond);
+	pthread_mutex_unlock(&npi_rx_mutex);
 
-  // wait till the thread terminates
-  pthread_join(npiRxThread, NULL);
+	// wait till the thread terminates
+	pthread_join(npiRxThread, NULL);
 }
 
 /* Open TTY device
  * return non-zero when failed to open the device. */
 static int npi_opentty(const char *devpath)
 {
-  struct termios newtio;
+	struct termios newtio;
 
-  /* NOCTTY so that RNP cannot kill the current process by ^C */
-  npi_fd = open(devpath, O_RDWR | O_NOCTTY | O_NONBLOCK);
-  if (npi_fd < 0) {
-    return npi_fd;
-  }
+	/* NOCTTY so that RNP cannot kill the current process by ^C */
+	npi_fd = open(devpath, O_RDWR | O_NOCTTY | O_NONBLOCK);
+	if (npi_fd < 0) {
+		return npi_fd;
+	}
 
-  /* install signal handler */
-  npi_installsig();
+	/* install signal handler */
+	npi_installsig();
 
-  /* make the file descriptor asynchronous */
-  fcntl(npi_fd, F_SETFL, FASYNC | FNDELAY);
+	/* make the file descriptor asynchronous */
+	fcntl(npi_fd, F_SETFL, FASYNC | FNDELAY);
 
-  /* save current port settings */
-  tcgetattr(npi_fd, &npi_oldtio);
+	/* save current port settings */
+	tcgetattr(npi_fd, &npi_oldtio);
 
-  /* clear new port setting structure */
-  bzero(&newtio, sizeof(newtio));
+	/* clear new port setting structure */
+	bzero(&newtio, sizeof(newtio));
 
-  /* CRTSCTS : in case hardware flow control is used
-   * CS8     : 8n1 (8 bit, no parity, 1 stopbit)
-   * CLOCAL  : local connection, no modem control
-   * CREAD   : enable receiving characters
-   */
-  newtio.c_cflag = NPI_BAUDRATE | CS8 | CLOCAL | CREAD;
+	/* CRTSCTS : in case hardware flow control is used
+	 * CS8     : 8n1 (8 bit, no parity, 1 stopbit)
+	 * CLOCAL  : local connection, no modem control
+	 * CREAD   : enable receiving characters
+	 */
+	newtio.c_cflag = NPI_BAUDRATE | CS8 | CLOCAL | CREAD;
 
-  /* IGNPAR  : ignore bytes with parity errors
-   * ICRNL   : map CR to NL (not in use)
-   */
-  newtio.c_iflag = IGNPAR;
+	/* IGNPAR  : ignore bytes with parity errors
+	 * ICRNL   : map CR to NL (not in use)
+	 */
+	newtio.c_iflag = IGNPAR;
 
-  /* raw output */
-  newtio.c_oflag = 0;
+	/* raw output */
+	newtio.c_oflag = 0;
 
-  newtio.c_cc[VTIME] = 0; /* inter-character timer unused */
-  newtio.c_cc[VMIN]  = 1; /* blocking read until 1 char received */
+	newtio.c_cc[VTIME] = 0; /* inter-character timer unused */
+	newtio.c_cc[VMIN]  = 1; /* blocking read until 1 char received */
 
-  /* clean the modem line */
-  tcflush(npi_fd, TCIFLUSH);
+	/* clean the modem line */
+	tcflush(npi_fd, TCIFLUSH);
 
-  /* set new attribute */
-  tcsetattr(npi_fd, TCSANOW, &newtio);
+	/* set new attribute */
+	tcsetattr(npi_fd, TCSANOW, &newtio);
 
-  return 0;
+	return 0;
 }
 
 /* Close open device */
 static void npi_closetty(void)
 {
-  /* revert to old settings */
-  tcsetattr(npi_fd, TCSANOW, &npi_oldtio);
+	/* revert to old settings */
+	tcsetattr(npi_fd, TCSANOW, &npi_oldtio);
 
-  /* close the device */
-  close(npi_fd);
+	/* close the device */
+	close(npi_fd);
 }
 
 /* wrapper of write function to make safe write operation
@@ -733,59 +768,120 @@ static void npi_closetty(void)
  */
 static int npi_write(const void *buf, size_t count)
 {
-  int result;
+	int result;
 
-  debug_printf("[UART] write %d bytes to %d\n", (int)count, npi_fd);
+#ifdef __DEBUG_TIME__
+	long int diffPrev;
+	int t = 0;
+	int hours, minutes;
+	if (__DEBUG_TIME_ACTIVE == TRUE)
+	{
+		//            debug_
+		gettimeofday(&curTime, NULL);
+		if (curTime.tv_usec >= prevTimeRec.tv_usec)
+		{
+			diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
+		}
+		else
+		{
+			diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
+			t = 1;
+		}
 
-  pthread_mutex_lock(&npi_write_mutex);
-  result = write(npi_fd, buf, count);
-  pthread_mutex_unlock(&npi_write_mutex);
+		hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+		minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+		//            debug_
+		time_printf("[<-- %.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] [UART] write %d bytes to %d\n",
+				hours,											// hours
+				minutes,										// minutes
+				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+				curTime.tv_usec,
+				curTime.tv_sec - prevTimeRec.tv_sec - t,
+				diffPrev,
+				(int)count,
+				npi_fd);
+		prevTimeRec = curTime;
+	}
+#endif //__DEBUG_TIME__
 
-  debug_printf("[UART] result: %d\n", (int)result);
+	pthread_mutex_lock(&npi_write_mutex);
+	result = write(npi_fd, buf, count);
+	pthread_mutex_unlock(&npi_write_mutex);
 
-  return result;
+#ifdef __DEBUG_TIME__
+	if (__DEBUG_TIME_ACTIVE == TRUE)
+	{
+		//            debug_
+		gettimeofday(&curTime, NULL);
+		t = 0;
+		if (curTime.tv_usec >= prevTimeRec.tv_usec)
+		{
+			diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
+		}
+		else
+		{
+			diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
+			t = 1;
+		}
+
+		hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+		minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+		//            debug_
+		time_printf("[<-- %.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] [UART] result: %d\n",
+				hours,											// hours
+				minutes,										// minutes
+				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+				curTime.tv_usec,
+				curTime.tv_sec - prevTimeRec.tv_sec - t,
+				diffPrev,
+				(int)result);
+		prevTimeRec = curTime;
+	}
+#endif //__DEBUG_TIME__
+
+	return result;
 }
 
 /* build and send an NPI frame
  */
 static int npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len)
 {
-  // Build a frame from the primitive ID and primitive content
+	// Build a frame from the primitive ID and primitive content
 
-  unsigned char *pBuf;
-  size_t frlen = AIC_UART_FRAME_OVHD + AIC_FRAME_HDR_SZ + len; // frame length
+	unsigned char *pBuf;
+	size_t frlen = AIC_UART_FRAME_OVHD + AIC_FRAME_HDR_SZ + len; // frame length
 
-  pBuf = (unsigned char *) malloc(frlen);
+	pBuf = (unsigned char *) malloc(frlen);
 
-  if (!pBuf)
-  {
-	npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_FRAME_FAILED_TO_ALLOCATE;
-	return NPI_LNX_FAILURE;
-  }
+	if (!pBuf)
+	{
+		npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_FRAME_FAILED_TO_ALLOCATE;
+		return NPI_LNX_FAILURE;
+	}
 
-  pBuf[0] = AIC_UART_SOF;
-  pBuf[1 + AIC_POS_LEN] = len;
-  pBuf[1 + AIC_POS_CMD0] = subsystem;
-  pBuf[1 + AIC_POS_CMD1] = cmd;
-  memcpy(&pBuf[1 + AIC_POS_DAT0], data, len);
-  pBuf[1 + len + AIC_FRAME_HDR_SZ] = npi_calcfcs(len, subsystem, cmd, data);
+	pBuf[0] = AIC_UART_SOF;
+	pBuf[1 + AIC_POS_LEN] = len;
+	pBuf[1 + AIC_POS_CMD0] = subsystem;
+	pBuf[1 + AIC_POS_CMD1] = cmd;
+	memcpy(&pBuf[1 + AIC_POS_DAT0], data, len);
+	pBuf[1 + len + AIC_FRAME_HDR_SZ] = npi_calcfcs(len, subsystem, cmd, data);
 
-  // Send the data over to the serial com device
-  if (npi_write(pBuf, frlen) < 0) {
-	  perror("ERR:");
-	  free(pBuf);
-	  npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_FRAME_FAILED_TO_WRITE;
-	  return NPI_LNX_FAILURE;
-  }
+	// Send the data over to the serial com device
+	if (npi_write(pBuf, frlen) < 0) {
+		perror("ERR:");
+		free(pBuf);
+		npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_FRAME_FAILED_TO_WRITE;
+		return NPI_LNX_FAILURE;
+	}
 
-  // Trace the sent data
-  if (npi_tracehook_tx) {
-    npi_tracehook_tx(subsystem, cmd, data, len);
-  }
+	// Trace the sent data
+	if (npi_tracehook_tx) {
+		npi_tracehook_tx(subsystem, cmd, data, len);
+	}
 
-  free(pBuf);
+	free(pBuf);
 
-  return NPI_LNX_SUCCESS;
+	return NPI_LNX_SUCCESS;
 }
 
 /* Parse an NPI frame */
@@ -942,6 +1038,12 @@ static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
 		uint8 length)
 {
 	int ret = NPI_LNX_SUCCESS;
+	int i;
+	debug_printf("[UART] npi_procframe, subsys: 0x%.2x, Cmd ID: 0x%.2X, length: %d ,Data:  \n", subsystemId, commandId, length);
+	for (i=0;i<length;i++)
+		debug_printf("0x%.2x, ", pBuf[i]);
+	debug_printf("\n");
+		
 	if ( ((subsystemId & RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP) ||
 			((subsystemId & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT))
 	{
@@ -1007,46 +1109,108 @@ static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
 /* Calculate NPI frame FCS */
 static uint8 npi_calcfcs( uint8 len, uint8 cmd0, uint8 cmd1, uint8 *data_ptr )
 {
-  uint8 x;
-  uint8 xorResult;
+	uint8 x;
+	uint8 xorResult;
 
-  xorResult = len ^ cmd0 ^ cmd1;
+	xorResult = len ^ cmd0 ^ cmd1;
 
-  for ( x = 0; x < len; x++, data_ptr++ )
-    xorResult = xorResult ^ *data_ptr;
+	for ( x = 0; x < len; x++, data_ptr++ )
+		xorResult = xorResult ^ *data_ptr;
 
-  return ( xorResult );
+	return ( xorResult );
 }
 
 static void npi_iohandler(int status)
 {
+	// This is a potential reentrant function.
+	// Therefore used semaphore instead of mutex.
+
 	/* send wakeup signal */
-	debug_printf("[UART] Signal from UART, grabbing mutex\n");
-	pthread_mutex_lock(&npi_rx_mutex);
-	debug_printf("[UART] Signal read handle, owning mutex\n");
-	pthread_cond_signal(&npi_rx_cond);
-	pthread_mutex_unlock(&npi_rx_mutex);
+#ifdef __DEBUG_TIME__
+	long int diffPrev;
+	int t = 0, hours, minutes;
+	if (__DEBUG_TIME_ACTIVE == TRUE)
+	{
+		//            debug_
+		gettimeofday(&curTime, NULL);
+		if (curTime.tv_usec >= prevTimeRec.tv_usec)
+		{
+			diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
+		}
+		else
+		{
+			diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
+			t = 1;
+		}
+
+		hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+		minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+		//            debug_
+		time_printf("[<-- %.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] Signal from UART, grabbing mutex\n",
+				hours,											// hours
+				minutes,										// minutes
+				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+				curTime.tv_usec,
+				curTime.tv_sec - prevTimeRec.tv_sec - t,
+				diffPrev);
+		prevTimeRec = curTime;
+	}
+#endif //__DEBUG_TIME__
+
+	sem_post(&signal_mutex);
+
+#ifdef __DEBUG_TIME__
+	if (__DEBUG_TIME_ACTIVE == TRUE)
+	{
+		//            debug_
+		gettimeofday(&curTime, NULL);
+		t = 0;
+		if (curTime.tv_usec >= prevTimeRec.tv_usec)
+		{
+			diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
+		}
+		else
+		{
+			diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
+			t = 1;
+		}
+
+		hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+		minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+		//            debug_
+		time_printf("[<-- %.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] Signal read handle, owning mutex\n",
+				hours,											// hours
+				minutes,										// minutes
+				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+				curTime.tv_usec,
+				curTime.tv_sec - prevTimeRec.tv_sec - t,
+				diffPrev);
+		prevTimeRec = curTime;
+	}
+#endif //__DEBUG_TIME__
 }
 
 /* Install signal handler for UART IO */
 static void npi_installsig(void)
 {
-  struct sigaction ioaction;
+	struct sigaction ioaction;
 
-  /* install signal handler */
-  ioaction.sa_handler = npi_iohandler;
-  sigemptyset(&ioaction.sa_mask);
-  ioaction.sa_flags = 0;
-  ioaction.sa_restorer = NULL;
-  if (sigaction(SIGIO, &ioaction, NULL)) {
-    perror("sigaction");
-  }
+	/* install signal handler */
+	debug_printf("[UART] Install IO signal handler \n");
+	ioaction.sa_handler = npi_iohandler;
+	sigemptyset(&ioaction.sa_mask);
+	ioaction.sa_flags = 0;
+	ioaction.sa_restorer = NULL;
+	if (sigaction(SIGIO, &ioaction, NULL)) {
+		perror("sigaction");
+	}
 
-  /* allow the process to receive SIGIO */
-  if (fcntl(npi_fd, F_SETOWN, getpid()) < 0) {
-    perror("fcntl");
-  }
+	/* allow the process to receive SIGIO */
+	if (fcntl(npi_fd, F_SETOWN, getpid()) < 0) {
+		perror("fcntl");
+	}
 }
+#endif // #if (defined NPI_UART) && (NPI_UART == TRUE)
 
 /**************************************************************************************************
-*/
+ */

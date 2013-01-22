@@ -77,6 +77,7 @@
 #endif // __STRESS_TEST__
 
 // -- macros --
+#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 
 #ifndef TRUE
 # define TRUE (1)
@@ -1299,6 +1300,9 @@ static void *npi_event_entry(void *ptr)
 
 	return NULL;
 }
-#endif
+#endif //SRDY_INTERRUPT
+
+#endif //#if (defined NPI_SPI) && (NPI_SPI == TRUE)
+
 /**************************************************************************************************
 */

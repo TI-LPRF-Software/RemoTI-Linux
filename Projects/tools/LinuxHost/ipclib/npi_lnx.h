@@ -60,7 +60,7 @@ extern "C"
  * CONSTANTS
  **************************************************************************************************/
 
-#define AP_MAX_BUF_LEN 128
+#define AP_MAX_BUF_LEN 256
 
 #define NPI_PORT			"2533"
 

@@ -73,6 +73,10 @@ extern "C"
   void NPI_SendAsynchData( npiMsgData_t *pMsg );
   void NPI_SendSynchData( npiMsgData_t *pMsg );
 
+  /* NPI server API */
+  void NPI_ReadVersionReq( uint8 *pValue );
+  void NPI_ReadParamReq( uint8 paramId, uint8 len, uint8 *pValue );
+
   /**************************************************************************************************
    * TYPEDEFS
    **************************************************************************************************/

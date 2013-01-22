@@ -48,6 +48,13 @@
 //#include "hal_rpc.h"
 #include "npi_lnx.h"
 
+#ifdef __BIG_DEBUG__
+#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
+#else
+uint8 __BIG_DEBUG_ACTIVE = FALSE;
+#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
+#endif
+
 // Pairing reference
 uint8 destIdx;
 

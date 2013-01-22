@@ -52,6 +52,7 @@
 #include <pthread.h>
 #include <poll.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #ifndef NPI_UNIX
 #include <netdb.h>
@@ -60,6 +61,9 @@
 
 /* NPI includes */
 #include "npi_lnx.h"
+
+#include "npi_lnx_error.h"
+#include "npi_lnx_ipc_rpc.h"
 
 /* RTI includes */
 #include "rti_lnx_constants.h"
@@ -373,6 +377,23 @@ int RTIS_Init(const char *devPath)
 		// thread creation failed
 		printf("Failed to create RTIS LNX IPC Client handle thread\n");
 		return -1;
+	}
+
+    if (res == TRUE)
+    {
+    	uint8 version[3];
+    	uint8 param[2];
+		//Read Software Version.
+		NPI_ReadVersionReq(version);
+		printf("Connected to Server v%d.%d.%d\n", version[0], version[1], version[2]);
+
+		//Read Number of Active Connection Version.
+		NPI_ReadParamReq(NPI_LNX_PARAM_NB_CONNECTIONS,2, param);
+		printf("%d active connection , out of %d maximum connections\n", param[0], param[1]);
+		//Check Which interface is used.
+		NPI_ReadParamReq(NPI_LNX_PARAM_DEVICE_USED, 1 , param);
+		printf("Interface used y server: %d (0 = UART, 1 = SPI, 2 = I2C)\n", param[0]);
+
 	}
 
 	return res;
@@ -704,7 +725,7 @@ static void *rtis_lnx_ipc_readThreadFunc (void *ptr)
 #endif //__BIG_DEBUG__
 			if (messageCount > 50)
 			{
-				printf("[WARNING] AREQ message count: %4d", messageCount);
+				printf("[WARNING] AREQ message count: %4d\n", messageCount);
 			}
 		}
 		// Handle thread must make sure it has finished its list. See if there are new messages to move over
@@ -1030,7 +1051,87 @@ void NPI_SendAsynchData (npiMsgData_t *pMsg)
 		exit(1);
 	}
 }
+/**************************************************************************************************
+ *
+ * @fn          NPI_ReadVersion
+ *
+ * @brief       This API is used to read the NPI server version.
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+void NPI_ReadVersionReq( uint8 *pValue )
+{
+  npiMsgData_t pMsg;
 
+  // Prepare Read Version Request
+  pMsg.subSys = RPC_SYS_SRV_CTRL;
+  pMsg.cmdId  = NPI_LNX_CMD_ID_VERSION_REQ;
+  pMsg.len    = 0;
+
+  NPI_SendSynchData( &pMsg );
+
+  // DEBUG
+  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
+  {
+//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
+  }
+
+  // copy the reply data to the client's buffer
+  // Note: the first byte of the payload is reserved for the status
+  msg_memcpy( pValue, &pMsg.pData[1], 3 );
+}
+/**************************************************************************************************
+ *
+ * @fn          NPI_ReadParamReq
+ *
+ * @brief       This API is used to read NPI server parameters.
+ *
+ * input parameters
+ *
+ * @param       paramId - The parameter item identifier.
+ * @param       len - The length in bytes of the item identifier's data.
+ *
+ * output parameters
+ *
+ * @param       *pValue - Pointer to buffer where read data is placed.
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+void NPI_ReadParamReq( uint8 paramId, uint8 len, uint8 *pValue )
+{
+  npiMsgData_t pMsg;
+
+  // prep Pair request
+  pMsg.subSys = RPC_SYS_SRV_CTRL;
+  pMsg.cmdId  = NPI_LNX_CMD_ID_GET_PARAM_REQ;
+  pMsg.len    = 2;
+  pMsg.pData[0] = paramId;
+  pMsg.pData[1] = len;
+
+  NPI_SendSynchData( &pMsg );
+
+  // DEBUG
+  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
+  {
+//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
+  }
+
+  // copy the reply data to the client's buffer
+  // Note: the first byte of the payload is reserved for the status
+  msg_memcpy( pValue, &pMsg.pData[1], len );
+}
 /**************************************************************************************************
  *
  * @fn          RTI_ReadItemEx

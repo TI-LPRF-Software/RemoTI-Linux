@@ -80,6 +80,9 @@
 #define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
 #endif
 
+#ifdef __DEBUG_TIME__
+#define time_printf(fmt, ...) st (if (__DEBUG_TIME_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
+#endif //__DEBUG_TIME__
 /**************************************************************************************************
  *                                            TYPEDEFS
  **************************************************************************************************/
@@ -638,6 +641,44 @@ int HalGpioMrdyCheck(uint8 state)
 }
 
 /**************************************************************************************************
+ * @fn      HalGpioResetSet
+ *
+ *
+ * @brief   Set Reset.
+ *
+ * @param
+ *
+ * @return  STATUS
+ **************************************************************************************************/
+int HalGpioResetSet(uint8 state)
+{
+	if(state == 0)
+	{
+		debug_printf("[GPIO]RESET set to low\n");
+		if (ERROR == write(gpioResetFd, "0", 1))
+		{
+			perror(resetGpioCfg.gpio.value);
+			debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",resetGpioCfg.gpio.value);
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_VAL_WRITE_SET_LOW;
+		    return NPI_LNX_FAILURE;
+		}
+	}
+	else
+	{
+		debug_printf("[GPIO]RESET set to High\n");
+    	if(ERROR == write(gpioResetFd, "1", 1))
+		{
+			perror(resetGpioCfg.gpio.value);
+			debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",resetGpioCfg.gpio.value);
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_VAL_WRITE_SET_HIGH;
+			return NPI_LNX_FAILURE;
+		}
+	}
+
+	return NPI_LNX_SUCCESS;
+
+}
+/**************************************************************************************************
  * @fn      HalGpioReset
  *
  *
@@ -667,7 +708,7 @@ int HalGpioReset(void)
 	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
 	//	debug_
-	printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] Reset High\n",
+	time_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] Reset High\n",
 			hours,										// hours
 			minutes,									// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
@@ -701,7 +742,7 @@ int HalGpioReset(void)
 	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
 	//	debug_
-	printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] Reset Low\n",
+	time_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] Reset Low\n",
 			hours,										// hours
 			minutes,									// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
@@ -738,7 +779,7 @@ int HalGpioReset(void)
 	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
 	//	debug_
-	printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] Reset High\n",
+	printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] Reset High\n",
 			hours,										// hours
 			minutes,									// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
@@ -830,13 +871,16 @@ int HalGpioWaitSrdyClr(void)
 	prevTime = curTime;
 	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY: wait to go Low\n",
+	time_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] SRDY: wait to go Low\n",
 			hours,										// hours
 			minutes,									// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
 			curTime.tv_usec,
 			curTime.tv_sec - prevTime.tv_sec - t,
 			diffPrev);
+
+	struct timeval limitPrints = curTime;
+	limitPrints.tv_sec = curTime.tv_sec - 5;
 #endif //(defined __DEBUG_TIME__)
 
 	while(srdy == '1')
@@ -867,11 +911,20 @@ int HalGpioWaitSrdyClr(void)
 					npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_READ_FAILED;
 					return NPI_LNX_FAILURE;
 				}
-				debug_printf("[0x%.2X , %c(0x%.2X)]", atoi(&srdy), srdy, srdy);
+#ifdef __DEBUG_TIME__
+	gettimeofday(&curTime, NULL);
+
+	if ((curTime.tv_sec - limitPrints.tv_sec) >= 5)
+	{
+		debug_printf("[0x%.2X , %c(0x%.2X)]\n", atoi(&srdy), srdy, srdy);
+		// Start over
+		limitPrints = curTime;
+	}
+#endif //(defined __DEBUG_TIME__)
 			}
 			else
 			{
-				printf("[GPIO](%d)", ufds[0].revents);
+				printf("[GPIO](%d)\n", ufds[0].revents);
 			}
 		}
 	}
@@ -891,7 +944,7 @@ int HalGpioWaitSrdyClr(void)
 	prevTime = curTime;
 	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY: %c  (%c)\n",
+	time_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] SRDY: %c  (%c)\n",
 			hours,										// hours
 			minutes,									// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
@@ -921,7 +974,7 @@ int HalGpioWaitSrdyClr(void)
 
   hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
   minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-	printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY Low\n",
+  time_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY Low\n",
 		  hours,										// hours
 		  minutes,										// minutes
 		  (curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
@@ -983,7 +1036,7 @@ int HalGpioWaitSrdySet()
 
 	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY: wait to go High\n",
+	time_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] SRDY: wait to go High\n",
 			hours,											// hours
 			minutes,										// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
@@ -1045,7 +1098,7 @@ int HalGpioWaitSrdySet()
 
 	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] SRDY: %c  (%c)\n",
+	time_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] SRDY: %c  (%c)\n",
 			hours,											// hours
 			minutes,										// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds

@@ -147,6 +147,7 @@ int HalGpioWaitSrdySet(void);
 void HalGpioSrdyClose( void );
 void HalGpioMrdyClose( void );
 void HalGpioResetClose( void );
+int HalGpioResetSet(uint8 state);
 int HalGpioReset( void );
 
 #ifdef __cplusplus
