@@ -87,7 +87,8 @@ extern "C" {
 #define RPC_SYS_BOOT        13   // Serial Bootloader
 #define RPC_SYS_DEBUG	    14   // Debug Interface for Flash Programming
 #define RPC_SYS_SRV_CTRL	15   // Interface to control Server
-#define RPC_SYS_MAX         16   // Maximum value, must be last
+#define RPC_SYS_CAPSENSE    16   // CapSense callback
+#define RPC_SYS_MAX         17   // Maximum value, must be last
 
 /* 1st byte is the length of the data field, 2nd/3rd bytes are command field. */
 #define RPC_FRAME_HDR_SZ    3
