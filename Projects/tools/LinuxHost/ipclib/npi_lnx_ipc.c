@@ -151,7 +151,7 @@ const pNPI_OpenDeviceFn NPI_OpenDeviceFnArr[] =
 #else
 		NULL,
 #endif
-#if (defined NPI_SPI) && (NPIL_SPI == TRUE)
+#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 		NPI_SPI_OpenDevice,
 #else
 		NULL,
@@ -542,7 +542,6 @@ int main(int argc, char ** argv)
 	memcpy(logPath, strBuf, strlen(strBuf));
 	//            debug_
 	printf("logPath = '%s'\n", logPath);
-
 
 	// GPIO configuration
 	if ((devIdx == 1) || (devIdx == 2))
@@ -1389,7 +1388,8 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			for (i = 0; i < n; i++)
 			{
 				debug_printf(" 0x%.2X", (uint8)npi_ipc_buf[0][i]);
-			} debug_printf("\n");
+			}
+			debug_printf("\n");
 
 			if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
 			{
