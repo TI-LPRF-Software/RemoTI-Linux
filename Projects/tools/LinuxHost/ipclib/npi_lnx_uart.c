@@ -260,14 +260,14 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
 		return NPI_LNX_FAILURE;
 	}
 
-
 	// Open UART port
+	debug_printf("[UART] Opening device %s\n", portName);
 	if (npi_opentty(portName)) {
 		// device open failed
 		npi_termasync();
 		npiOpenFlag = FALSE;
 
-		npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_FAILED_PORT;
+		npi_ipc_errno = NPI_LNX_ERROR_UART_OPEN_FAILED_DEVICE;
 		return NPI_LNX_FAILURE;
 	}
 
@@ -315,13 +315,17 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
  */
 void NPI_UART_CloseDevice(void)
 {
+	debug_printf("[UART] UART device closing... \n");
 	npi_termrx();
+	debug_printf("[UART] UART thread closed... \n");
 	npi_closetty();
 	npi_termasync();
 
 	npi_delsyncres();
 
 	npiOpenFlag = FALSE;
+
+	debug_printf("[UART] UART device closed\n");
 
 }
 
@@ -693,12 +697,16 @@ static void npi_termasync(void)
 static void npi_termrx(void)
 {
 	// send terminate signal
-	pthread_mutex_lock(&npi_rx_mutex);
 	npi_rx_terminate = 1;
+	debug_printf("[UART] [MUTEX] Signaling thread that we have terminated\n");
+#ifdef NPI_UNRELIABLE_SIGACTION
 	pthread_cond_signal(&npi_rx_cond);
-	pthread_mutex_unlock(&npi_rx_mutex);
+#else
+	sem_post(&signal_mutex);
+#endif
 
 	// wait till the thread terminates
+	debug_printf("[UART] [MUTEX] Waiting for thread to finish termination\n");
 	pthread_join(npiRxThread, NULL);
 }
 

@@ -62,6 +62,8 @@ extern "C" {
 #define NPI_LNX_CMD_ID_VERSION_REQ					0x03
 #define NPI_LNX_CMD_ID_GET_PARAM_REQ				0x04
 #define NPI_LNX_CMD_ID_RESET_DEVICE					0x05
+#define NPI_LNX_CMD_ID_DISCONNECT_DEVICE			0x06
+#define NPI_LNX_CMD_ID_CONNECT_DEVICE				0x07
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Common

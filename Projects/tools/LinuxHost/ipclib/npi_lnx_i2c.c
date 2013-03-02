@@ -477,7 +477,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 	debug_printf("==================== START SEND SYNC DATA ====================\n");
 	if (lockRet != 0)
 	{
-		printf("[ERR] Could not get lock\n");
+		debug_printf("[ERR] Could not get lock\n");
 		perror("mutex lock");
 		npi_ipc_errno = NPI_LNX_ERROR_I2C_SEND_SYNCH_FAILED_LOCK;
 		ret = NPI_LNX_FAILURE;
@@ -495,7 +495,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 				((int *)&npiPollLock)[1],
 				syscall(224));
 #elif (defined __DEBUG_MUTEX__)
-		printf("[MUTEX] NPI_I2C_SendSynchData has lock (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
+		debug_printf("[MUTEX] NPI_I2C_SendSynchData has lock (%d @ 0x%.16X)\n", npiPollLock, &npiPollLock);
 #endif //__DEBUG_TIME__I2C
 	}
 

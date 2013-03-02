@@ -1019,6 +1019,7 @@ int main(int argc, char ** argv)
 						uint8 childThread;
 						switch (npi_ipc_errno)
 						{
+						case NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT:
 						case NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT:
 						case NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT:
 							// This may be caused by an unexpected reset. Write it to the log,
@@ -1059,17 +1060,34 @@ int main(int argc, char ** argv)
 							npi_ipc_errno = NPI_LNX_SUCCESS;
 							break;
 						default:
-							//							debug_
-							printf("[ERR] npi_ipc_errno 0x%.8X\n", npi_ipc_errno);
-							// Everything about the error can be found in the message, and in npi_ipc_errno:
-							childThread = ((npiMsgData_t *) npi_ipc_buf[0])->cmdId;
-							sprintf(toNpiLnxLog, "Child thread with ID %d in module %d reported error:\t%s",
-									NPI_LNX_ERROR_THREAD(childThread),
-									NPI_LNX_ERROR_MODULE(childThread),
-									(char *)(((npiMsgData_t *) npi_ipc_buf[0])->pData));
-							//							printf("%s\n", toNpiLnxLog);
-							writeToNpiLnxLog(toNpiLnxLog);
+							if (npi_ipc_errno == NPI_LNX_SUCCESS)
+							{
+								// Do not report and abort if there is no real error.
+								ret = NPI_LNX_SUCCESS;
+							}
+							else
+							{
+								//							debug_
+								printf("[ERR] npi_ipc_errno 0x%.8X\n", npi_ipc_errno);
+								// Everything about the error can be found in the message, and in npi_ipc_errno:
+								childThread = ((npiMsgData_t *) npi_ipc_buf[0])->cmdId;
+								sprintf(toNpiLnxLog, "Child thread with ID %d in module %d reported error:\t%s",
+										NPI_LNX_ERROR_THREAD(childThread),
+										NPI_LNX_ERROR_MODULE(childThread),
+										(char *)(((npiMsgData_t *) npi_ipc_buf[0])->pData));
+								//							printf("%s\n", toNpiLnxLog);
+								writeToNpiLnxLog(toNpiLnxLog);
+							}
 							break;
+						}
+
+						// If this error was sent through socket; close this connection
+						if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_CMD_TYPE_MASK)  == RPC_CMD_NOTIFY_ERR)
+						{
+							close(c);
+							printf("Removing connection #%d\n", c);
+							// Connection closed. Remove from set
+							FD_CLR(c, &activeConnectionsFDs);
 						}
 					}
 				}
@@ -1088,6 +1106,9 @@ int main(int argc, char ** argv)
 	freeaddrinfo(servinfo); // free the linked-list
 #endif //NPI_UNIX
 	(NPI_CloseDeviceFnArr[devIdx])();
+
+	// Free all remaining memory
+	NPI_LNX_IPC_Exit(NPI_LNX_SUCCESS + 1);
 
 #if (defined __STRESS_TEST__) && (__STRESS_TEST__ == TRUE)
 	//            close(fpStressTestData);
@@ -1235,12 +1256,22 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 		if (n < 0)
 		{
 			perror("recv");
-			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_CHECK_ERRNO;
-			ret = NPI_LNX_FAILURE;
+			if (errno == ENOTSOCK)
+			{
+				debug_printf("[ERROR] Tried to read #%d as socket\n", connection);
+				debug_printf("Will disconnect #%d\n", connection);
+				npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT;
+				ret = NPI_LNX_FAILURE;
+			}
+			else
+			{
+				npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_CHECK_ERRNO;
+				ret = NPI_LNX_FAILURE;
+			}
 		}
 		else
 		{
-			debug_printf("Will disconnect %d\n", connection);
+			debug_printf("Will disconnect #%d\n", connection);
 			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT;
 			ret = NPI_LNX_FAILURE;
 		}
@@ -1346,9 +1377,17 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 				// Synchronous request requires an answer...
 				ret = (NPI_SendSynchDataFnArr[devIdx])(
 						(npiMsgData_t *) npi_ipc_buf[0]);
+				if ( (ret != NPI_LNX_SUCCESS) &&
+						(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT) )
+				{
+					// Report this error to client through a pseudo response
+					((npiMsgData_t *) npi_ipc_buf[0])->len = 1;
+					((npiMsgData_t *) npi_ipc_buf[0])->pData[0] = 0xFF;
+				}
 			}
 
-			if (ret == NPI_LNX_SUCCESS)
+			if ( (ret == NPI_LNX_SUCCESS) ||
+					(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT) )
 			{
 				n = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
 
@@ -1858,19 +1897,28 @@ void NPI_LNX_IPC_Exit(int ret)
 	// Free memory for configuration buffers
 	if (pStrBufRoot != NULL)
 		free(pStrBufRoot);
-	if (devPath != NULL)
-		free(devPath);
-
-	uint8 gpioIdx;
-	for (gpioIdx = 0; gpioIdx < 3; gpioIdx++)
-	{
-		if (gpioCfg[gpioIdx] != NULL)
-			free(gpioCfg[gpioIdx]);
-	}
-	if (gpioCfg != NULL)
-		free(gpioCfg);
 
 	if (ret != NPI_LNX_SUCCESS)
+	{
+		// Keep path for later use
+		if (devPath != NULL)
+			free(devPath);
+	}
+
+	uint8 gpioIdx;
+	if (ret != NPI_LNX_SUCCESS)
+	{
+		// Keep GPIO paths for later use
+		for (gpioIdx = 0; gpioIdx < 3; gpioIdx++)
+		{
+			if (gpioCfg[gpioIdx] != NULL)
+				free(gpioCfg[gpioIdx]);
+		}
+		if (gpioCfg != NULL)
+			free(gpioCfg);
+	}
+
+	if (ret == NPI_LNX_FAILURE)
 	{
 		// Don't even bother open a socket; device opening failed..
 		printf("Could not open device... exiting\n");
@@ -1940,7 +1988,7 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg)
 	}
 	else
 	{
-		debug_printf("Port: %s\n\n", port);
+		debug_printf("[NOTIFY_ERROR] Port: %s\n", port);
 		if ((ret = getaddrinfo(ipAddress, port, &hints, &resAddr)) != 0)
 		{
 			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ret));
@@ -2114,16 +2162,92 @@ static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf)
 					npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INVALID_GET_PARAM_CMD;
 					ret = NPI_LNX_FAILURE;
 					break;
-
 			}
 		}
 		break;
 		case NPI_LNX_CMD_ID_RESET_DEVICE:
 		{
-			ret = HalGpioResetSet(FALSE);
-			debug_printf("Resetting device\n");
-			usleep(1);
-			ret = HalGpioResetSet(TRUE);
+			if (devIdx == NPI_SPI_FN_ARR_IDX)
+			{
+				// Perform Reset of the RNP
+				(NPI_ResetSlaveFnArr[devIdx])();
+
+				// Do the Hw Handshake
+				(NPI_SynchSlaveFnArr[devIdx])();
+			}
+			else if (devIdx == NPI_I2C_FN_ARR_IDX)
+			{
+				// Perform Reset of the RNP
+				(NPI_ResetSlaveFnArr[devIdx])();
+			}
+			else
+			{
+				ret = HalGpioResetSet(FALSE);
+				debug_printf("Resetting device\n");
+				usleep(1);
+				ret = HalGpioResetSet(TRUE);
+			}
+		}
+		break;
+		case NPI_LNX_CMD_ID_DISCONNECT_DEVICE:
+		{
+			debug_printf("Trying to disconnect device %d\n", devIdx);
+			(NPI_CloseDeviceFnArr[devIdx])();
+			debug_printf("Preparing return message after disconnecting device %d\n", devIdx);
+			npi_ipc_buf->len = 1;
+			npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+		}
+		break;
+		case NPI_LNX_CMD_ID_CONNECT_DEVICE:
+		{
+			debug_printf("Trying to connect to device %d, %s\n", devIdx, devPath);
+			switch(devIdx)
+			{
+			case NPI_UART_FN_ARR_IDX:
+#if (defined NPI_UART) && (NPI_UART == TRUE)
+			{
+				ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, NULL);
+			}
+#endif
+			break;
+			case NPI_SPI_FN_ARR_IDX:
+#if (defined NPI_SPI) && (NPI_SPI == TRUE)
+			{
+				npiSpiCfg_t spiCfg;
+				char* strBuf;
+				strBuf = (char*) malloc(128);
+				if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
+					spiCfg.speed = atoi(strBuf);
+				else
+					spiCfg.speed=500000;
+				spiCfg.gpioCfg = gpioCfg;
+				free(strBuf);
+
+				// Now open device for processing
+				ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiSpiCfg_t *) &spiCfg);
+			}
+#endif
+			break;
+
+			case NPI_I2C_FN_ARR_IDX:
+#if (defined NPI_I2C) && (NPI_I2C == TRUE)
+			{
+				npiI2cCfg_t i2cCfg;
+				i2cCfg.gpioCfg = gpioCfg;
+
+				// Open the Device and perform a reset
+				ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiI2cCfg_t *) &i2cCfg);
+			}
+#endif
+			break;
+			default:
+				ret = NPI_LNX_FAILURE;
+				break;
+			}
+			debug_printf("Preparing return message after connecting to device %d (ret == 0x%.2X, npi_ipc_errno == 0x%.2X)\n",
+					devIdx, ret, npi_ipc_errno);
+			npi_ipc_buf->len = 1;
+			npi_ipc_buf->pData[0] = ret;
 		}
 		break;
 		default:

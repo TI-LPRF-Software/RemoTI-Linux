@@ -844,7 +844,7 @@ int HalGpioSrdyCheck(uint8 state)
 int HalGpioWaitSrdyClr(void)
 {
 	char srdy= '1';
-	int ret = NPI_LNX_SUCCESS;
+	int ret = NPI_LNX_SUCCESS, attempts = 0;
 
 	debug_printf("[GPIO]Wait SRDY Low, \n");
 
@@ -909,17 +909,27 @@ int HalGpioWaitSrdyClr(void)
 					perror(srdyGpioCfg.gpio.value);
 					debug_printf("\n[GPIO]can't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
 					npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_READ_FAILED;
-					return NPI_LNX_FAILURE;
+					ret = NPI_LNX_FAILURE;
+					break;
 				}
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
+				gettimeofday(&curTime, NULL);
 
-	if ((curTime.tv_sec - limitPrints.tv_sec) >= 5)
-	{
-		debug_printf("[0x%.2X , %c(0x%.2X)]\n", atoi(&srdy), srdy, srdy);
-		// Start over
-		limitPrints = curTime;
-	}
+				// Only print every 250ms
+				if ( (curTime.tv_usec > 250000 ) && (((curTime.tv_usec - limitPrints.tv_usec) % 250000) == 0) )
+				{
+					debug_printf("[0x%.2X , %c (0x%.2X)]\n", atoi(&srdy), srdy, srdy);
+					// Start over
+					limitPrints = curTime;
+					attempts++;
+				}
+				// Abort after 1 second
+				if (attempts > 4)
+				{
+					npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT;
+					ret = NPI_LNX_FAILURE;
+					break;
+				}
 #endif //(defined __DEBUG_TIME__)
 			}
 			else

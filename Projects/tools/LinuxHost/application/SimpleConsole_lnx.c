@@ -456,6 +456,11 @@ void RTI_UnpairCnf( rStatus_t status, uint8 dstIndex )
  */
 void RTI_ResetInd( void )
 {
+	printf("\nReset detected\n");
+	printf("\n-------------------- START Init Req-------------------\n");
+	// Initialize node and RF4CE stack
+	printf("- Calling RTI_InitReq...\n");
+	RTI_InitReq();
 }
 
 
