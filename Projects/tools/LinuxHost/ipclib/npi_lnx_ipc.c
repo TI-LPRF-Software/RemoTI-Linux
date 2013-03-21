@@ -8,6 +8,11 @@
 
  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
 
+ Beej's Guide to Unix IPC was used in the development of this software:
+ http://beej.us/guide/bgipc/output/html/multipage/intro.html#audience
+ A small portion of the code from the associated code was also used. This
+ code is Public Domain.
+
 
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions
