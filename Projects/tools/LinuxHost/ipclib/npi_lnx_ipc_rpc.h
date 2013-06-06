@@ -75,6 +75,8 @@ extern "C" {
 
 #define NPI_LNX_PARAM_NB_CONNECTIONS 		1
 #define NPI_LNX_PARAM_DEVICE_USED			2
+
+#define NPI_LNX_WORKAROUND_CDC_BOOTLOADER	1
 /* ------------------------------------------------------------------------------------------------
  *                                           Typedefs
  * ------------------------------------------------------------------------------------------------

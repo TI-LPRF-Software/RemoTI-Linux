@@ -8,8 +8,12 @@ OBJS = out
 TEMP = temp
 
 #library to use
-LIBS_x86= -lpthread 
-LIBS_arm= -lpthread 
+LIBS_x86= -lpthread
+# -lusb-1.0
+LIBS_armBeagleBoard= -lpthread
+# -lusb-1.0
+LIBS_armBeagleBone= -lpthread
+# -lusb-1.0
 
 #include path
 INCLUDES= -I application\
@@ -18,17 +22,20 @@ INCLUDES= -I application\
 	-I services
 
 #compilation tools
-CC_arm = arm-none-linux-gnueabi-gcc
+CC_armBeagleBoard = arm-none-linux-gnueabi-gcc
+CC_armBeagleBone = arm-arago-linux-gnueabi-gcc
 CC_x86 = gcc
 
 #predefine
 #DEFINES = -DRNP_HOST -D__BIG_DEBUG__
-#DEFINES = -DRNP_HOST -DSRDY_INTERRUPT
-DEFINES = -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=TRUE -D__DEBUG_TIME__
+#DEFINES = -DRNP_HOST -DSRDY_INTERRUPT -DNPI_UNIX
+DEFINES = -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=TRUE -DNPI_HID=TRUE -D__DEBUG_TIME__ -DSRDY_INTERRUPT -D__DEBUG_TIME__I2C
+# -D__DEBUG_TIME__HID -D__DEBUG_MUTEX__
 
 #compilation Option
 COMPILO_FLAGS_x86 = "-Wall  $(INCLUDES) $(DEFINES)" 
-COMPILO_FLAGS_arm = "-Wall  $(INCLUDES) $(DEFINES) -mcpu=cortex-a8 -march=armv7-a"
+COMPILO_FLAGS_armBeagleBoard = "-Wall  $(INCLUDES) $(DEFINES) -mcpu=cortex-a8 -march=armv7-a"
+COMPILO_FLAGS_armBeagleBone = "-Wall  $(INCLUDES) $(DEFINES) -mcpu=cortex-a8 -march=armv7-a"
 
 #list of object file to compile for the server
 SERVER_OBJS= \
@@ -55,21 +62,27 @@ all: \
 	clean_obj \
 	arch-all-x86 \
 	clean_obj2 \
-	arch-all-arm \
+	arch-all-armBeagleBoard \
+	clean_obj3 \
+	arch-all-armBeagleBone \
 
 server: \
 	create_output \
 	clean_obj \
 	arch-server-x86 \
 	clean_obj2 \
-	arch-server-arm \
+	arch-server-armBeagleBoard \
+	clean_obj3 \
+	arch-server-armBeagleBone \
 
 client: \
 	create_output \
 	clean_obj \
 	arch-client-x86 \
 	clean_obj2 \
-	arch-client-arm \
+	arch-client-armBeagleBoard \
+	clean_obj3 \
+	arch-client-armBeagleBone \
 
 create_output:
 	@echo "********************************************************" 
@@ -84,23 +97,36 @@ arch-all-x86:
 	@echo "COMPILING SIMPLE APP FOR x86" 
 	@$(MAKE) COMPILO=$(CC_x86) COMPILO_FLAGS=$(COMPILO_FLAGS_x86) exec_client_x86
 
-arch-all-arm: 
+arch-all-armBeagleBoard: 
 	@echo "********************************************************" 
-	@echo "COMPILING SERVER FOR ARM" 
-	@$(MAKE) COMPILO=$(CC_arm) COMPILO_FLAGS=$(COMPILO_FLAGS_arm) exec_server_arm
+	@echo "COMPILING SERVER FOR ARM BEAGLE BOARD" 
+	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_server_armBeagleBoard
 	@echo "********************************************************" 
-	@echo "COMPILING SIMPLE APP FOR ARM" 
-	@$(MAKE) COMPILO=$(CC_arm) COMPILO_FLAGS=$(COMPILO_FLAGS_arm) exec_client_arm
+	@echo "COMPILING SIMPLE APP FOR ARM BEAGLE BOARD" 
+	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_client_armBeagleBoard
+
+arch-all-armBeagleBone: 
+	@echo "********************************************************" 
+	@echo "COMPILING SERVER FOR ARM BEAGLE BONE" 
+	@$(MAKE) COMPILO=$(CC_armBeagleBone) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBone) exec_server_armBeagleBone
+	@echo "********************************************************" 
+	@echo "COMPILING SIMPLE APP FOR ARM BEAGLE BONE" 
+	@$(MAKE) COMPILO=$(CC_armBeagleBone) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBone) exec_client_armBeagleBone
 
 arch-server-x86: 
 	@echo "********************************************************" 
 	@echo "COMPILING SERVER FOR x86" 
 	@$(MAKE) COMPILO=$(CC_x86) COMPILO_FLAGS=$(COMPILO_FLAGS_x86) exec_server_x86
 
+arch-server-armBeagleBoard: 
+	@echo "********************************************************" 
+	@echo "COMPILING SERVER FOR ARM BEAGLE BOARD" 
+	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_server_armBeagleBoard
+
 arch-server-arm: 
 	@echo "********************************************************" 
-	@echo "COMPILING SERVER FOR ARM" 
-	@$(MAKE) COMPILO=$(CC_arm) COMPILO_FLAGS=$(COMPILO_FLAGS_arm) exec_server_arm
+	@echo "COMPILING SERVER FOR ARM BEAGLE BONE" 
+	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_server_armBeagleBoard
 
 arch-client-x86: 
 	@echo "********************************************************" 
@@ -109,16 +135,25 @@ arch-client-x86:
 
 arch-client-arm: 
 	@echo "********************************************************" 
-	@echo "COMPILING SIMPLE APP FOR ARM" 
-	@$(MAKE) COMPILO=$(CC_arm) COMPILO_FLAGS=$(COMPILO_FLAGS_arm) exec_client_arm
+	@echo "COMPILING SIMPLE APP FOR ARM BEAGLE BOARD" 
+	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_client_armBeagleBoard
+
+arch-client-armBeagleBone: 
+	@echo "********************************************************" 
+	@echo "COMPILING SIMPLE APP FOR ARM BEAGLE BONE" 
+	@$(MAKE) COMPILO=$(CC_armBeagleBone) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBone) exec_client_armBeagleBone
 
 exec_server_x86: $(OBJS)/NPI_lnx_x86_server
 
-exec_server_arm: $(OBJS)/NPI_lnx_arm_server
+exec_server_armBeagleBoard: $(OBJS)/NPI_lnx_armBeagleBoard_server
+
+exec_server_armBeagleBone: $(OBJS)/NPI_lnx_armBeagleBone_server
 
 exec_client_x86: $(OBJS)/NPI_lnx_x86_client
 
-exec_client_arm: $(OBJS)/NPI_lnx_arm_client
+exec_client_armBeagleBoard: $(OBJS)/NPI_lnx_armBeagleBoard_client
+
+exec_client_armBeagleBone: $(OBJS)/NPI_lnx_armBeagleBone_client
 
 
 arch-sbl-x86: 
@@ -138,14 +173,24 @@ clean_obj2:
 	@echo "Cleaning Existing object" 
 	-if test -d $(OBJS); then rm -f $(OBJS)/*.o; fi
 
+clean_obj3:
+	@echo "********************************************************" 
+	@echo "Cleaning Existing object" 
+	-if test -d $(OBJS); then rm -f $(OBJS)/*.o; fi
+
 clean:
 	@echo "********************************************************" 
 	@echo "Cleaning all" 
 	-if test -d $(OBJS); then rm -rf $(OBJS); fi
 
-$(OBJS)/NPI_lnx_arm_server: $(SERVER_OBJS)
+$(OBJS)/NPI_lnx_armBeagleBoard_server: $(SERVER_OBJS)
 	@echo "Building target" $@ "..."
-	@$(COMPILO) -o $@ $(SERVER_OBJS) $(LIBS_arm)
+	$(COMPILO) -o $@ $(SERVER_OBJS) $(LIBS_armBeagleBoard)
+	@echo "********************************************************" 
+
+$(OBJS)/NPI_lnx_armBeagleBone_server: $(SERVER_OBJS)
+	@echo "Building target" $@ "..."
+	@$(COMPILO) -o $@ $(SERVER_OBJS) $(LIBS_armBeagleBone)
 	@echo "********************************************************" 
 
 $(OBJS)/NPI_lnx_x86_server: $(SERVER_OBJS)
@@ -153,9 +198,14 @@ $(OBJS)/NPI_lnx_x86_server: $(SERVER_OBJS)
 	@$(COMPILO) -o $@ $(SERVER_OBJS) $(LIBS_x86)
 	@echo "********************************************************" 
 
-$(OBJS)/NPI_lnx_arm_client: $(CLIENT_OBJS)
+$(OBJS)/NPI_lnx_armBeagleBoard_client: $(CLIENT_OBJS)
 	@echo "Building target" $@ "..."
-	@$(COMPILO) -o $@ $(CLIENT_OBJS) $(LIBS_arm)
+	@$(COMPILO) -o $@ $(CLIENT_OBJS) $(LIBS_armBeagleBoard)
+	@echo "********************************************************" 
+
+$(OBJS)/NPI_lnx_armBeagleBone_client: $(CLIENT_OBJS)
+	@echo "Building target" $@ "..."
+	@$(COMPILO) -o $@ $(CLIENT_OBJS) $(LIBS_armBeagleBone)
 	@echo "********************************************************" 
 
 $(OBJS)/NPI_lnx_x86_client: $(CLIENT_OBJS)
@@ -179,11 +229,19 @@ $(OBJS)/npi_lnx_i2c.o: ipclib/npi_lnx_i2c.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
+$(OBJS)/npi_lnx_hid.o: ipclib/npi_lnx_hid.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+
 $(OBJS)/hal_spi.o: ipclib/hal_spi.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
 $(OBJS)/hal_i2c.o: ipclib/hal_i2c.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+
+$(OBJS)/hid.o: ipclib/hid.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 

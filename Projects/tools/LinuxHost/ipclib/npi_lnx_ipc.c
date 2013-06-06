@@ -420,8 +420,9 @@ void writeToNpiLnxLog(const char* str)
 
 static void print_usage(const char *prog)
 {
-	printf("Usage: %s [config_file_name]\n", prog);
-	puts("  config_file_name: the name of the config file to use, if not set, the default is ./RemoTI_RNP.cfg \n");
+	printf("Usage: %s [config_file_name] [debug]\n", prog);
+	puts("  config_file_name: the name of the config file to use, if not set, the default is ./RemoTI_RNP.cfg");
+	puts("  debug: set debug options. 'debugAll' for both BIG and TIME, 'debugTime' for just TIME or 'debugBig' for just BIG \n");
 	exit(1);
 }
 
@@ -462,6 +463,27 @@ int main(int argc, char ** argv)
 	else if (argc==2)
 	{
 		configFilePath = argv[1];
+	}
+	else if (argc==3)
+	{
+		configFilePath = argv[1];
+		if (strcmp(argv[2], "debugAll") == 0)
+		{
+			__BIG_DEBUG_ACTIVE = TRUE;
+			__DEBUG_TIME_ACTIVE = TRUE;
+		}
+		else if (strcmp(argv[2], "debugBig") == 0)
+		{
+			__BIG_DEBUG_ACTIVE = TRUE;
+		}
+		else if (strcmp(argv[2], "debugTime") == 0)
+		{
+			__DEBUG_TIME_ACTIVE = TRUE;
+		}
+		else
+		{
+			print_usage(argv[0]);
+		}
 	}
 	else
 	{
@@ -991,15 +1013,21 @@ int main(int argc, char ** argv)
 					}
 					else
 					{
+#ifndef NPI_UNIX
 						char ipstr[INET6_ADDRSTRLEN];
 						char ipstr2[INET6_ADDRSTRLEN];
+#endif //NPI_UNIX
 						FD_SET(justConnected, &activeConnectionsFDs);
 						if (justConnected > fdmax)
 							fdmax = justConnected;
+#ifdef NPI_UNIX
+						sprintf(toNpiLnxLog, "Connected to #%d.", justConnected);
+#else
 						//                                            debug_
 						inet_ntop(AF_INET, &((struct sockaddr_in *) &their_addr)->sin_addr, ipstr, sizeof ipstr);
 						inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&their_addr)->sin6_addr, ipstr2, sizeof ipstr2);
 						sprintf(toNpiLnxLog, "Connected to #%d.(%s / %s)", justConnected, ipstr, ipstr2);
+#endif //NPI_UNIX
 						printf("%s\n", toNpiLnxLog);
 						writeToNpiLnxLog(toNpiLnxLog);
 						ret = addToActiveList(justConnected);
@@ -1026,7 +1054,9 @@ int main(int argc, char ** argv)
 						{
 						case NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT:
 						case NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT:
+						case NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT_PERFORM_RESET:
 						case NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT:
+						case NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT_PERFORM_RESET:
 							// This may be caused by an unexpected reset. Write it to the log,
 							// but keep going.
 							// Everything about the error can be found in the message, and in npi_ipc_errno:
@@ -1084,6 +1114,18 @@ int main(int argc, char ** argv)
 								writeToNpiLnxLog(toNpiLnxLog);
 							}
 							break;
+						}
+
+						// Check if error requested a reset
+						if (NPI_LNX_ERROR_RESET_REQUESTED(npi_ipc_errno))
+						{
+							// Yes, utilize server control API to reset current device
+							// Do it by reconnecting so that threads are kept synchronized
+							npiMsgData_t npi_ipc_buf;
+							npi_ipc_buf.cmdId = NPI_LNX_CMD_ID_DISCONNECT_DEVICE;
+							npi_ServerCmdHandle(&npi_ipc_buf);
+							npi_ipc_buf.cmdId = NPI_LNX_CMD_ID_CONNECT_DEVICE;
+							npi_ServerCmdHandle(&npi_ipc_buf);
 						}
 
 						// If this error was sent through socket; close this connection
@@ -1261,7 +1303,7 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 		if (n < 0)
 		{
 			perror("recv");
-			if (errno == ENOTSOCK)
+			if ( (errno == ENOTSOCK) || (errno == EPIPE))
 			{
 				debug_printf("[ERROR] Tried to read #%d as socket\n", connection);
 				debug_printf("Will disconnect #%d\n", connection);
@@ -1957,7 +1999,9 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg)
 {
 	int ret = NPI_LNX_SUCCESS;
 	int sNPIconnected;
+#ifndef NPI_UNIX
 	struct addrinfo *resAddr;
+#endif //NPI_UNIX
 
 	const char *ipAddress = "127.0.0.1";
 

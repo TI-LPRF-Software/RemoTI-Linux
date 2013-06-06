@@ -60,7 +60,7 @@ extern "C"
  * CONSTANTS
  **************************************************************************************************/
 
-#define AP_MAX_BUF_LEN 256
+#define AP_MAX_BUF_LEN 255
 
 #define NPI_PORT			"2533"
 
@@ -121,6 +121,10 @@ extern volatile uint16 npiEventFlags;
 // NPI OSAL related functions
 extern void NPI_Init( void );
 extern uint16 NPI_ProcessEvent( void );
+
+/* NPI server API */
+void NPI_ReadVersionReq( uint8 *pValue );
+void NPI_ReadParamReq( uint8 paramId, uint8 len, uint8 *pValue );
 
 //
 // Network Processor Interface APIs

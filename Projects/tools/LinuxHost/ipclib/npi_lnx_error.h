@@ -64,14 +64,18 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg);
  * significant nibble
  * 0-3:	Error code
  * 		0-1:	Special per error info
+ * 				If nibble 0-1 == FF then a reset is requested
  * 		2-3:	Error ID
  * 4-5:	Function
  * 6-7:	Module (natural parent module)	 (Example: Serial Interface)
  */
 #define NPI_LNX_SUCCESS												0x00000000
 #define NPI_LNX_FAILURE												0xFFFFFFFF
+#define NPI_LNX_UINT8_ERROR											0xFF
 // Reserved error code. This must not be used as it is a valid return value.
 #define NPI_LNX_ERROR_RESERVED										0x00000001
+
+#define NPI_LNX_ERROR_RESET_REQUESTED(x)							((x & 0x000000FF) == 0x000000FF)
 
 // Mask for module/thread
 #define NPI_LNX_ERROR_MODULE_MASK(a)								((uint16)((a & 0xFFFF0000) >> 16))
@@ -105,6 +109,7 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg);
 #define NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_PATH			0x01070200
 #define NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO_ERR 	0x01070300
 #define NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_LOG_PATH			0x01070400
+#define NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_CAPSENSE_PATH		0x01070500
 #define NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO(gpioIdx, gpioOrLevel, devIdx) \
 	(NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO_ERR | \
 			((gpioOrLevel & 0x03)<<6) | \
@@ -210,7 +215,9 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg);
 #define NPI_LNX_ERROR_HAL_I2C_INIT_FAILED_TO_SET_ADDRESS			0x06010200
 #define NPI_LNX_ERROR_HAL_I2C_CLOSE_GENERIC							0x06020100
 #define NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT						0x06030100
+#define NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT_PERFORM_RESET			0x060301FF
 #define NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT							0x06040100
+#define NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT_PERFORM_RESET			0x060401FF
 
 // Error codes for the common HAL GPIO module
 #define NPI_LNX_ERROR_HAL_GPIO_GENERIC								0x07000100

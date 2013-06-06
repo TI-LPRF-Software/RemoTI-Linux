@@ -192,16 +192,35 @@ int HalI2cWrite(uint8 port, uint8 *pBuf, uint8 len)
   {
     timeout--;
     debug_printf("I2C Write timeout %d, %s \n", timeout, strerror(errno));
-    usleep(1000); //Wait 1ms before re-trying
+
+    if ((errno == ETIMEDOUT) && (timeout < (I2C_OPEN_100MS_TIMEOUT - 2)) )
+    {
+    	// When ETIMEDOUT is received the function did not immediately return, so the 100 ms timeout
+    	// is not accurate. Hence, cut it short after 3 attempts.
+    	timeout = 0;
+    }
+    else
+    {
+    	usleep(1000); //Wait 1ms before re-trying
+    }
   }
 
   if ( (-1 == res) && !timeout)
   {
     /* ERROR HANDLING: i2c transaction failed */
-    printf("Failed to write to the i2c bus for %d ms. read %d byte(s)...reason: %s\n", I2C_OPEN_100MS_TIMEOUT, res, strerror(errno));
-    printf("RNP may have reset unexpectedly. Keep going...\n");
+    printf("Failed to write to the i2c bus for %d ms. read %d byte(s)...reason: (#%d)%s\n", I2C_OPEN_100MS_TIMEOUT, res, errno, strerror(errno));
+    if (errno == ETIMEDOUT)
+    {
+    	// RNP may be hung, report error and perform reset.
+    	printf("May have to reset RNP...\n");
+        npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT_PERFORM_RESET;
+    }
+    else
+    {
+    	printf("RNP may have reset unexpectedly. Keep going...\n");
+        npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT;
+    }
     printf("\n\n");
-    npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT;
     ret = NPI_LNX_FAILURE;
   }
   else
@@ -235,19 +254,39 @@ int HalI2cRead(uint8 port, uint8 *pBuf, uint8 len)
   {
     timeout--;
     printf("I2C Read timeout %d, %s \n", timeout, strerror(errno));
-    usleep(1000); //Wait 1ms before re-trying
+
+    if ((errno == ETIMEDOUT) && (timeout < (I2C_OPEN_100MS_TIMEOUT - 2)) )
+    {
+    	// When ETIMEDOUT is received the function did not immediately return, so the 100 ms timeout
+    	// is not accurate. Hence, cut it short after 3 attempts.
+    	timeout = 0;
+    }
+    else
+    {
+    	usleep(1000); //Wait 1ms before re-trying
+    }
   }
 
   if ( (-1 == res) && !timeout)
   {
     /* ERROR HANDLING: i2c transaction failed */
-    printf("Failed to read to the i2c bus for %d ms. read %d byte(s)...reason: %s\n",
+    printf("Failed to read to the i2c bus for %d ms. read %d byte(s)...reason: (#%d)%s\n",
     		I2C_OPEN_100MS_TIMEOUT,
     		res,
+    		errno,
     		strerror(errno));
-    printf("RNP may have reset unexpectedly. Keep going...\n");
+    if (errno == ETIMEDOUT)
+    {
+    	// RNP may be hung, report error and perform reset.
+    	printf("May have to reset RNP...\n");
+        npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT_PERFORM_RESET;
+    }
+    else
+    {
+    	printf("RNP may have reset unexpectedly. Keep going...\n");
+        npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT;
+    }
     printf("\n");
-    npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT;
     ret = NPI_LNX_FAILURE;
   }
   else

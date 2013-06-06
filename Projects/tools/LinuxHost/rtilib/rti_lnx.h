@@ -83,14 +83,41 @@ extern "C"
 #define RCN_USER_STRING_LENGTH                    15
 #define RCN_SEC_KEY_SEED_LENGTH                   80
 
+#define RCN_NODE_CAP_TARGET						  1
+
 #ifndef RCN_FEATURE_SECURITY
 # define RCN_FEATURE_SECURITY                     TRUE
 #endif
 
+#define	RCN_PROFILE_DISCS_SIZE					  1
 
 #ifndef RCN_FEATURE_EXTRA_PAIR_INFO
 # define RCN_FEATURE_EXTRA_PAIR_INFO              TRUE
 #endif
+
+
+// sub structure for application capabilities field in macro
+#define RCN_APP_CAPA_GET_USER_STRING(_capa) \
+  ((_capa) & 0x01)
+#define RCN_APP_CAPA_SET_USER_STRING(_capa,_val) \
+{                                                \
+  ((_capa) &= ~0x01);                            \
+  ((_capa) |= (_val));                           \
+}
+#define RCN_APP_CAPA_GET_NUM_DEV_TYPES(_capa) \
+  (((_capa) & 0x06) >> 1)
+#define RCN_APP_CAPA_SET_NUM_DEV_TYPES(_capa,_val) \
+{                                                  \
+  ((_capa) &= ~0x06);                              \
+  ((_capa) |= ((_val) << 1));                      \
+}
+#define RCN_APP_CAPA_GET_NUM_PROFILES(_capa) \
+  (((_capa) & 0x70) >> 4)
+#define RCN_APP_CAPA_SET_NUM_PROFILES(_capa,_val) \
+{                                                 \
+  ((_capa) &= ~0x70);                             \
+  ((_capa) |= ((_val) << 4));                     \
+}
 
 // Macro to build a byte for node capabilities - each parameter has to be set to either 0 or 1.
 #define RTI_BUILD_NODE_CAPABILITIES(_target,_ac_powered,_security_capable,_ch_norm_capable ) \
@@ -416,6 +443,12 @@ PACK_1 typedef struct ATTR_PACKED
 #endif // RCN_FEATURE_EXTRA_PAIR_INFO
 
   uint32     recFrameCounter;    // frame counter last received
+
+#if RCN_FEATURE_EXTRA_PAIR_INFO
+  // NOTE that RF4CE spec does not include the following as part of pairing entry
+  uint8 	 profileDiscs[RCN_PROFILE_DISCS_SIZE];
+#endif // RCN_FEATURE_EXTRA_PAIR_INFO
+
 } rcnNwkPairingEntry_t;
 
 // Controller Node Information

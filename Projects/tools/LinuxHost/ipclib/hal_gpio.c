@@ -81,7 +81,7 @@
 #endif
 
 #ifdef __DEBUG_TIME__
-#define time_printf(fmt, ...) st (if (__DEBUG_TIME_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
+#define time_printf(fmt, ...) st (if ((__DEBUG_TIME_ACTIVE == TRUE) && (__BIG_DEBUG_ACTIVE == TRUE)) printf( fmt, ##__VA_ARGS__);)
 #endif //__DEBUG_TIME__
 /**************************************************************************************************
  *                                            TYPEDEFS
@@ -820,7 +820,7 @@ int HalGpioSrdyCheck(uint8 state)
 		return NPI_LNX_FAILURE;
 	}
 
-//	debug_printf("[GPIO]===>check SRDY: %c  (%c) \n", srdy, srdy);
+	debug_printf("[GPIO]===>check SRDY: %c [%d]  (%c) \n", srdy, srdy, atoi(&srdy));
 
 	return (state == ((srdy == '1') ? 1 : 0));
 }
