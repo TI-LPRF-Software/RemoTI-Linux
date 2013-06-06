@@ -29,8 +29,8 @@ CC_x86 = gcc
 #predefine
 #DEFINES = -DRNP_HOST -D__BIG_DEBUG__
 #DEFINES = -DRNP_HOST -DSRDY_INTERRUPT -DNPI_UNIX
-DEFINES = -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=TRUE -DNPI_HID=TRUE -D__DEBUG_TIME__ -DSRDY_INTERRUPT -D__DEBUG_TIME__I2C
-# -D__DEBUG_TIME__HID -D__DEBUG_MUTEX__
+DEFINES = -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=TRUE -D__DEBUG_TIME__ -DSRDY_INTERRUPT -D__DEBUG_TIME__I2C
+# -D__DEBUG_TIME__HID -D__DEBUG_MUTEX__ -DNPI_HID=TRUE 
 
 #compilation Option
 COMPILO_FLAGS_x86 = "-Wall  $(INCLUDES) $(DEFINES)" 
@@ -229,9 +229,9 @@ $(OBJS)/npi_lnx_i2c.o: ipclib/npi_lnx_i2c.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-$(OBJS)/npi_lnx_hid.o: ipclib/npi_lnx_hid.c
-	@echo "Compiling" $< "..."
-	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+#$(OBJS)/npi_lnx_hid.o: ipclib/npi_lnx_hid.c
+#	@echo "Compiling" $< "..."
+#	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
 $(OBJS)/hal_spi.o: ipclib/hal_spi.c
 	@echo "Compiling" $< "..."
@@ -241,9 +241,9 @@ $(OBJS)/hal_i2c.o: ipclib/hal_i2c.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-$(OBJS)/hid.o: ipclib/hid.c
-	@echo "Compiling" $< "..."
-	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+#$(OBJS)/hid.o: ipclib/hid.c
+#	@echo "Compiling" $< "..."
+#	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
 $(OBJS)/hal_gpio.o: ipclib/hal_gpio.c
 	@echo "Compiling" $< "..."
