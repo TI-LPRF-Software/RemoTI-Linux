@@ -1,4 +1,4 @@
-# Makefile for Linux Simple Console Application
+# Makefile for NPI Server
 
 
 #Compilation output
@@ -17,9 +17,8 @@ LIBS_armBeagleBone= -lpthread
 
 #include path
 INCLUDES= -I application\
-	-I ipclib \
-	-I rtilib \
-	-I services
+	-I ipclib/server \
+	-I ipclib/common
 
 #compilation tools
 CC_armBeagleBoard = arm-none-linux-gnueabi-gcc
@@ -45,17 +44,13 @@ SERVER_OBJS= \
 	$(OBJS)/npi_lnx_i2c.o \
 	$(OBJS)/hal_gpio.o \
 	$(OBJS)/hal_i2c.o \
-	$(OBJS)/hal_spi.o 
-
-CLIENT_OBJS= \
-	$(OBJS)/rtis_lnx_ipc_client.o \
-	$(OBJS)/SimpleConsole_lnx.o 
+	$(OBJS)/hal_spi.o
 
 
 #by default, do not use the library.
 #PROJ_OBJS=$(SERVER_OBJS)
 
-.PHONY: all clean server lib create_output arch-all-x86 arch-all-arm exec_server_x86 exec_server_arm exec_client_x86 exec_client_arm arch-server-x86 exec_server_arm clean_obj clean_obj2 
+.PHONY: all clean server lib create_output arch-all-x86 arch-all-armBeagleBoard arch-all-armBeagleBone exec_server_x86 exec_server_armBeagleBoard exec_server_armBeagleBone arch-server-x86 clean_obj clean_obj2 
 
 all: \
 	create_output \
@@ -66,24 +61,6 @@ all: \
 	clean_obj3 \
 	arch-all-armBeagleBone \
 
-server: \
-	create_output \
-	clean_obj \
-	arch-server-x86 \
-	clean_obj2 \
-	arch-server-armBeagleBoard \
-	clean_obj3 \
-	arch-server-armBeagleBone \
-
-client: \
-	create_output \
-	clean_obj \
-	arch-client-x86 \
-	clean_obj2 \
-	arch-client-armBeagleBoard \
-	clean_obj3 \
-	arch-client-armBeagleBone \
-
 create_output:
 	@echo "********************************************************" 
 	@echo "Check existance of output folder" 
@@ -92,76 +69,23 @@ create_output:
 arch-all-x86: 
 	@echo "********************************************************" 
 	@echo "COMPILING SERVER FOR x86" 
-	@$(MAKE) COMPILO=$(CC_x86) COMPILO_FLAGS=$(COMPILO_FLAGS_x86) exec_server_x86
-	@echo "********************************************************" 
-	@echo "COMPILING SIMPLE APP FOR x86" 
-	@$(MAKE) COMPILO=$(CC_x86) COMPILO_FLAGS=$(COMPILO_FLAGS_x86) exec_client_x86
+	@$(MAKE) COMPILO=$(CC_x86) COMPILO_FLAGS=$(COMPILO_FLAGS_x86) exec_all_x86
 
 arch-all-armBeagleBoard: 
 	@echo "********************************************************" 
 	@echo "COMPILING SERVER FOR ARM BEAGLE BOARD" 
-	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_server_armBeagleBoard
-	@echo "********************************************************" 
-	@echo "COMPILING SIMPLE APP FOR ARM BEAGLE BOARD" 
-	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_client_armBeagleBoard
+	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_all_armBeagleBoard
 
 arch-all-armBeagleBone: 
 	@echo "********************************************************" 
 	@echo "COMPILING SERVER FOR ARM BEAGLE BONE" 
-	@$(MAKE) COMPILO=$(CC_armBeagleBone) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBone) exec_server_armBeagleBone
-	@echo "********************************************************" 
-	@echo "COMPILING SIMPLE APP FOR ARM BEAGLE BONE" 
-	@$(MAKE) COMPILO=$(CC_armBeagleBone) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBone) exec_client_armBeagleBone
+	@$(MAKE) COMPILO=$(CC_armBeagleBone) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBone) exec_all_armBeagleBone
 
-arch-server-x86: 
-	@echo "********************************************************" 
-	@echo "COMPILING SERVER FOR x86" 
-	@$(MAKE) COMPILO=$(CC_x86) COMPILO_FLAGS=$(COMPILO_FLAGS_x86) exec_server_x86
+exec_all_x86: $(OBJS)/NPI_lnx_x86_server
 
-arch-server-armBeagleBoard: 
-	@echo "********************************************************" 
-	@echo "COMPILING SERVER FOR ARM BEAGLE BOARD" 
-	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_server_armBeagleBoard
+exec_all_armBeagleBoard: $(OBJS)/NPI_lnx_armBeagleBoard_server
 
-arch-server-arm: 
-	@echo "********************************************************" 
-	@echo "COMPILING SERVER FOR ARM BEAGLE BONE" 
-	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_server_armBeagleBoard
-
-arch-client-x86: 
-	@echo "********************************************************" 
-	@echo "COMPILING SIMPLE APP FOR x86" 
-	@$(MAKE) COMPILO=$(CC_x86) COMPILO_FLAGS=$(COMPILO_FLAGS_x86) exec_client_x86
-
-arch-client-arm: 
-	@echo "********************************************************" 
-	@echo "COMPILING SIMPLE APP FOR ARM BEAGLE BOARD" 
-	@$(MAKE) COMPILO=$(CC_armBeagleBoard) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBoard) exec_client_armBeagleBoard
-
-arch-client-armBeagleBone: 
-	@echo "********************************************************" 
-	@echo "COMPILING SIMPLE APP FOR ARM BEAGLE BONE" 
-	@$(MAKE) COMPILO=$(CC_armBeagleBone) COMPILO_FLAGS=$(COMPILO_FLAGS_armBeagleBone) exec_client_armBeagleBone
-
-exec_server_x86: $(OBJS)/NPI_lnx_x86_server
-
-exec_server_armBeagleBoard: $(OBJS)/NPI_lnx_armBeagleBoard_server
-
-exec_server_armBeagleBone: $(OBJS)/NPI_lnx_armBeagleBone_server
-
-exec_client_x86: $(OBJS)/NPI_lnx_x86_client
-
-exec_client_armBeagleBoard: $(OBJS)/NPI_lnx_armBeagleBoard_client
-
-exec_client_armBeagleBone: $(OBJS)/NPI_lnx_armBeagleBone_client
-
-
-arch-sbl-x86: 
-	@echo "********************************************************" 
-	@echo "COMPILING SERIAL BOOT LOADER APPLICATION FOR x86" 
-	@$(MAKE) COMPILO=$(CC_x86) COMPILO_FLAGS=$(COMPILO_FLAGS_x86) exec_sbl_x86
-
-exec_sbl_x86: $(OBJS)/RTI_lnx_x86_client_sbl
+exec_all_armBeagleBone: $(OBJS)/NPI_lnx_armBeagleBone_server
 
 clean_obj:
 	@echo "********************************************************" 
@@ -185,7 +109,7 @@ clean:
 
 $(OBJS)/NPI_lnx_armBeagleBoard_server: $(SERVER_OBJS)
 	@echo "Building target" $@ "..."
-	$(COMPILO) -o $@ $(SERVER_OBJS) $(LIBS_armBeagleBoard)
+	@$(COMPILO) -o $@ $(SERVER_OBJS) $(LIBS_armBeagleBoard)
 	@echo "********************************************************" 
 
 $(OBJS)/NPI_lnx_armBeagleBone_server: $(SERVER_OBJS)
@@ -198,64 +122,39 @@ $(OBJS)/NPI_lnx_x86_server: $(SERVER_OBJS)
 	@$(COMPILO) -o $@ $(SERVER_OBJS) $(LIBS_x86)
 	@echo "********************************************************" 
 
-$(OBJS)/NPI_lnx_armBeagleBoard_client: $(CLIENT_OBJS)
-	@echo "Building target" $@ "..."
-	@$(COMPILO) -o $@ $(CLIENT_OBJS) $(LIBS_armBeagleBoard)
-	@echo "********************************************************" 
-
-$(OBJS)/NPI_lnx_armBeagleBone_client: $(CLIENT_OBJS)
-	@echo "Building target" $@ "..."
-	@$(COMPILO) -o $@ $(CLIENT_OBJS) $(LIBS_armBeagleBone)
-	@echo "********************************************************" 
-
-$(OBJS)/NPI_lnx_x86_client: $(CLIENT_OBJS)
-	@echo "Building target" $@ "..."
-	@$(COMPILO) -o $@ $(CLIENT_OBJS) $(LIBS_x86)
-	@echo "********************************************************" 
-
-$(OBJS)/npi_lnx_ipc.o: ipclib/npi_lnx_ipc.c
+$(OBJS)/npi_lnx_ipc.o: ipclib/server/npi_lnx_ipc.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-$(OBJS)/npi_lnx_spi.o: ipclib/npi_lnx_spi.c
+$(OBJS)/npi_lnx_spi.o: ipclib/server/npi_lnx_spi.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-$(OBJS)/npi_lnx_uart.o: ipclib/npi_lnx_uart.c
+$(OBJS)/npi_lnx_uart.o: ipclib/server/npi_lnx_uart.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-$(OBJS)/npi_lnx_i2c.o: ipclib/npi_lnx_i2c.c
+$(OBJS)/npi_lnx_i2c.o: ipclib/server/npi_lnx_i2c.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-#$(OBJS)/npi_lnx_hid.o: ipclib/npi_lnx_hid.c
+#$(OBJS)/npi_lnx_hid.o: ipclib/server/npi_lnx_hid.c
 #	@echo "Compiling" $< "..."
 #	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-$(OBJS)/hal_spi.o: ipclib/hal_spi.c
+$(OBJS)/hal_spi.o: ipclib/server/hal_spi.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-$(OBJS)/hal_i2c.o: ipclib/hal_i2c.c
+$(OBJS)/hal_i2c.o: ipclib/server/hal_i2c.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-#$(OBJS)/hid.o: ipclib/hid.c
+#$(OBJS)/hid.o: ipclib/server/hid.c
 #	@echo "Compiling" $< "..."
 #	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-$(OBJS)/hal_gpio.o: ipclib/hal_gpio.c
+$(OBJS)/hal_gpio.o: ipclib/server/hal_gpio.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
-
-$(OBJS)/rtis_lnx_ipc_client.o: rtilib/rtis_lnx_ipc_client.c
-	@echo "Compiling" $< "..."
-	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
-
-$(OBJS)/SimpleConsole_lnx.o: application/SimpleConsole_lnx.c
-	@echo "Compiling" $< "..."
-	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
-	
-
 
