@@ -50,7 +50,7 @@ SERVER_OBJS= \
 #by default, do not use the library.
 #PROJ_OBJS=$(SERVER_OBJS)
 
-.PHONY: all clean server lib create_output arch-all-x86 arch-all-armBeagleBoard arch-all-armBeagleBone exec_server_x86 exec_server_armBeagleBoard exec_server_armBeagleBone arch-server-x86 clean_obj clean_obj2 
+.PHONY: all clean lib create_output arch-all-x86 arch-all-armBeagleBoard arch-all-armBeagleBone exec_all_x86 exec_all_armBeagleBoard exec_all_armBeagleBone arch-all-x86 clean_obj clean_obj2 
 
 all: \
 	create_output \
