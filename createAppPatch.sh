@@ -45,7 +45,7 @@ NEWTAG=$TAGBASE$NEWINC
 #echo "NEWTAG:" $NEWTAG
 
 # Then create this tag
-git tag -a $NEWTAG -m 'Tag for '$1' application patch'
+git tag -a $NEWTAG -m 'Tag for application patch'
 echo $NEWTAG 'Tag for '$1' application patch'
 
 # Now share this tag
@@ -89,7 +89,7 @@ for i in "$@"; do
 	echo "# "$i".tar must exist in this folder" >> "install_"$i"_"$NEWTAG".sh"
 	echo "# RemoTI-Linux/ must NOT exist in this folder" >> "install_"$i"_"$NEWTAG".sh"
 # First clone into RemoTI-Linux
-	echo "git clone http://github.com/TI-LPRF-Software/RemoTI-Linux.git tags/"$NEWTAG >> "install_"$i"_"$NEWTAG".sh"
+	echo "git clone http://github.com/TI-LPRF-Software/RemoTI-Linux.git"  >> "install_"$i"_"$NEWTAG".sh"
 	echo "cd RemoTI-Linux" >> "install_"$i"_"$NEWTAG".sh"
 	echo "git checkout tags/"$NEWTAG >> "install_"$i"_"$NEWTAG".sh"
 # Then untar the patch into RemoTI-Linux
