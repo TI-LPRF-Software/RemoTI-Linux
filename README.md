@@ -30,6 +30,10 @@ allows multiple applications to use RF4CE data, s.a. Consumer Control, Keyboard 
 Please see http://processors.wiki.ti.com/index.php/RF4CE,_simple_linux_target_application for 
 more details.
 
+![Alt text](/Documents/RemoTI-Linux_Architecture-NPI_Server.png "NPI Server")
+
+![Alt text](/Documents/RemoTI-Linux_Architecture-Simple.png "NPI Server")
+
 Compilation
 -----------
 The makefile in <code>/Projects/tools/LinuxHost/</code> will build the NPI_Server for the following 
