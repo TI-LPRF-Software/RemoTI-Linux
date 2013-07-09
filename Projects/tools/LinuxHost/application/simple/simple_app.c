@@ -1886,7 +1886,7 @@ void appSendDataProcessKey (char* strIn)
 		while ( strlen(pEnd) != 0 )
 		{
 			pEndOld = pEnd;
-			appSendData_s.pData[i++] = strtol(pEnd, &pEnd, 16);
+			appSendData_s.pData[++i] = strtol(pEnd, &pEnd, 16);
 			debug_printf("payload[%d] 0x%.2X (int)%d\n", i, appSendData_s.pData[i], (int)appSendData_s.pData[i]);
 
 			// Check for global error code
@@ -1904,12 +1904,13 @@ void appSendDataProcessKey (char* strIn)
 				break;
 			}
 		}
+		appSendData_s.len = ++i;
 		// Return to Send Data Init state
 		appSendDataState = APP_SEND_DATA_STATE_INIT;
 	}
 	else if (appSendDataState == APP_SEND_DATA_STATE_TX_OPTIONS)
 	{
-		appSendData_s.txOptions = strIn[0];
+		appSendData_s.txOptions = strtol(strIn, NULL, 16);
 
 		printf("Tx Options set to: 0x%.2X\n", appSendData_s.txOptions);
 
