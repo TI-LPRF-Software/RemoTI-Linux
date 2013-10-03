@@ -45,8 +45,24 @@
 extern "C" {
 #endif
 
+
+#if !defined PACK_1
+#define PACK_1
+#endif
+
+// To be compatible with MS and unix native target
+// declare pragma for structure packing
+#if defined(_MSC_VER) || defined(unix) || (defined(__ICC430__) && (__ICC430__==1))
+#pragma pack(1)
+#endif
+
   /////////////////////////////////////////////////////////////////////////////
   // Typedefs
+
+PACK_1 typedef struct ATTR_PACKED
+{
+	  uint32 speed;
+} npiUartCfg_t;
 
   /////////////////////////////////////////////////////////////////////////////
   // globals

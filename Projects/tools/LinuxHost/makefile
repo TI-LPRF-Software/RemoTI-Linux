@@ -22,13 +22,17 @@ INCLUDES= -I application\
 
 #compilation tools
 CC_armBeagleBoard = arm-none-linux-gnueabi-gcc
-CC_armBeagleBone = arm-arago-linux-gnueabi-gcc
+#CC_armBeagleBone = arm-arago-linux-gnueabi-gcc
+# arm-arago-gnueabi-gcc is for default Angstrom that comes with BeagleBone
+CC_armBeagleBone = arm-linux-gnueabihf-gcc
+# arm-linux-gnueabihf-gcc is for Ubuntu on BeagleBone Black
+# get it here: eewiki.net/display/linuxonarm/BeagleBone+Black#BeagleBoneBlack-ARMCrossCompiler:GCC
 CC_x86 = gcc
 
 #predefine
 #DEFINES = -DRNP_HOST -D__BIG_DEBUG__
 #DEFINES = -DRNP_HOST -DSRDY_INTERRUPT -DNPI_UNIX
-DEFINES = -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=TRUE -D__DEBUG_TIME__ -DSRDY_INTERRUPT -D__DEBUG_TIME__I2C
+DEFINES = -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=TRUE -D__DEBUG_TIME__ -D__DEBUG_TIME__I2C -DSRDY_INTERRUPT
 # -D__DEBUG_TIME__HID -D__DEBUG_MUTEX__ -DNPI_HID=TRUE 
 
 #compilation Option

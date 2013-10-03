@@ -146,6 +146,8 @@ struct timeval curTime, prevTime, startTime;
 struct timeval curTime, prevTime;
 #endif //__STRESS_TEST__
 
+struct timeval curTimeSPIisrPoll, prevTimeSPIisrPoll;
+
 // -- Private functions --
 static int npi_initsyncres(void);
 static int npi_initThreads(void);
@@ -547,12 +549,6 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 		printf("SRDY Clear\n");
 #endif
 
-#ifdef __BIG_DEBUG__
-	printf("Sync Data Command ...");
-	for (i = 0 ; i < (RPC_FRAME_HDR_SZ+pMsg->len); i++ ) printf(" 0x%.2x", ((uint8*)pMsg)[i]);
-	printf("\n");
-#endif
-
 #ifdef __STRESS_TEST__
 	//	debug_
 	gettimeofday(&curTime, NULL);
@@ -584,6 +580,9 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	//Wait for SRDY Clear
 	ret = HalGpioWaitSrdyClr();
 
+	debug_printf("Sync Data Command ...");
+	for (i = 0 ; i < (RPC_FRAME_HDR_SZ+pMsg->len); i++ ) debug_printf(" 0x%.2x", ((uint8*)pMsg)[i]);
+	debug_printf("\n");
 	if (ret == NPI_LNX_SUCCESS)
 		ret = HalSpiWrite( 0, (uint8*) pMsg, (pMsg->len)+RPC_FRAME_HDR_SZ);
 
@@ -601,13 +600,23 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	//Do a Three Byte Dummy Write to read the RPC Header
 	for (i = 0 ;i < RPC_FRAME_HDR_SZ; i++ ) ((uint8*)pMsg)[i] = 0;
 	if (ret == NPI_LNX_SUCCESS)
+	{
 		ret = HalSpiWrite( 0, (uint8*) pMsg, RPC_FRAME_HDR_SZ);
-
+	}
+	debug_printf("Read %d bytes ...", RPC_FRAME_HDR_SZ);
+	for (i = 0 ; i < (RPC_FRAME_HDR_SZ); i++ ) debug_printf(" 0x%.2x", ((uint8*)pMsg)[i]);
+	debug_printf("\n");
 
 	//Do a write/read of the corresponding length
 	for (i = 0 ;i < ((uint8*)pMsg)[0]; i++ ) ((uint8*)pMsg)[i+RPC_FRAME_HDR_SZ] = 0;
 	if (ret == NPI_LNX_SUCCESS)
+	{
 		ret = HalSpiWrite( 0, pMsg->pData, ((uint8*)pMsg)[0]);
+	}
+
+	debug_printf("Read %d more bytes ...", ((uint8*)pMsg)[0]);
+	for (i = RPC_FRAME_HDR_SZ ; i < (pMsg->len); i++ ) debug_printf(" 0x%.2x", ((uint8*)pMsg)[i]);
+	debug_printf("\n");
 
 	//End of transaction
 	if (ret == NPI_LNX_SUCCESS)
@@ -1216,9 +1225,13 @@ static void npi_termpoll(void)
  */
 static void *npi_event_entry(void *ptr)
 {
+#define SPI_ISR_POLL_TIMEOUT_MS_MIN		3
+#define SPI_ISR_POLL_TIMEOUT_MS_MAX		100
 	int result = -1;
+	int missedInterrupt = FALSE;
+	int whileIt = 0;
 	int ret = NPI_LNX_SUCCESS;
-	int timeout = 2000; /* Timeout in msec. */
+	int timeout = SPI_ISR_POLL_TIMEOUT_MS_MAX; /* Timeout in msec. Drop down to 10ms if two consecutive interrupts are missed */
 	struct pollfd pollfds[1];
 	int val;
 
@@ -1227,6 +1240,7 @@ static void *npi_event_entry(void *ptr)
 	/* thread loop */
 	while (!npi_poll_terminate) {
 		{
+			whileIt++;
 			memset((void*) pollfds, 0, sizeof(pollfds));
 			pollfds[0].fd = GpioSrdyFd; /* Wait for input */
 			pollfds[0].events = POLLPRI; /* Wait for input */
@@ -1237,15 +1251,50 @@ static void *npi_event_entry(void *ptr)
 			{
 				//Should not happen by default no Timeout.
 				result = 2; //FORCE WRONG RESULT TO AVOID DEADLOCK CAUSE BY TIMEOUT
+				int bigDebugWas = __BIG_DEBUG_ACTIVE;
+				if (bigDebugWas == TRUE)
+				{
+					__BIG_DEBUG_ACTIVE = FALSE;
+				}
 				debug_printf("[INT]:poll() timeout\n");
-#ifdef __BIG_DEBUG__
+//#ifdef __BIG_DEBUG__
 				if (  NPI_LNX_FAILURE == (val = HalGpioSrdyCheck(1)))
 				{
 					ret = val;
 					npi_poll_terminate = 1;
 				}
-#endif
+				else
+				{
+					// Accept this case as a missed interrupt. We may stall if not attempting to handle asserted SRDY
+					if (!val)
+					{
+						//	debug_
+						gettimeofday(&curTime, NULL);
+						long int diffPrev;
+						int t = 0;
+						if (curTime.tv_usec >= prevTime.tv_usec)
+						{
+							diffPrev = curTime.tv_usec - prevTime.tv_usec;
+						}
+						else
+						{
+							diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+							t = 1;
+						}
+
+						prevTime = curTime;
+
+						debug_printf("[+%ld.%6ld]",
+								curTime.tv_sec - prevTime.tv_sec - t,
+								diffPrev);
+						debug_printf("%d (it #%d)\n", missedInterrupt, whileIt);
+						missedInterrupt++;
+					}
+					result = val;
+				}
+//#endif
 				debug_printf("[INT]: SRDY: %d\n", val);
+				__BIG_DEBUG_ACTIVE = bigDebugWas;
 				break;
 			}
 			case -1:
@@ -1255,11 +1304,51 @@ static void *npi_event_entry(void *ptr)
 			    ret = NPI_LNX_FAILURE;
 				// Exit clean so main knows...
 				npi_poll_terminate = 1;
+				break;
 			}
 			default:
 			{
 				char * buf[64];
 				read(pollfds[0].fd, buf, 64);
+				if (missedInterrupt)
+				{
+					//	debug_
+					gettimeofday(&curTime, NULL);
+					long int diffPrev;
+					int t = 0;
+					if (curTime.tv_usec >= prevTime.tv_usec)
+					{
+						diffPrev = curTime.tv_usec - prevTime.tv_usec;
+					}
+					else
+					{
+						diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+						t = 1;
+					}
+
+					prevTime = curTime;
+
+					debug_printf("[+%ld.%6ld]",
+							curTime.tv_sec - prevTime.tv_sec - t,
+							diffPrev);
+					if ( ( (pollfds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0 ) &&
+							( (diffPrev < 500000) || ((curTime.tv_sec - prevTime.tv_sec) > 1 )) )
+					{
+						debug_printf("Poll returned error (it #%d), revent[0] = %d\n",
+								whileIt,
+								pollfds[0].revents);
+					}
+					else
+					{
+						debug_printf("Clearing missed INT (it #%d), results = %d, revent[0] = %d\n",
+								whileIt,
+								result,
+								pollfds[0].revents);
+						missedInterrupt = 0;
+						// Set timeout back to 100ms
+						timeout = SPI_ISR_POLL_TIMEOUT_MS_MAX;
+					}
+				}
 				result = global_srdy = HalGpioSrdyCheck(1);
 				debug_printf("[INT]:Set global SRDY: %d\n", global_srdy);
 
@@ -1271,6 +1360,45 @@ static void *npi_event_entry(void *ptr)
 
 		if (FALSE == result) //Means SRDY switch to low state
 		{
+			if (gettimeofday(&curTimeSPIisrPoll, NULL) == 0)
+			// Adjust poll timeout based on time between packets, limited downwards
+			// to SPI_ISR_POLL_TIMEOUT_MS_MIN and upwards to SPI_ISR_POLL_TIMEOUT_MS_MAX
+			{
+				// Calculate delta
+				long int diffPrev;
+				int t = 0;
+				if (curTimeSPIisrPoll.tv_usec >= prevTimeSPIisrPoll.tv_usec)
+				{
+					diffPrev = curTimeSPIisrPoll.tv_usec - prevTimeSPIisrPoll.tv_usec;
+				}
+				else
+				{
+					diffPrev = (curTimeSPIisrPoll.tv_usec + 1000000) - prevTimeSPIisrPoll.tv_usec;
+					t = 1;
+				}
+				prevTimeSPIisrPoll = curTimeSPIisrPoll;
+
+				if (diffPrev < (SPI_ISR_POLL_TIMEOUT_MS_MIN / 1000) )
+				{
+					timeout = SPI_ISR_POLL_TIMEOUT_MS_MIN;
+				}
+				else if (diffPrev > (SPI_ISR_POLL_TIMEOUT_MS_MAX / 1000) )
+				{
+					timeout = SPI_ISR_POLL_TIMEOUT_MS_MAX;
+				}
+				else
+				{
+					timeout = diffPrev / 1000;
+				}
+			}
+			else
+			{
+				// Not good, can't trust time. Set timeout to its max
+				timeout = SPI_ISR_POLL_TIMEOUT_MS_MAX;
+			}
+
+
+
 			if ( (NPI_LNX_FAILURE == (ret = HalGpioMrdyCheck(1))))
 			{
 				debug_printf("[INT]:Fail to check MRDY \n");
@@ -1281,19 +1409,44 @@ static void *npi_event_entry(void *ptr)
 
 			if (ret != NPI_LNX_FAILURE)
 			{
+				if (missedInterrupt > 0)
+				{
+					// Two consecutive interrupts; turn down timeout to 5ms
+					timeout = SPI_ISR_POLL_TIMEOUT_MS_MIN;
+					//	debug_
+					gettimeofday(&curTime, NULL);
+					long int diffPrev;
+					int t = 0;
+					if (curTime.tv_usec >= prevTime.tv_usec)
+					{
+						diffPrev = curTime.tv_usec - prevTime.tv_usec;
+					}
+					else
+					{
+						diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+						t = 1;
+					}
+
+					prevTime = curTime;
+
+					debug_printf("[+%ld.%6ld]",
+							curTime.tv_sec - prevTime.tv_sec - t,
+							diffPrev);
+					debug_printf("[INT] Missed interrupt, but SRDY is asserted! %d (it #%d)\n", missedInterrupt, whileIt);
+				}
+
 				//MRDY High, This is a request from the RNP
 				debug_printf("[INT]: MRDY High??: %d \n", ret);
 				debug_printf("[INT]: send H2L to poll (srdy = %d)\n",
 						global_srdy);
 				pthread_cond_signal(&npi_srdy_H2L_poll);
 			}
-
 		} 
 		else 
 		{
-			//Unknow Event
+			//Unknown Event
 			//Do nothing for now ...
-			//debug_printf("Unknow Event or timeout, ignore it, result:%d \n",result);
+			//debug_printf("Unknown Event or timeout, ignore it, result:%d \n",result);
 		}
 
 	}

@@ -132,6 +132,8 @@ npi_tracehook_t npi_tracehook_tx = NULL;
 // State variable used to indicate that a device is open.
 static int npiOpenFlag = FALSE;
 
+static npiUartCfg_t uartCfg = {NPI_BAUDRATE};
+
 // mutex to protect write calls
 static pthread_mutex_t npi_write_mutex;
 
@@ -222,9 +224,15 @@ static void *npi_rx_entry(void *ptr);
  */
 int NPI_UART_OpenDevice(const char *portName, void *pCfg)
 {
-	// May become useful in the future, but for now it is only defined to fit
-	// in the function pointer array.
-	(void)pCfg;
+
+	if (pCfg != NULL)
+	{
+		uartCfg.speed = ((npiUartCfg_t *)pCfg)->speed;
+	}
+	else
+	{
+		uartCfg.speed = 115200;
+	}
 
 	if (npiOpenFlag)
 	{
@@ -739,7 +747,25 @@ static int npi_opentty(const char *devpath)
 	 * CLOCAL  : local connection, no modem control
 	 * CREAD   : enable receiving characters
 	 */
-	newtio.c_cflag = NPI_BAUDRATE | CS8 | CLOCAL | CREAD;
+	unsigned short int bRate = B115200;
+	switch (uartCfg.speed)
+	{
+	case 57600:
+		bRate = B57600;
+		break;
+	case 115200:
+		bRate = B115200;
+		break;
+	case 230400:
+		bRate = B230400;
+		break;
+	default:
+		bRate = B115200;
+		break;
+	}
+	debug_printf("[UART] Baud rate set to %d (0x%.6X)\n", uartCfg.speed, bRate);
+	newtio.c_cflag = bRate | CS8 | CLOCAL | CREAD;
+	debug_printf("[UART] c_cflag set to 0x%.6X\n", newtio.c_cflag);
 
 	/* IGNPAR  : ignore bytes with parity errors
 	 * ICRNL   : map CR to NL (not in use)

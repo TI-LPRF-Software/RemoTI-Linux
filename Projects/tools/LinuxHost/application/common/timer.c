@@ -80,6 +80,7 @@ static uint16 timerNumOfThreads;
 int timer_init(uint16 numOfThreads)
 {
 	timerThreadTbl = (timer_thread_s *) malloc(sizeof(timer_thread_s) * numOfThreads);
+	memset(timerThreadTbl, 0, sizeof(timer_thread_s) * numOfThreads);
 
 	timerNumOfThreads = numOfThreads;
 
@@ -89,7 +90,7 @@ int timer_init(uint16 numOfThreads)
 	if(pthread_create(&timerThreadId, NULL, timerThreadFunc, NULL))
 	{
 		// thread creation failed
-		printf("Failed to create app thread\n");
+		printf("Failed to create timer thread\n");
 		return -1;
 	}
 
@@ -358,7 +359,7 @@ static void *timerThreadFunc(void *ptr)
  *
  * @return  void
  */
-uint8 timer_start_timerEx(uint8 threadId, uint16 event, uint16 timeout)
+uint8 timer_start_timerEx(uint8 threadId, uint16 event, uint32 timeout)
 {
 	uint8 i;
 	for (i = 0; i < 16; i++)

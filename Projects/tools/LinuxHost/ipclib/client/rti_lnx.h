@@ -95,6 +95,31 @@ extern "C"
 # define RCN_FEATURE_EXTRA_PAIR_INFO              TRUE
 #endif
 
+#if RCN_FEATURE_EXTRA_PAIR_INFO
+// Discrete bit definitions for rcnNwkPairingEntry_t.profileDiscs[].
+#define RCN_PROFILE_DISC_GT8                      0  // GT8 set would imply one or more >= 8.
+#define RCN_PROFILE_DISC_ZRC                      1
+#define RCN_PROFILE_DISC_ZID                      2
+#define RCN_PROFILE_DISC_Z3D                      3
+#define RCN_PROFILE_DISC_SP4                      4
+#define RCN_PROFILE_DISC_SP5                      5
+#define RCN_PROFILE_DISC_SP6                      6
+#define RCN_PROFILE_DISC_SP7                      7
+
+#define RCN_PROFILE_DISCS_SIZE                    1  // Profile Discretes bytes allowed.
+#endif
+
+// Node capabilities bits
+#define RCN_NODE_CAP_TARGET                       0x01
+#define RCN_NODE_CAP_POWER_SOURCE                 0x02
+#define RCN_NODE_CAP_SECURITY_CAPABLE             0x04
+#define RCN_NODE_CAP_CHANNEL_NORMALIZATION_CAPABLE 0x08
+#define RCN_NODE_CAP_NUM_OF_PROFILES              0x70
+
+
+#define RCN_NIB_NWK_USER_STRING                   0x6f // nwkUserString
+
+/* Primitive Data Structures */
 
 // sub structure for application capabilities field in macro
 #define RCN_APP_CAPA_GET_USER_STRING(_capa) \
@@ -310,6 +335,7 @@ extern "C"
 
 #define DPP_DEF_KEY_TRANSFER_COUNT         36
 
+#define RTI_ZRC_KEY_REPEAT_INTERVAL                     50 // ms
 
 // RTI Configuration Interface Item Identifiers
 

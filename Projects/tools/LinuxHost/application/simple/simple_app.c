@@ -607,6 +607,18 @@ static void *appThreadFunc(void *ptr)
 				RTI_ReadItemEx(RTI_PROFILE_RTI, 0x61, 1, &macChannel); // RTI_SA_ITEM_CURRENT_CHANNEL == 0x61
 
 				printf ("Current MAC Channel %.2d\n", macChannel);
+
+//				// Get Latest Energy Samples
+//				uint8 energySamples[20] = {0};
+//
+//				RTI_ReadItemEx(RTI_PROFILE_RTI, 0x8A, sizeof(energySamples), energySamples); // RCN_NIB_ENERGY_SAMPLES == 0x8A
+//
+//				printf ("[");
+//				for (macChannel = 1; macChannel < (sizeof(energySamples)-1); macChannel++)
+//				{
+//					printf(" %d,", (91*energySamples[macChannel])/255 - 91);
+//				}
+//				printf(" %d]\n\n", (91*energySamples[sizeof(energySamples)-1])/255 - 91);
 			}
 			else if (ch != '\n')
 			{

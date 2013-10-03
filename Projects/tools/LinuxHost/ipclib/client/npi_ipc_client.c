@@ -430,6 +430,7 @@ int NPI_ClientInit(const char *devPath)
     {
         perror("connect");
         res = FALSE;
+    	printf("Not connected. res = 0x%.2X\n", res);
     }
 #endif
 
@@ -440,34 +441,43 @@ int NPI_ClientInit(const char *devPath)
 
 
 	int no = 0;
-	// allow out-of-band data
-	if (setsockopt(sNPIconnected, SOL_SOCKET, SO_OOBINLINE, &no, sizeof(int)) == -1)
-	{
-		perror("setsockopt");
-		res = FALSE;
-	}
+    if (res == TRUE)
+    {
+    	// allow out-of-band data
+    	if (setsockopt(sNPIconnected, SOL_SOCKET, SO_OOBINLINE, &no, sizeof(int)) == -1)
+    	{
+    		perror("setsockopt");
+    		res = FALSE;
+    	}
+    }
 
 	/**********************************************************************
 	 * Create thread which can read new messages from the NPI server
 	 **********************************************************************/
 
-	if (pthread_create(&NPIThreadId, NULL, npi_ipc_readThreadFunc, NULL))
-	{
-		// thread creation failed
-		printf("Failed to create NPI IPC Client read thread\n");
-		return -1;
-	}
+    if (res == TRUE)
+    {
+    	if (pthread_create(&NPIThreadId, NULL, npi_ipc_readThreadFunc, NULL))
+    	{
+    		// thread creation failed
+    		printf("Failed to create NPI IPC Client read thread\n");
+    		return -1;
+    	}
+    }
 
 	/**********************************************************************
 	 * Create thread which can handle new messages from the NPI server
 	 **********************************************************************/
 
-	if (pthread_create(&NPIThreadId, NULL, npi_ipc_handleThreadFunc, NULL))
-	{
-		// thread creation failed
-		printf("Failed to create NPI IPC Client handle thread\n");
-		return -1;
-	}
+    if (res == TRUE)
+    {
+    	if (pthread_create(&NPIThreadId, NULL, npi_ipc_handleThreadFunc, NULL))
+    	{
+    		// thread creation failed
+    		printf("Failed to create NPI IPC Client handle thread\n");
+    		return -1;
+    	}
+    }
 
     if (res == TRUE)
     {

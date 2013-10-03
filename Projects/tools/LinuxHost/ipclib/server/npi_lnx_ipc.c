@@ -716,7 +716,13 @@ int main(int argc, char ** argv)
 		case NPI_UART_FN_ARR_IDX:
 		#if (defined NPI_UART) && (NPI_UART == TRUE)
 		{
-			ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, NULL);
+			npiUartCfg_t uartCfg;
+			strBuf = pStrBufRoot;
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "UART", "speed", strBuf)))
+				uartCfg.speed = atoi(strBuf);
+			else
+				uartCfg.speed=115200;
+			ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiUartCfg_t *)&uartCfg);
 		}
 		#endif
 		break;
@@ -944,7 +950,7 @@ int main(int argc, char ** argv)
 
 #endif
 
-	// Listen, allow 4 connections in the queue
+	// Listen, allow 20 connections in the queue
 	if (listen(sNPIlisten, NPI_SERVER_CONNECTION_QUEUE_SIZE) == -1)
 	{
 		perror("listen");
@@ -1052,24 +1058,6 @@ int main(int argc, char ** argv)
 						uint8 childThread;
 						switch (npi_ipc_errno)
 						{
-						case NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT:
-						case NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT:
-						case NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT_PERFORM_RESET:
-						case NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT:
-						case NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT_PERFORM_RESET:
-							// This may be caused by an unexpected reset. Write it to the log,
-							// but keep going.
-							// Everything about the error can be found in the message, and in npi_ipc_errno:
-							childThread = ((npiMsgData_t *) npi_ipc_buf[0])->cmdId;
-							sprintf(toNpiLnxLog, "Child thread with ID %d in module %d reported error:\t%s",
-									NPI_LNX_ERROR_THREAD(childThread),
-									NPI_LNX_ERROR_MODULE(childThread),
-									(char *)(((npiMsgData_t *) npi_ipc_buf[0])->pData));
-							//							printf("%s\n", toNpiLnxLog);
-							writeToNpiLnxLog(toNpiLnxLog);
-							// Force continuation
-							ret = NPI_LNX_SUCCESS;
-							break;
 						case NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT:
 							close(c);
 							printf("Removing connection #%d\n", c);
@@ -1085,8 +1073,8 @@ int main(int argc, char ** argv)
 						case NPI_LNX_ERROR_UART_SEND_SYNCH_TIMEDOUT:
 							//This case can happen in some particular condition:
 							// if the network is in BOOT mode, it will not answer any synchronous request other than SYS_BOOT request.
-							// if we exit immedialty, we will never be able to recover the NP device.
-							// This may be replace in the futureby anupdate of the RNP behavior
+							// if we exit immediately, we will never be able to recover the NP device.
+							// This may be replace in the future by an update of the RNP behavior
 							printf("Synchronous Request Timeout...");
 							sprintf(toNpiLnxLog, "Removed connection #%d", c);
 							//							printf("%s\n", toNpiLnxLog);
@@ -1098,6 +1086,21 @@ int main(int argc, char ** argv)
 							if (npi_ipc_errno == NPI_LNX_SUCCESS)
 							{
 								// Do not report and abort if there is no real error.
+								ret = NPI_LNX_SUCCESS;
+							}
+							else if (NPI_LNX_ERROR_JUST_WARNING(npi_ipc_errno))
+							{
+								// This may be caused by an unexpected reset. Write it to the log,
+								// but keep going.
+								// Everything about the error can be found in the message, and in npi_ipc_errno:
+								childThread = ((npiMsgData_t *) npi_ipc_buf[0])->cmdId;
+								sprintf(toNpiLnxLog, "Child thread with ID %d in module %d reported error:\t%s",
+										NPI_LNX_ERROR_THREAD(childThread),
+										NPI_LNX_ERROR_MODULE(childThread),
+										(char *)(((npiMsgData_t *) npi_ipc_buf[0])->pData));
+								//							printf("%s\n", toNpiLnxLog);
+								writeToNpiLnxLog(toNpiLnxLog);
+								// Force continuation
 								ret = NPI_LNX_SUCCESS;
 							}
 							else
@@ -1121,15 +1124,34 @@ int main(int argc, char ** argv)
 						{
 							// Yes, utilize server control API to reset current device
 							// Do it by reconnecting so that threads are kept synchronized
-							npiMsgData_t npi_ipc_buf;
-							npi_ipc_buf.cmdId = NPI_LNX_CMD_ID_DISCONNECT_DEVICE;
-							npi_ServerCmdHandle(&npi_ipc_buf);
-							npi_ipc_buf.cmdId = NPI_LNX_CMD_ID_CONNECT_DEVICE;
-							npi_ServerCmdHandle(&npi_ipc_buf);
+							npiMsgData_t npi_ipc_buf_tmp;
+							int localRet = NPI_LNX_SUCCESS;
+							printf("Reset was requested, so try to disconnect device %d\n", devIdx);
+							npi_ipc_buf_tmp.cmdId = NPI_LNX_CMD_ID_DISCONNECT_DEVICE;
+							localRet = npi_ServerCmdHandle((npiMsgData_t *)&npi_ipc_buf_tmp);
+							printf("Disconnection from device %d was %s\n", devIdx, (localRet == NPI_LNX_SUCCESS) ? "successful" : "unsuccessful");
+							if (localRet == NPI_LNX_SUCCESS)
+							{
+								printf("Then try to connect device %d again\n", devIdx);
+								int bigDebugWas = __BIG_DEBUG_ACTIVE;
+								if (bigDebugWas == FALSE)
+								{
+									__BIG_DEBUG_ACTIVE = TRUE;
+									printf("__BIG_DEBUG_ACTIVE set to TRUE\n");
+								}
+								npi_ipc_buf_tmp.cmdId = NPI_LNX_CMD_ID_CONNECT_DEVICE;
+								localRet = npi_ServerCmdHandle((npiMsgData_t *)&npi_ipc_buf_tmp);
+								printf("Reconnection to device %d was %s\n", devIdx, (localRet == NPI_LNX_SUCCESS) ? "successful" : "unsuccessful");
+								if (bigDebugWas == FALSE)
+								{
+									__BIG_DEBUG_ACTIVE = FALSE;
+									printf("__BIG_DEBUG_ACTIVE set to FALSE\n");
+								}
+							}
 						}
 
 						// If this error was sent through socket; close this connection
-						if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_CMD_TYPE_MASK)  == RPC_CMD_NOTIFY_ERR)
+						if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_CMD_TYPE_MASK) == RPC_CMD_NOTIFY_ERR)
 						{
 							close(c);
 							printf("Removing connection #%d\n", c);
@@ -1306,6 +1328,14 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			if ( (errno == ENOTSOCK) || (errno == EPIPE))
 			{
 				debug_printf("[ERROR] Tried to read #%d as socket\n", connection);
+				debug_printf("Will disconnect #%d\n", connection);
+				npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT;
+				ret = NPI_LNX_FAILURE;
+			}
+			else if (errno == ECONNRESET)
+			{
+//				debug_
+				printf("[WARNING] Client disconnect while attempting to send to it\n");
 				debug_printf("Will disconnect #%d\n", connection);
 				npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT;
 				ret = NPI_LNX_FAILURE;
@@ -1665,7 +1695,7 @@ int NPI_LNX_IPC_SendData(uint8 len, int connection)
 		// Send to specific connection only
 		bytesSent = send(connection, npi_ipc_buf[1], len, MSG_NOSIGNAL);
 
-		debug_printf("...sent %d bytes to Client\n", bytesSent);
+		debug_printf("...sent %d bytes to Client #%d\n", bytesSent, connection);
 
 		if (bytesSent < 0)
 		{
@@ -1733,8 +1763,8 @@ int SerialConfigParser(FILE* serialCfgFd, const char* section,
 	resStringToFree = resString;
 	debug_printf("------------------------------------------------------\n");
 	debug_printf("Serial Config Parsing:\n");
-	debug_printf("- \tSection \t%s:\n", section);
-	debug_printf("- \tKey \t\t%s:\n", key);
+	debug_printf("- \tSection: \t%s\n", section);
+	debug_printf("- \tKey: \t\t%s\n", key);
 
 	// Do nothing if the file doesn't exist
 	if (serialCfgFd != NULL)
@@ -1937,6 +1967,8 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg)
  */
 void NPI_LNX_IPC_Exit(int ret)
 {
+	printf("... exiting\n");
+
 	// Close file for parsing
 	if (serialCfgFd != NULL)
 		fclose(serialCfgFd);
@@ -2265,8 +2297,13 @@ static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf)
 				npiSpiCfg_t spiCfg;
 				char* strBuf;
 				strBuf = (char*) malloc(128);
-				if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
-					spiCfg.speed = atoi(strBuf);
+				if (serialCfgFd != NULL)
+				{
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
+						spiCfg.speed = atoi(strBuf);
+					else
+						spiCfg.speed=500000;
+				}
 				else
 					spiCfg.speed=500000;
 				spiCfg.gpioCfg = gpioCfg;

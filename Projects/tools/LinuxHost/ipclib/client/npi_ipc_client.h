@@ -84,6 +84,7 @@ extern "C"
 
   /* AREQ from host */
   #define MT_SYS_RESET_REQ                     0x00
+  #define MT_SYS_SWITCH_MAC_REQ				   0x10
 
   /* SREQ/SRSP */
   #define MT_SYS_PING                          0x01

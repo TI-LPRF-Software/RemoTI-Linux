@@ -66,7 +66,7 @@ typedef struct
 
 extern int    timer_init			(uint16 numOfThreads);
 
-extern uint8  timer_start_timerEx	(uint8 threadId, uint16 event, uint16 timeout);
+extern uint8  timer_start_timerEx	(uint8 threadId, uint16 event, uint32 timeout);
 
 extern uint8  timer_set_event		(uint8 threadId, uint16 event);
 extern uint8  timer_clear_event		(uint8 threadId, uint16 event);

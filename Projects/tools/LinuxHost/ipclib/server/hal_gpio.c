@@ -589,7 +589,7 @@ int HalGpioMrdySet(uint8 state)
 {
 	if(state == 0)
 	{
-		debug_printf("[GPIO]MRDY set to low\n");
+		debug_printf("[GPIO] MRDY set to low\n");
 		if (ERROR == write(gpioMrdyFd, "0", 1))
 		{
 			perror(mrdyGpioCfg.gpio.value);
@@ -600,7 +600,7 @@ int HalGpioMrdySet(uint8 state)
 	}
 	else
 	{
-		debug_printf("[GPIO]MRDY set to High\n");
+		debug_printf("[GPIO] MRDY set to High\n");
     	if(ERROR == write(gpioMrdyFd, "1", 1))
 		{
 			perror(mrdyGpioCfg.gpio.value);
@@ -846,7 +846,7 @@ int HalGpioWaitSrdyClr(void)
 	char srdy= '1';
 	int ret = NPI_LNX_SUCCESS, attempts = 0;
 
-	debug_printf("[GPIO]Wait SRDY Low, \n");
+	debug_printf("[GPIO] Wait SRDY Low, \n");
 
 	struct pollfd ufds[1];
 	int pollRet;
@@ -918,7 +918,7 @@ int HalGpioWaitSrdyClr(void)
 				// Only print every 250ms
 				if ( (curTime.tv_usec > 250000 ) && (((curTime.tv_usec - limitPrints.tv_usec) % 250000) == 0) )
 				{
-					debug_printf("[0x%.2X , %c (0x%.2X)]\n", atoi(&srdy), srdy, srdy);
+					debug_printf("[0x%.2X , %c (0x%.2X)] ufds[0].revents = 0x%.4X\n", atoi(&srdy), srdy, srdy, ufds[0].revents);
 					// Start over
 					limitPrints = curTime;
 					attempts++;
@@ -954,7 +954,7 @@ int HalGpioWaitSrdyClr(void)
 	prevTime = curTime;
 	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
 	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-	time_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] SRDY: %c  (%c)\n",
+	time_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] SRDY: %c  (%d)\n",
 			hours,										// hours
 			minutes,									// minutes
 			(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
@@ -962,7 +962,7 @@ int HalGpioWaitSrdyClr(void)
 			curTime.tv_sec - prevTime.tv_sec - t,
 			diffPrev,
 			srdy,
-			srdy);
+			(int)srdy);
 #endif //(defined __DEBUG_TIME__)
 
 
