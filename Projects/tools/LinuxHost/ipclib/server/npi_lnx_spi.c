@@ -1231,7 +1231,8 @@ static void *npi_event_entry(void *ptr)
 	int missedInterrupt = FALSE;
 	int whileIt = 0;
 	int ret = NPI_LNX_SUCCESS;
-	int timeout = SPI_ISR_POLL_TIMEOUT_MS_MAX; /* Timeout in msec. Drop down to 10ms if two consecutive interrupts are missed */
+	int timeout = SPI_ISR_POLL_TIMEOUT_MS_MAX;
+	/* Timeout in msec. Drop down to SPI_ISR_POLL_TIMEOUT_MS_MIN if two consecutive interrupts are missed */
 	struct pollfd pollfds[1];
 	int val;
 
@@ -1411,7 +1412,7 @@ static void *npi_event_entry(void *ptr)
 			{
 				if (missedInterrupt > 0)
 				{
-					// Two consecutive interrupts; turn down timeout to 5ms
+					// Two consecutive interrupts; turn down timeout to SPI_ISR_POLL_TIMEOUT_MS_MIN
 					timeout = SPI_ISR_POLL_TIMEOUT_MS_MIN;
 					//	debug_
 					gettimeofday(&curTime, NULL);
