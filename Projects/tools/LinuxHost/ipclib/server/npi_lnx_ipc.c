@@ -487,7 +487,7 @@ int main(int argc, char ** argv)
 	}
 	else
 	{
-		printf(" too many Arguments)");
+		printf("Too many arguments\n");
 		print_usage(argv[0]);
 	}
 
@@ -522,6 +522,7 @@ int main(int argc, char ** argv)
 		//                            debug_
 		printf("Could not open file '%s'\n", configFilePath);
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_OPEN_REMOTI_RNP_CFG;
+		print_usage(argv[0]);
 		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
 	}
 

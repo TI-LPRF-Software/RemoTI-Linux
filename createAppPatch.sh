@@ -77,7 +77,7 @@ NEWTAG=$TAGBASE$NEWINC
 
 # Then create this tag
 git tag -a $NEWTAG -m 'Tag for application patch'
-echo $NEWTAG 'Tag for '$1' application patch'
+echo $NEWTAG 'Tag for '$1' '$2' '$3' application patch'
 
 # Now share this tag
 git push origin tags/$NEWTAG
@@ -124,6 +124,7 @@ for i in "$@"; do
 	echo "cd RemoTI-Linux" >> "install_"$i"_"$NEWTAG".sh"
 	echo "git checkout tags/"$NEWTAG >> "install_"$i"_"$NEWTAG".sh"
 # Then untar the patch into RemoTI-Linux
+	echo "echo Applying patch to checked out RemoTI-Linux tag" >> "install_"$i"_"$NEWTAG".sh"
 	echo "tar -xf ../"$i"_"$NEWTAG".tar" >> "install_"$i"_"$NEWTAG".sh"
 	echo "cd .." >> "install_"$i"_"$NEWTAG".sh"
 	echo "echo Installation Complete!" >> "install_"$i"_"$NEWTAG".sh"

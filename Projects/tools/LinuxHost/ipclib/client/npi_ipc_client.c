@@ -562,9 +562,9 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
 		areqMsg *searchList = npi_ipc_areq_proc_buf, *clearList;
 		while (searchList != NULL)
 		{
-			debug_verbose_printf("\n\n[CLIENT HANDLE][DBG] Processing \t@ 0x%.16X next \t@ 0x%.16X\n",
-					(unsigned int)searchList,
-					(unsigned int)(searchList->nextMessage));
+			debug_verbose_printf("\n\n[CLIENT HANDLE][DBG] Processing \t@ %p next \t@ %p\n",
+					(void *)searchList,
+					(void *)(searchList->nextMessage));
 
 			// Must remove command type before calling NPI_AsynchMsgCback
 			searchList->message.subSys &= ~(RPC_CMD_TYPE_MASK);
@@ -573,7 +573,7 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
 
 			NPI_AsynchMsgCback((npiMsgData_t *)&(searchList->message));
 
-			debug_verbose_printf("[CLIENT HANDLE][MUTEX] AREQ (Handle) (message @ 0x%.16X)...\n", (unsigned int)searchList);
+			debug_verbose_printf("[CLIENT HANDLE][MUTEX] AREQ (Handle) (message @ %p)...\n", (void *)searchList);
 
 			clearList = searchList;
 			// Set search list to next message
@@ -589,8 +589,8 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
 			else
 			{
 				messageCount--;
-				debug_verbose_printf("[CLIENT HANDLE][DBG] Clearing \t\t@ 0x%.16X (processed %d messages)...\n",
-						(unsigned int)clearList,
+				debug_verbose_printf("[CLIENT HANDLE][DBG] Clearing \t\t@ %p (processed %d messages)...\n",
+						(void *)clearList,
 						messageCount);
 				memset(clearList, 0, sizeof(areqMsg));
 				free(clearList);
@@ -754,12 +754,12 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 							{
 								messageCount++;
 								memset(newMessage, 0, sizeof(areqMsg));
-								debug_verbose_printf("\n[CLIENT READ][DBG] Allocated \t@ 0x%.16X (received\040 %d messages)...\n",
-										(unsigned int)newMessage,
+								debug_verbose_printf("\n[CLIENT READ][DBG] Allocated \t@ %p (received\040 %d messages)...\n",
+										(void *)newMessage,
 										messageCount);
 							}
 
-							debug_verbose_printf("[CLIENT READ] Filling new message (@ 0x%.16X)...\n", (unsigned int)newMessage);
+							debug_verbose_printf("[CLIENT READ] Filling new message (@ %p)...\n", (void *)newMessage);
 
 							// Copy AREQ message into AREQ buffer
 							memcpy(&(newMessage->message),

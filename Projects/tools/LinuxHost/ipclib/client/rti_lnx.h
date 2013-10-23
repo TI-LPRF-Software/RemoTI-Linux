@@ -83,8 +83,6 @@ extern "C"
 #define RCN_USER_STRING_LENGTH                    15
 #define RCN_SEC_KEY_SEED_LENGTH                   80
 
-#define RCN_NODE_CAP_TARGET						  1
-
 #ifndef RCN_FEATURE_SECURITY
 # define RCN_FEATURE_SECURITY                     TRUE
 #endif
