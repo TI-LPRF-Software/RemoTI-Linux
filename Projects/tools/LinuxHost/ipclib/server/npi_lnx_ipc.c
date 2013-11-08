@@ -501,18 +501,18 @@ int main(int argc, char ** argv)
 	memset(devPath, 0, 128);
 	memset(logPath, 0, 128);
 	gpioCfg = (halGpioCfg_t**) malloc(3 * sizeof(halGpioCfg_t*));
-	debug_printf("gpioCfg \t\t\t\t@0x%.8X\n",
-			(unsigned int)&(gpioCfg));
+	debug_printf("gpioCfg \t\t\t\t%p\n",
+			(void *)&(gpioCfg));
 	for (gpioIdx = 0; gpioIdx < 3; gpioIdx++)
 	{
 		gpioCfg[gpioIdx] = (halGpioCfg_t*) malloc(sizeof(halGpioCfg_t));
 		memset(gpioCfg[gpioIdx], 0, sizeof(halGpioCfg_t));
-		debug_printf("gpioCfg[%d] \t\t\t\t@0x%.8X\n",
-				gpioIdx, (unsigned int)&(gpioCfg[gpioIdx]));
-		debug_printf("gpioCfg[%d].gpio \t\t\t@0x%.8X\n",
-				gpioIdx, (unsigned int)&(gpioCfg[gpioIdx]->gpio));
-		debug_printf("gpioCfg[%d].levelshifter \t\t@0x%.8X\n",
-				gpioIdx, (unsigned int)&(gpioCfg[gpioIdx]->levelshifter));
+		debug_printf("gpioCfg[%d] \t\t\t\t%p\n",
+				gpioIdx, (void *)&(gpioCfg[gpioIdx]));
+		debug_printf("gpioCfg[%d].gpio \t\t\t%p\n",
+				gpioIdx, (void *)&(gpioCfg[gpioIdx]->gpio));
+		debug_printf("gpioCfg[%d].levelshifter \t\t%p\n",
+				gpioIdx, (void *)&(gpioCfg[gpioIdx]->levelshifter));
 	}
 
 	// Open file for parsing
@@ -576,8 +576,8 @@ int main(int argc, char ** argv)
 	{
 		for (gpioIdx = 0; gpioIdx < 3; gpioIdx++) {
 			// Get SRDY, MRDY or RESET GPIO
-			debug_printf("gpioCfg[gpioIdx]->gpio \t\t\t@ 0x%.8X\n",
-					(unsigned int)&(gpioCfg[gpioIdx]->gpio));
+			debug_printf("gpioCfg[gpioIdx]->gpio \t\t\t%p\n",
+					(void *)&(gpioCfg[gpioIdx]->gpio));
 
 			// Get SRDY, MRDY or RESET GPIO value
 			strBuf = pStrBufRoot;
@@ -585,10 +585,10 @@ int main(int argc, char ** argv)
 					"value", strBuf)))
 			{
 			// Copy from buffer to variable
-				debug_printf("strBuf \t\t\t\t\t@ 0x%.8X\n",
-						(unsigned int)&strBuf);
-				debug_printf("gpioCfg[gpioIdx]->gpio.value \t\t@ 0x%.8X\n",
-						(unsigned int)&(gpioCfg[gpioIdx]->gpio.value));
+				debug_printf("strBuf \t\t\t\t\t%p\n",
+						(void *)&strBuf);
+				debug_printf("gpioCfg[gpioIdx]->gpio.value \t\t%p\n",
+						(void *)&(gpioCfg[gpioIdx]->gpio.value));
 				memcpy(gpioCfg[gpioIdx]->gpio.value, strBuf, strlen(strBuf));
 				debug_printf("gpioCfg[%i]->gpio.value = '%s'\n",
 						gpioIdx, gpioCfg[gpioIdx]->gpio.value);
@@ -606,10 +606,10 @@ int main(int argc, char ** argv)
 					"direction", strBuf)))
 			{
 			// Copy from buffer to variable
-				debug_printf("strBuf \t\t\t\t\t@ 0x%.8X\n",
-						(unsigned int)&strBuf);
-				debug_printf("gpioCfg[gpioIdx]->gpio.direction \t@ 0x%.8X\n",
-						(unsigned int)&(gpioCfg[gpioIdx]->gpio.direction));
+				debug_printf("strBuf \t\t\t\t\t%p\n",
+						(void *)&strBuf);
+				debug_printf("gpioCfg[gpioIdx]->gpio.direction \t%p\n",
+						(void *)&(gpioCfg[gpioIdx]->gpio.direction));
 				memcpy(gpioCfg[gpioIdx]->gpio.direction, strBuf,
 						strlen(strBuf));
 				debug_printf("gpioCfg[%i]->gpio.direction = '%s'\n",
@@ -631,10 +631,10 @@ int main(int argc, char ** argv)
 						"edge", strBuf)))
 				{
 					// Copy from buffer to variable
-					debug_printf("strBuf \t\t\t\t\t@ 0x%.8X\n",
-							(unsigned int)&strBuf);
-					debug_printf("gpioCfg[gpioIdx]->gpio.edge \t@ 0x%.8X\n",
-							(unsigned int)&(gpioCfg[gpioIdx]->gpio.edge));
+					debug_printf("strBuf \t\t\t\t\t%p\n",
+							(void *)&strBuf);
+					debug_printf("gpioCfg[gpioIdx]->gpio.edge \t%p\n",
+							(void *)&(gpioCfg[gpioIdx]->gpio.edge));
 					memcpy(gpioCfg[gpioIdx]->gpio.edge, strBuf, strlen(strBuf));
 					debug_printf("gpioCfg[%i]->gpio.edge = '%s'\n",
 							gpioIdx, gpioCfg[gpioIdx]->gpio.edge);
@@ -661,8 +661,8 @@ int main(int argc, char ** argv)
 				printf("[CONFIG] Warning , key 'active_high_low' is missing for optionnal GPIO %s\n", sectionNamesArray[gpioIdx][0]);
 
 			// Get SRDY, MRDY or RESET Level Shifter
-			debug_printf("gpioCfg[gpioIdx]->levelshifter \t\t\t@ 0x%.8X\n",
-					(unsigned int)&(gpioCfg[gpioIdx]->levelshifter));
+			debug_printf("gpioCfg[gpioIdx]->levelshifter \t\t\t%p\n",
+					(void *)&(gpioCfg[gpioIdx]->levelshifter));
 
 			// Get SRDY, MRDY or RESET Level Shifter value
 			strBuf = pStrBufRoot;
@@ -1968,7 +1968,7 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg)
  */
 void NPI_LNX_IPC_Exit(int ret)
 {
-	printf("... exiting\n");
+	printf("... freeing memory (ret %d)\n", ret);
 
 	// Close file for parsing
 	if (serialCfgFd != NULL)

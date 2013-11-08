@@ -49,7 +49,6 @@
 #include <string.h>
 #include <pthread.h>
 #include <errno.h>
-
 #include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -141,7 +140,8 @@ static pthread_mutex_t  npiSrdyLock;
 extern struct timeval curTime, startTime;
 struct timeval prevTimeI2C;
 #elif (defined __DEBUG_TIME__)
-struct timeval curTime, prevTime, startTime;
+struct timeval curTime, prevTime;
+extern struct timeval startTime;
 #else
 struct timeval curTime, prevTime;
 #endif //__STRESS_TEST__
@@ -170,9 +170,9 @@ static int npi_initThreads(void);
  * None.
  ******************************************************************************
  */
-int PollLockVarError(void)
+int PollLockVarError(int originator)
 {
-    printf("PollLock Var ERROR, it is %d, it should be %d", PollLockVar, !PollLockVar);
+    printf("PollLock Var ERROR, it is %d, it should be %d. Called by 0x%.8X\n", PollLockVar, !PollLockVar, originator);
     npi_ipc_errno = NPI_LNX_ERROR_SPI_POLL_LOCK_VAR_ERROR;
     return NPI_LNX_FAILURE;
 }
@@ -200,62 +200,63 @@ int PollLockVarError(void)
  */
 int NPI_SPI_OpenDevice(const char *portName, void *pCfg)
 {
-	int ret = NPI_LNX_SUCCESS;
+	int ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_OPEN_DEVICE;
 
-  if(npiOpenFlag)
-  {
-	  npi_ipc_errno = NPI_LNX_ERROR_SPI_OPEN_ALREADY_OPEN;
-	  return NPI_LNX_FAILURE;
-  }
+	if(npiOpenFlag)
+	{
+		npi_ipc_errno = NPI_LNX_ERROR_SPI_OPEN_ALREADY_OPEN;
+		return NPI_LNX_FAILURE;
+	}
 
-#ifdef __DEBUG_TIME__
-  gettimeofday(&startTime, NULL);
-#endif //__DEBUG_TIME__
+	npiOpenFlag = TRUE;
 
-  npiOpenFlag = TRUE;
+	debug_printf("Opening Device File: %s\n", portName);
 
-  debug_printf("Opening Device File: %s\n", portName);
+	ret = HalSpiInit(portName, ((npiSpiCfg_t*)pCfg)->speed);
+	if (ret != NPI_LNX_SUCCESS)
+		return ret;
 
-  ret = HalSpiInit(portName, ((npiSpiCfg_t*)pCfg)->speed);
-  if (ret != NPI_LNX_SUCCESS)
+	debug_printf("((npiSpiCfg_t *)pCfg)->gpioCfg[0] \t @%p\n",
+			(void *)&(((npiSpiCfg_t *)pCfg)->gpioCfg[0]));
+
+	if ( NPI_LNX_FAILURE == (GpioSrdyFd = HalGpioSrdyInit(((npiSpiCfg_t *)pCfg)->gpioCfg[0])))
+		return GpioSrdyFd;
+	if ( NPI_LNX_FAILURE == (ret = HalGpioMrdyInit(((npiSpiCfg_t *)pCfg)->gpioCfg[1])))
+		return ret;
+	if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit(((npiSpiCfg_t *)pCfg)->gpioCfg[2])))
+		return ret;
+
+	// initialize thread synchronization resources
+	if ( NPI_LNX_FAILURE == (ret = npi_initsyncres()))
+		return ret;
+
+
+	//Polling forbid until the Reset and Sync is done
+	debug_printf("LOCK POLL WHILE INIT\n");
+	pthread_mutex_lock(&npiPollLock);
+	if (PollLockVar)
+	{
+		ret = PollLockVarError(funcID++);
+	}
+	else
+	{
+		PollLockVar = 1;
+		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+	}
+
+	debug_printf("PollLockVar = %d\n", PollLockVar);
+
+	// TODO: it is ideal to make this thread higher priority
+	// but Linux does not allow real time of FIFO scheduling policy for
+	// non-privileged threads.
+
+	if (ret == NPI_LNX_SUCCESS)
+		// create Polling thread
+		ret = npi_initThreads();
+	else
+		debug_printf("Did not attempt to start Threads\n");
+
 	return ret;
-
-  debug_printf("((npiSpiCfg_t *)pCfg)->gpioCfg[0] \t @0x%.8X\n",
-		  (unsigned int)&(((npiSpiCfg_t *)pCfg)->gpioCfg[0]));
-
-  if ( NPI_LNX_FAILURE == (GpioSrdyFd = HalGpioSrdyInit(((npiSpiCfg_t *)pCfg)->gpioCfg[0])))
-	return GpioSrdyFd;
-  if ( NPI_LNX_FAILURE == (ret = HalGpioMrdyInit(((npiSpiCfg_t *)pCfg)->gpioCfg[1])))
-	return ret;
-  if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit(((npiSpiCfg_t *)pCfg)->gpioCfg[2])))
-	return ret;
-
-  // initialize thread synchronization resources
-  if ( NPI_LNX_FAILURE == (ret = npi_initsyncres()))
-	return ret;
-
-
-  //Polling forbid until the Reset and Sync is done
-  debug_printf("LOCK POLL WHILE INIT\n");
-  pthread_mutex_lock(&npiPollLock);
-  if (PollLockVar)
-	  ret = PollLockVarError();
-  else
-	  PollLockVar = 1;
-
-  debug_printf("PollLockVar = %d\n", PollLockVar);
-
-  // TODO: it is ideal to make this thread higher priority
-  // but Linux does not allow real time of FIFO scheduling policy for
-  // non-privileged threads.
-
-  if (ret == NPI_LNX_SUCCESS)
-	  // create Polling thread
-	  ret = npi_initThreads();
-  else
-	  debug_printf("Did not attempt to start Threads\n");
-
-  return ret;
 }
 
 
@@ -305,7 +306,7 @@ void NPI_SPI_CloseDevice(void)
  */
 int NPI_SPI_SendAsynchData( npiMsgData_t *pMsg )
 {
-	int ret = NPI_LNX_SUCCESS;
+	int ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_SEND_ASYNCH;
 	debug_printf("Sync Lock SRDY ...");
 	fflush(stdout);
 	//Lock the polling until the command is send
@@ -314,9 +315,14 @@ int NPI_SPI_SendAsynchData( npiMsgData_t *pMsg )
 	pthread_mutex_lock(&npiSrdyLock);
 #endif
 	if (PollLockVar)
-		ret = PollLockVarError();
+	{
+		ret = PollLockVarError(funcID++);
+	}
 	else
+	{
 		PollLockVar = 1;
+		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+	}
 	debug_printf("(Sync) success \n");
 
 	debug_printf("\n******************** START SEND ASYNC DATA ********************\n");
@@ -341,9 +347,14 @@ int NPI_SPI_SendAsynchData( npiMsgData_t *pMsg )
 		(void)HAL_RNP_MRDY_SET();
 
 	if (!PollLockVar)
-		ret = PollLockVarError();
+	{
+		ret = PollLockVarError(funcID++);
+	}
 	else
+	{
 		PollLockVar = 0;
+		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+	}
 	pthread_mutex_unlock(&npiPollLock);
 #ifdef SRDY_INTERRUPT
 	pthread_mutex_unlock(&npiSrdyLock);
@@ -515,7 +526,7 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
  */
 int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 {
-	int i, ret = NPI_LNX_SUCCESS;
+	int i, ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_SEND_SYNCH;
 	// Do not attempt to send until polling is finished
 
 	int lockRet = 0;
@@ -527,9 +538,14 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	pthread_mutex_lock(&npiSrdyLock);
 #endif
 	if (PollLockVar)
-		ret = PollLockVarError();
+	{
+		ret = PollLockVarError(funcID++);
+	}
 	else
+	{
 		PollLockVar = 1;
+		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+	}
 	debug_printf("(Sync) success \n");
 	debug_printf("==================== START SEND SYNC DATA ====================\n");
 	if (lockRet != 0)
@@ -643,9 +659,14 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 
     debug_printf("\n==================== END SEND SYNC DATA ====================\n");
 	if (!PollLockVar)
-		ret = PollLockVarError();
+	{
+		ret = PollLockVarError(funcID++);
+	}
 	else
+	{
 		PollLockVar = 0;
+		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+	}
 	pthread_mutex_unlock(&npiPollLock);
 #ifdef SRDY_INTERRUPT
     pthread_mutex_unlock(&npiSrdyLock);
@@ -787,12 +808,23 @@ static int npi_initThreads(void)
  */
 int NPI_SPI_SynchSlave( void )
 {
-	int ret = NPI_LNX_SUCCESS;
+	int ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_SYNCH_SLAVE;
    printf("\n\n-------------------- START GPIO HANDSHAKE -------------------\n");
 
 #ifdef SRDY_INTERRUPT
 	pthread_mutex_lock(&npiSrdyLock);
 #endif
+
+	pthread_mutex_lock(&npiPollLock);
+	if (PollLockVar)
+	{
+		ret = PollLockVarError(funcID);
+	}
+	else
+	{
+		PollLockVar = 1;
+		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+	}
 
 #ifdef __DEBUG_TIME__
 	gettimeofday(&curTime, NULL);
@@ -909,12 +941,17 @@ int NPI_SPI_SynchSlave( void )
 		ret = HalGpioSrdyCheck(1);
 
   if (!PollLockVar)
-	  ret = PollLockVarError();
+  {
+	  ret = PollLockVarError(funcID++);
+  }
   else
+  {
 	  PollLockVar = 0;
+	  debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+  }
 
+  printf("Handshake unLock Poll ...");
   pthread_mutex_unlock(&npiPollLock);
-	printf("Handshake unLock Poll ...");
   printf("(Handshake) success \n");
 #ifdef SRDY_INTERRUPT
 	pthread_mutex_unlock(&npiSrdyLock);
@@ -1001,9 +1038,9 @@ static int npi_initsyncres(void)
  */
 static void *npi_poll_entry(void *ptr)
 {
-	int ret = NPI_LNX_SUCCESS;
+	int ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_POLL_ENTRY;
 	uint8 readbuf[128];
-	uint8 pollStatus = FALSE;
+//	uint8 pollStatus = FALSE;
 
 	printf("POLL: Locking Mutex for Poll Thread \n");
 
@@ -1033,9 +1070,14 @@ static void *npi_poll_entry(void *ptr)
 		pthread_mutex_lock(&npiPollLock);
 #endif
 		if (PollLockVar)
-			ret = PollLockVarError();
+		{
+			ret = PollLockVarError(funcID+1);
+		}
 		else
+		{
 			PollLockVar = 1;
+			debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+		}
 
 		debug_printf("(Poll) success \n");
 		//Ready SRDY Status
@@ -1086,13 +1128,18 @@ static void *npi_poll_entry(void *ptr)
 			}
 
 			if (!PollLockVar)
-				ret = PollLockVarError();
+			{
+				ret = PollLockVarError(funcID+2);
+			}
 			else
+			{
 				PollLockVar = 0;
+				debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+			}
 
 			if ( 0 == pthread_mutex_unlock(&npiPollLock))
 			{
-				pollStatus = TRUE;
+//				pollStatus = TRUE;
 				debug_printf("Poll unLock SRDY ...\n");
 			}
 			else
@@ -1106,9 +1153,14 @@ static void *npi_poll_entry(void *ptr)
 		else
 		{
 			if (!PollLockVar)
-				ret = PollLockVarError();
+			{
+				ret = PollLockVarError(funcID+3);
+			}
 			else
+			{
 				PollLockVar = 0;
+				debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+			}
 
 			if ( 0 == pthread_mutex_unlock(&npiPollLock))
 			{
@@ -1121,7 +1173,7 @@ static void *npi_poll_entry(void *ptr)
 			    ret = NPI_LNX_FAILURE;
 				npi_poll_terminate = 1;
 			}
-			pollStatus = FALSE;
+//			pollStatus = FALSE;
 		}
 
 
@@ -1367,7 +1419,6 @@ static void *npi_event_entry(void *ptr)
 			{
 				// Calculate delta
 				long int diffPrev;
-				int t = 0;
 				if (curTimeSPIisrPoll.tv_usec >= prevTimeSPIisrPoll.tv_usec)
 				{
 					diffPrev = curTimeSPIisrPoll.tv_usec - prevTimeSPIisrPoll.tv_usec;
@@ -1375,7 +1426,6 @@ static void *npi_event_entry(void *ptr)
 				else
 				{
 					diffPrev = (curTimeSPIisrPoll.tv_usec + 1000000) - prevTimeSPIisrPoll.tv_usec;
-					t = 1;
 				}
 				prevTimeSPIisrPoll = curTimeSPIisrPoll;
 
@@ -1449,6 +1499,11 @@ static void *npi_event_entry(void *ptr)
 			//Do nothing for now ...
 			//debug_printf("Unknown Event or timeout, ignore it, result:%d \n",result);
 		}
+
+		// Make sure we don't go back to polling for interrupt until end of
+		// synch data transmission, or poll message transmission.
+		pthread_mutex_lock(&npiPollLock);
+		pthread_mutex_unlock(&npiPollLock);
 
 	}
 

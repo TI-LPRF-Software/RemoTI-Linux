@@ -352,7 +352,7 @@ extern "C"
 #define RTI_SA_ITEM_USER_STRING                          0x6F	// RCN_NIB_NWK_USER_STRING
 #define RTI_SA_ITEM_PAN_ID                               0x85	// RCN_NIB_PAN_ID
 #define RTI_SA_ITEM_SHORT_ADDRESS                        0x86	// RCN_NIB_SHORT_ADDRESS
-#define RTI_SA_ITEM_AGILITY_ENABLE                       RCN_NIB_AGILITY_ENABLE              // 0x87
+#define RTI_SA_ITEM_AGILITY_ENABLE                       0x87	// RCN_NIB_AGILITY_ENABLE
 #define RTI_SA_ITEM_TRANSMIT_POWER                       RCN_NIB_TRANSMIT_POWER              // 0x88
 
 // Configuration Parameters (CP) Table Item Identifiers

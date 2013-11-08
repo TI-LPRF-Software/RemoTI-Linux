@@ -53,7 +53,7 @@ fi
 # Check if the applications are valid
 for i in "$@"; do 
 	if [ ! -d $APP_DIR"/"$i ]; then
-		echo $1 "does not exist, cannot create patch"
+		echo $i "does not exist, cannot create patch"
 		exit
 	fi
 done

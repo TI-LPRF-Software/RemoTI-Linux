@@ -1,5 +1,5 @@
    /**************************************************************************************************
-  Filename:       mso_app.h
+  Filename:       common_app.h
   Revised:        $Date: 2012-03-21 17:37:33 -0700 (Wed, 21 Mar 2012) $
   Revision:       $Revision: 246 $
 
@@ -70,7 +70,6 @@ extern "C" {
 // and waited on (decremented) by app
 extern sem_t event_mutex;
 extern sem_t exit_mutex;
-
 
 #if defined _MSC_VER || defined(unix)
 #pragma pack()

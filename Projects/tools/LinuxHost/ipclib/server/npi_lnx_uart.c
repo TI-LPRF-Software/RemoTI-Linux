@@ -79,7 +79,8 @@
 #define time_printf(fmt, ...) st (if ( (__BIG_DEBUG_ACTIVE == TRUE) && (__DEBUG_TIME_ACTIVE == TRUE)) printf( fmt, ##__VA_ARGS__);)
 
 #if (defined __DEBUG_TIME__)
-struct timeval curTime, startTime, prevTimeSend, prevTimeRec, targetDelayTime;
+struct timeval curTime, targetDelayTime;
+extern struct timeval startTime, prevTimeSend, prevTimeRec;
 #endif //__DEBUG_TIME__
 
 // -- Constants --
@@ -281,10 +282,6 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
 
 
 	// create UART receive thread
-
-#if (defined __DEBUG_TIME__)
-	gettimeofday(&startTime, NULL);
-#endif // (defined __DEBUG_TIME__)
 
 	// TODO: it is ideal to make this thread higher priority
 	// but linux does not allow realtime of FIFO scheduling policy for

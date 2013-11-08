@@ -75,6 +75,19 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg);
 // Reserved error code. This must not be used as it is a valid return value.
 #define NPI_LNX_ERROR_RESERVED										0x00000001
 
+/* Following defines can be used to identify a function within a module. These
+ * function IDs have names that are used by several modules within the driver.
+ * Use 16 LSBs to indicate position within function.
+ */
+#define NPI_LNX_ERROR_FUNC_ID_OPEN_DEVICE							0x00010000
+#define NPI_LNX_ERROR_FUNC_ID_CLOSE_DEVICE							0x00020000
+#define NPI_LNX_ERROR_FUNC_ID_SEND_ASYNCH							0x00030000
+#define NPI_LNX_ERROR_FUNC_ID_SEND_SYNCH							0x00040000
+#define NPI_LNX_ERROR_FUNC_ID_RESET_SLAVE							0x00050000
+#define NPI_LNX_ERROR_FUNC_ID_SYNCH_SLAVE							0x00060000
+#define NPI_LNX_ERROR_FUNC_ID_POLL_DATA								0x00070000
+#define NPI_LNX_ERROR_FUNC_ID_POLL_ENTRY							0x00080000
+
 #define RESET_REQUESTED												0x00000080
 #define NPI_LNX_ERROR_RESET_REQUESTED(x)							((x & RESET_REQUESTED) == RESET_REQUESTED)
 #define JUST_WARNING												0x00000040
