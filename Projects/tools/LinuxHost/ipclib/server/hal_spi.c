@@ -90,7 +90,8 @@
 static int spiDevFd;
 
 #if (defined __DEBUG_TIME__)
-struct timeval curTime, prevTime, startTime;
+struct timeval curTime, prevTime;
+extern struct timeval startTime;
 #endif //__STRESS_TEST__
 
 static uint8 bits = 8;
@@ -126,13 +127,13 @@ void HalSpiFlush(uint8 port, uint8 len)
  *
  * @return  None
  **************************************************************************************************/
-int HalSpiInit(const char *devpath, uint32 speedIn)
+int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
 {
   /* open the device */
   int ret;
-  uint8_t mode=0;
-  uint8_t bits = 8;
-  speed = speedIn;
+  uint8_t mode = halSpiCfg->mode;
+  uint8_t bits = halSpiCfg->bitsPerWord;
+  speed = halSpiCfg->speed;
 
 #ifdef __BIG_DEBUG__
   printf("Opening %s ...\n",devpath);

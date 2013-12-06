@@ -75,7 +75,7 @@
  **************************************************************************************************/
 
 #ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
+#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__); fflush(stdout);
 #else
 #define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
 #endif
@@ -102,8 +102,8 @@ static halGpioCfg_t resetGpioCfg;
 extern struct timeval curTime, startTime;
 extern struct timeval prevTimeI2C;
 #elif defined __DEBUG_TIME__
-struct timeval curTime, startTime;
-struct timeval prevTime;
+struct timeval curTime, prevTime;
+extern struct timeval startTime;
 #endif //__DEBUG_TIME__
 
 /**************************************************************************************************
@@ -176,12 +176,10 @@ int HalGpioSrdyInit(halGpioCfg_t *gpioCfg)
 
 	srdyGpioCfg.gpio.active_high_low = gpioCfg->gpio.active_high_low;
 
-#ifdef SRDY_INTERRUPT
 	memcpy(srdyGpioCfg.gpio.edge,
 			gpioCfg->gpio.edge,
 			strlen(gpioCfg->gpio.edge));
 	debug_printf("[GPIO]srdyGpioCfg.gpio.edge = '%s'\n", srdyGpioCfg.gpio.edge);
-#endif
 
 	if ( ( gpioCfg->levelshifter.value) &&
 		 ( gpioCfg->levelshifter.active_high_low) &&
@@ -272,7 +270,6 @@ int HalGpioSrdyInit(halGpioCfg_t *gpioCfg)
 	//close SRDY DIR file
 	close(gpioSrdyFd);
 
-#ifdef SRDY_INTERRUPT
 	//open the SRDY GPIO Edge file
 	gpioSrdyFd = open(srdyGpioCfg.gpio.edge, O_RDWR);
 	if(gpioSrdyFd == 0)
@@ -293,7 +290,6 @@ int HalGpioSrdyInit(halGpioCfg_t *gpioCfg)
 	}
 	//close SRDY edge file
 	close(gpioSrdyFd);
-#endif
 
 	//open the SRDY GPIO VALUE file so it can be written to using the file handle later
 	gpioSrdyFd = open(srdyGpioCfg.gpio.value, O_RDWR| O_NONBLOCK);
@@ -589,7 +585,7 @@ int HalGpioMrdySet(uint8 state)
 {
 	if(state == 0)
 	{
-		debug_printf("[GPIO] MRDY set to low\n");
+		debug_printf("[%u][GPIO] MRDY set to low\n", (unsigned int) pthread_self());
 		if (ERROR == write(gpioMrdyFd, "0", 1))
 		{
 			perror(mrdyGpioCfg.gpio.value);
@@ -600,7 +596,7 @@ int HalGpioMrdySet(uint8 state)
 	}
 	else
 	{
-		debug_printf("[GPIO] MRDY set to High\n");
+		debug_printf("[%u][GPIO] MRDY set to High\n", (unsigned int) pthread_self());
     	if(ERROR == write(gpioMrdyFd, "1", 1))
 		{
 			perror(mrdyGpioCfg.gpio.value);
@@ -635,7 +631,7 @@ int HalGpioMrdyCheck(uint8 state)
 		return NPI_LNX_FAILURE;
 	}
 
-	debug_printf("[GPIO]===>check MRDY: %c  (%c) \n", mrdy, mrdy);
+	debug_printf("[%u][GPIO]===>check MRDY: %c  (%c) \n", (unsigned int) pthread_self(), mrdy, mrdy);
 
 	return (state == ((mrdy == '1') ? 1 : 0));
 }
@@ -654,7 +650,7 @@ int HalGpioResetSet(uint8 state)
 {
 	if(state == 0)
 	{
-		debug_printf("[GPIO]RESET set to low\n");
+		debug_printf("[%u][GPIO]RESET set to low\n", (unsigned int) pthread_self());
 		if (ERROR == write(gpioResetFd, "0", 1))
 		{
 			perror(resetGpioCfg.gpio.value);
@@ -665,7 +661,7 @@ int HalGpioResetSet(uint8 state)
 	}
 	else
 	{
-		debug_printf("[GPIO]RESET set to High\n");
+		debug_printf("[%u][GPIO]RESET set to High\n", (unsigned int) pthread_self());
     	if(ERROR == write(gpioResetFd, "1", 1))
 		{
 			perror(resetGpioCfg.gpio.value);
@@ -750,7 +746,7 @@ int HalGpioReset(void)
 			curTime.tv_sec - prevTime.tv_sec - t,
 			diffPrev);
 #endif //(defined __DEBUG_TIME__)
-	debug_printf("[GPIO]Reset low\n");
+	debug_printf("[%u][GPIO]Reset low\n", (unsigned int) pthread_self());
 	if(ERROR == write(gpioResetFd, "0", 1))
 	{
 		perror(resetGpioCfg.gpio.value);
@@ -787,7 +783,7 @@ int HalGpioReset(void)
 			curTime.tv_sec - prevTime.tv_sec - t,
 			diffPrev);
 #endif //(defined __DEBUG_TIME__)
-	debug_printf("[GPIO]Reset High\n");
+	debug_printf("[%u][GPIO]Reset High\n", (unsigned int) pthread_self());
 	if(ERROR == write(gpioResetFd, "1", 1))
 	{
 		perror(resetGpioCfg.gpio.value);
@@ -820,7 +816,7 @@ int HalGpioSrdyCheck(uint8 state)
 		return NPI_LNX_FAILURE;
 	}
 
-	debug_printf("[GPIO]===>check SRDY: %c [%d]  (%c) \n", srdy, srdy, atoi(&srdy));
+	debug_printf("[%u][GPIO]===>check SRDY: %c [%d]  (%c) \n", (unsigned int) pthread_self(), srdy, srdy, atoi(&srdy));
 
 	return (state == ((srdy == '1') ? 1 : 0));
 }
@@ -844,15 +840,14 @@ int HalGpioSrdyCheck(uint8 state)
 int HalGpioWaitSrdyClr(void)
 {
 	char srdy= '1';
-	int ret = NPI_LNX_SUCCESS, attempts = 0;
+	int ret = NPI_LNX_SUCCESS, attempts = 0, accTimeout = 0;
 
-	debug_printf("[GPIO] Wait SRDY Low, \n");
+	debug_printf("[%u][GPIO] Wait SRDY Low, \n", (unsigned int) pthread_self());
 
 	struct pollfd ufds[1];
 	int pollRet;
 	ufds[0].fd = gpioSrdyFd;
-	ufds[0].events = POLLIN | POLLPRI;
-//	ufds[0].events = POLLPRI;
+	ufds[0].events = POLLPRI;
 
 #ifdef __DEBUG_TIME__
 	gettimeofday(&curTime, NULL);
@@ -883,9 +878,12 @@ int HalGpioWaitSrdyClr(void)
 	limitPrints.tv_sec = curTime.tv_sec - 5;
 #endif //(defined __DEBUG_TIME__)
 
+	lseek(gpioSrdyFd,0,SEEK_SET);
+	read(gpioSrdyFd,&srdy, 1);
+
 	while(srdy == '1')
 	{
-		pollRet = poll((struct pollfd*)&ufds, 1, 100);
+		pollRet = poll((struct pollfd*)&ufds, 1, HAL_WAIT_SRDY_LOW_INTERMEDIATE_TIMEOUT);
 		if (pollRet == -1)
 		{
 			// Error occured in poll()
@@ -893,15 +891,39 @@ int HalGpioWaitSrdyClr(void)
 		}
 		else if (pollRet == 0)
 		{
+			accTimeout++;
 			// Timeout
-			printf("[GPIO][WARNING] Waiting for SRDY to go low timed out.\n");
-			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT;
-			ret = NPI_LNX_FAILURE;
-			break;
+			lseek(gpioSrdyFd,0,SEEK_SET);
+			read(gpioSrdyFd,&srdy, 1);
+
+			if(srdy == '1')
+			{
+				if (accTimeout >= (HAL_WAIT_SRDY_LOW_TIMEOUT / HAL_WAIT_SRDY_LOW_INTERMEDIATE_TIMEOUT) )
+				{
+					printf("[%u][GPIO][WARNING] Waiting for SRDY to go low timed out.\n", (unsigned int) pthread_self());
+					npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT;
+					ret = NPI_LNX_FAILURE;
+					break;
+				}
+				else
+				{
+					// This timeout is expected, and ok. Nothing to report, only for debug.
+					debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go low intermediate timed out, %d\n",
+							(unsigned int) pthread_self(), accTimeout);
+				}
+			}
+			else
+			{
+				// Missed interrupt waiting for SRDY to go high
+				// This timeout is expected, and ok. Nothing to report, only for debug.
+				debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go low intermediate timed out, %d. However, SRDY is now low\n",
+						(unsigned int) pthread_self(), accTimeout);
+				break;
+			}
 		}
 		else
 		{
-			if ( (ufds[0].revents & POLLIN) || (ufds[0].revents & POLLPRI) )
+			if (ufds[0].revents & POLLPRI)
 			{
 				lseek(gpioSrdyFd,0,SEEK_SET);
 				if(ERROR == read(gpioSrdyFd,&srdy, 1))
@@ -934,7 +956,7 @@ int HalGpioWaitSrdyClr(void)
 			}
 			else
 			{
-				printf("[GPIO](%d)\n", ufds[0].revents);
+				printf("[%u][GPIO](%d)\n", (unsigned int) pthread_self(), ufds[0].revents);
 			}
 		}
 	}
@@ -993,7 +1015,7 @@ int HalGpioWaitSrdyClr(void)
 		  diffPrev);
 #endif //__STRESS_TEST__
 
-  debug_printf("[GPIO]==>SRDY change to : %c  (%c) \n", srdy, srdy);
+  debug_printf("[%u][GPIO]==>SRDY change to : %c  (%d) \n", (unsigned int) pthread_self(), srdy, srdy);
 
   return ret;
 }
@@ -1019,14 +1041,14 @@ int HalGpioWaitSrdySet()
 {
 	char srdy= '0';
 
-	int ret = NPI_LNX_SUCCESS;
+	int ret = NPI_LNX_SUCCESS, accTimeout = 0;
 
-	debug_printf("[GPIO]Wait SRDY High, \n");
+	debug_printf("[%u][GPIO]Wait SRDY High, \n", (unsigned int) pthread_self());
 
 	struct pollfd ufds[1];
 	int pollRet;
 	ufds[0].fd = gpioSrdyFd;
-	ufds[0].events = POLLIN | POLLPRI;
+	ufds[0].events = POLLPRI;
 
 #ifdef __DEBUG_TIME__
 	gettimeofday(&curTime, NULL);
@@ -1055,9 +1077,14 @@ int HalGpioWaitSrdySet()
 			diffPrev);
 #endif //(defined __DEBUG_TIME__)
 
+	lseek(gpioSrdyFd,0,SEEK_SET);
+	read(gpioSrdyFd,&srdy, 1);
+
 	while( (srdy == '0') )
 	{
-		pollRet = poll((struct pollfd*)&ufds, 1, 400);
+		// There is still a chance we can miss an interrupt. So we need to split the
+		// big HAL_WAIT_SRDY_HIGH_TIMEOUT timeout into smaller timeouts
+		pollRet = poll((struct pollfd*)&ufds, 1, HAL_WAIT_SRDY_HIGH_INTERMEDIATE_TIMEOUT);
 		if (pollRet == -1)
 		{
 			// Error occured in poll()
@@ -1065,15 +1092,39 @@ int HalGpioWaitSrdySet()
 		}
 		else if (pollRet == 0)
 		{
+			accTimeout++;
 			// Timeout
-			printf("[GPIO][WARNING] Waiting for SRDY to go high timed out.\n");
-			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_POLL_TIMEDOUT;
-			ret = NPI_LNX_FAILURE;
-			break;
+			lseek(gpioSrdyFd,0,SEEK_SET);
+			read(gpioSrdyFd,&srdy, 1);
+
+			if(srdy == '0')
+			{
+				if (accTimeout >= (HAL_WAIT_SRDY_HIGH_TIMEOUT / HAL_WAIT_SRDY_HIGH_INTERMEDIATE_TIMEOUT) )
+				{
+					printf("[%u][GPIO][WARNING] Waiting for SRDY to go high timed out.\n", (unsigned int) pthread_self());
+					npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_POLL_TIMEDOUT;
+					ret = NPI_LNX_FAILURE;
+					break;
+				}
+				else
+				{
+					// This timeout is expected, and ok. Nothing to report, only for debug.
+					debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go high intermediate timed out, %d\n",
+							(unsigned int) pthread_self(), accTimeout);
+				}
+			}
+			else
+			{
+				// Missed interrupt waiting for SRDY to go high
+				// This timeout is expected, and ok. Nothing to report, only for debug.
+				debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go high intermediate timed out, %d. However, SRDY is now high\n",
+						(unsigned int) pthread_self(), accTimeout);
+				break;
+			}
 		}
 		else
 		{
-			if ( (ufds[0].revents & POLLIN) || (ufds[0].revents & POLLPRI) )
+			if (ufds[0].revents & POLLPRI)
 			{
 				lseek(gpioSrdyFd,0,SEEK_SET);
 				if(ERROR == read(gpioSrdyFd,&srdy, 1))
@@ -1086,7 +1137,7 @@ int HalGpioWaitSrdySet()
 			}
 			else
 			{
-				printf("[GPIO](%d)", ufds[0].revents);
+				printf("[%u][GPIO](%d)", (unsigned int) pthread_self(), ufds[0].revents);
 			}
 		}
 	}
@@ -1119,7 +1170,7 @@ int HalGpioWaitSrdySet()
 			srdy);
 #endif //__DEBUG_TIME__
 
-	debug_printf("[GPIO]==>SRDY change to : %c  (%c) \n", srdy, srdy);
+	debug_printf("[%u][GPIO]==>SRDY change to : %c  (%d) \n", (unsigned int) pthread_self(), srdy, srdy);
 
 	return ret;
 }

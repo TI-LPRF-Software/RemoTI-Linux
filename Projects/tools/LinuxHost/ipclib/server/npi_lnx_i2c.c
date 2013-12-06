@@ -92,6 +92,10 @@
 #ifdef __DEBUG_TIME__I2C
 struct timeval curTime, initTime;
 #endif
+#if (defined __DEBUG_TIME__)
+struct timeval curTime, prevTime;
+extern struct timeval startTime;
+#endif
 // -- Constants --
 
 // State variable used to indicate that a device is open.

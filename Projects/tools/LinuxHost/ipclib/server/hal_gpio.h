@@ -94,6 +94,11 @@ extern "C"
  * CONSTANTS
  */
 
+#define HAL_WAIT_SRDY_HIGH_TIMEOUT				500
+#define HAL_WAIT_SRDY_HIGH_INTERMEDIATE_TIMEOUT  50
+#define HAL_WAIT_SRDY_LOW_TIMEOUT				500
+#define HAL_WAIT_SRDY_LOW_INTERMEDIATE_TIMEOUT   50
+
 /*********************************************************************
  * TYPEDEFS
  */

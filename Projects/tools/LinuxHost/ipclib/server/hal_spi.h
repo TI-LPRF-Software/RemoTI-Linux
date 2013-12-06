@@ -53,6 +53,16 @@ extern "C"
 #include "hal_types.h"
 #include "hal_gpio.h"
 
+/////////////////////////////////////////////////////////////////////////////
+// Typedefs
+
+PACK_1 typedef struct ATTR_PACKED
+{
+	  uint32 speed;
+	  uint8 mode;
+	  uint8 bitsPerWord;
+} halSpiCfg_t;
+
 
 #if ((defined NPI_SPI) && (NPI_SPI == TRUE))
 /*********************************************************************
@@ -119,7 +129,7 @@ st ( \
  */
 
 void HalSpiFlush(uint8 port, uint8 len);
-int HalSpiInit(const char *devpath, uint32 speed);
+int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg);
 void HalSpiPoll(void);
 int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len);
 void HalSpiClose( void );

@@ -83,10 +83,6 @@ char ch;
 // string from console
 char str[128];
 
-// Toggle Timer Print on Server state variable
-static uint8 toggleTimerPrintOnServer = FALSE;
-static uint8 toggleBigDebugPrintOnServer = FALSE;
-
 // RNP in Standby
 uint8 appRNPpowerState = RTI_APP_RNP_POWER_STATE_ACTIVE;
 
@@ -257,6 +253,10 @@ enum {
 appDevInfo_t appCFGParam;
 uint8 appCFGstate;
 
+// Toggle Timer Print on Server state variable
+static uint8 toggleTimerPrintOnServer = FALSE;
+static uint8 toggleBigDebugPrintOnServer = FALSE;
+
 appSendData_t appSendData_s;
 uint8 appSendDataState;
 void appSendDataProcessKey (char* strIn);
@@ -284,8 +284,10 @@ int appInit(int mode, char threadId)
 	pMsg.subSys = RPC_SYS_SRV_CTRL | RPC_CMD_SREQ;
 	pMsg.cmdId = NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT_REQ;
 
-	// Turn timer debug OFF
-	toggleBigDebugPrintOnServer = FALSE;
+	if ( (mode == 2) || (mode == 3))
+	{
+		toggleBigDebugPrintOnServer = TRUE;
+	}
 
 	pMsg.pData[0] = toggleBigDebugPrintOnServer;
 
@@ -298,9 +300,10 @@ int appInit(int mode, char threadId)
 
 	pMsg.cmdId = NPI_LNX_CMD_ID_CTRL_TIME_PRINT_REQ;
 
-	// Turn timer debug OFF
-	toggleTimerPrintOnServer = FALSE;
-
+	if ( (mode == 1) || (mode == 3))
+	{
+		toggleTimerPrintOnServer = TRUE;
+	}
 	pMsg.pData[0] = toggleTimerPrintOnServer;
 
 	// send debug flag value
@@ -309,6 +312,7 @@ int appInit(int mode, char threadId)
 	{
 		printf("__DEBUG_TIME_ACTIVE set to: 0x%.2X\n", toggleTimerPrintOnServer);
 	}
+	printf("debugBig %d, debugTime %d\n", toggleBigDebugPrintOnServer, toggleTimerPrintOnServer);
 	printf("\n-------------------- END TURN ON DEBUG TRACES -------------------\n\n");
 
 	printf("\n-------------------- START SOFTWARE VERSION READING-------------------\n");
@@ -931,6 +935,10 @@ void RTI_AllowPairCnf(rStatus_t status, uint8 dstIndex, uint8 devType)
 	if (0 == status)
 	{
 		printf("\tPaired!! Waiting for data from RC, press the <q> key followed by <enter> at any time to quit\n\n");
+	}
+	else
+	{
+		printf("\tRTI_AllowPairCnf(0x%.2X)\n\n", status);
 	}
 }
 

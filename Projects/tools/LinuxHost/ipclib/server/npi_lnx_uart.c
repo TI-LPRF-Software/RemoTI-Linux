@@ -98,6 +98,8 @@ extern struct timeval startTime, prevTimeSend, prevTimeRec;
 
 // UART Baud rate
 #define NPI_BAUDRATE B115200
+// UART Flow Control
+#define NPI_FLOWCONTROL	0
 
 // State values for UART frame parsing
 #define SOP_STATE      0x00
@@ -133,7 +135,7 @@ npi_tracehook_t npi_tracehook_tx = NULL;
 // State variable used to indicate that a device is open.
 static int npiOpenFlag = FALSE;
 
-static npiUartCfg_t uartCfg = {NPI_BAUDRATE};
+static npiUartCfg_t uartCfg = {NPI_BAUDRATE, NPI_FLOWCONTROL};
 
 // mutex to protect write calls
 static pthread_mutex_t npi_write_mutex;
@@ -229,10 +231,12 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
 	if (pCfg != NULL)
 	{
 		uartCfg.speed = ((npiUartCfg_t *)pCfg)->speed;
+		uartCfg.flowcontrol = ((npiUartCfg_t *)pCfg)->flowcontrol;
 	}
 	else
 	{
-		uartCfg.speed = 115200;
+		uartCfg.speed = NPI_BAUDRATE;
+		uartCfg.flowcontrol = NPI_FLOWCONTROL;
 	}
 
 	if (npiOpenFlag)
@@ -761,7 +765,14 @@ static int npi_opentty(const char *devpath)
 		break;
 	}
 	debug_printf("[UART] Baud rate set to %d (0x%.6X)\n", uartCfg.speed, bRate);
-	newtio.c_cflag = bRate | CS8 | CLOCAL | CREAD;
+	if (uartCfg.flowcontrol == 1)
+	{
+		newtio.c_cflag = bRate | CS8 | CLOCAL | CREAD | CRTSCTS;
+	}
+	else
+	{
+		newtio.c_cflag = bRate | CS8 | CLOCAL | CREAD;
+	}
 	debug_printf("[UART] c_cflag set to 0x%.6X\n", newtio.c_cflag);
 
 	/* IGNPAR  : ignore bytes with parity errors
@@ -1087,7 +1098,7 @@ static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
 			// Fill in the synchronous response buffer
 			memcpy(&pMsg->pData, pBuf + NPI_CBACK_BUF_HDR_LEN, length);
 			pMsg->len = length;
-			pMsg->subSys = subsystemId & RPC_SUBSYSTEM_MASK;
+			pMsg->subSys = subsystemId;
 			pMsg->cmdId = commandId;
 		}
 		// if pointer is NULL, no action should be taken
@@ -1112,7 +1123,7 @@ static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
 
 		// Fill in the message structure
 		pMsg->len = length;
-		pMsg->subSys = subsystemId & RPC_SUBSYSTEM_MASK;
+		pMsg->subSys = subsystemId;
 		pMsg->cmdId = commandId;
 		pElement->pNext = NULL;
 

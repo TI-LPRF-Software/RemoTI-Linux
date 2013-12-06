@@ -87,7 +87,7 @@
 #endif
 
 #ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
+#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__); fflush(stdout);
 #else
 #define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
 #endif
@@ -98,6 +98,10 @@
 
 // State variable used to indicate that a device is open.
 static int npiOpenFlag = FALSE;
+static uint8 earlyMrdyDeAssert = TRUE;
+static uint8 detectResetFromSlowSrdyAssert = TRUE;
+static uint8 forceRun = NPI_LNX_UINT8_ERROR;
+static uint8 srdyMrdyHandshakeSupport = TRUE;
 
 // NPI device related variables
 static int              npi_poll_terminate;
@@ -151,6 +155,53 @@ struct timeval curTimeSPIisrPoll, prevTimeSPIisrPoll;
 // -- Private functions --
 static int npi_initsyncres(void);
 static int npi_initThreads(void);
+void time_printf(char *strToPrint);
+
+/******************************************************************************
+ * @fn         time_printf
+ *
+ * @brief      This function adds timestamp to a printf.
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return
+ *
+ * None.
+ ******************************************************************************
+ */
+void time_printf(char *strToPrint)
+{
+	long int diffPrev;
+	int t = 0;
+
+	gettimeofday(&curTime, NULL);
+	if (curTime.tv_usec >= prevTime.tv_usec)
+	{
+		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+	}
+	else
+	{
+		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+		t = 1;
+	}
+	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+	debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] %s\n",
+			hours,											// hours
+			minutes,										// minutes
+			(int)(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+			(long int)curTime.tv_usec,
+			curTime.tv_sec - prevTime.tv_sec - t,
+			diffPrev,
+			strToPrint);
+	prevTime = curTime;
+}
 
 /******************************************************************************
  * @fn         PollLockVarError
@@ -212,23 +263,40 @@ int NPI_SPI_OpenDevice(const char *portName, void *pCfg)
 
 	debug_printf("Opening Device File: %s\n", portName);
 
-	ret = HalSpiInit(portName, ((npiSpiCfg_t*)pCfg)->speed);
+
+	// Setup parameters that differ between ZNP and RNP
+	earlyMrdyDeAssert = ((npiSpiCfg_t *)pCfg)->earlyMrdyDeAssert;
+	detectResetFromSlowSrdyAssert = ((npiSpiCfg_t *)pCfg)->detectResetFromSlowSrdyAssert;
+	forceRun = ((npiSpiCfg_t *)pCfg)->forceRunOnReset;
+	srdyMrdyHandshakeSupport = ((npiSpiCfg_t *)pCfg)->srdyMrdyHandshakeSupport;
+
+	ret = HalSpiInit(portName, ((npiSpiCfg_t*)pCfg)->spiCfg);
 	if (ret != NPI_LNX_SUCCESS)
+	{
 		return ret;
+	}
 
 	debug_printf("((npiSpiCfg_t *)pCfg)->gpioCfg[0] \t @%p\n",
 			(void *)&(((npiSpiCfg_t *)pCfg)->gpioCfg[0]));
 
 	if ( NPI_LNX_FAILURE == (GpioSrdyFd = HalGpioSrdyInit(((npiSpiCfg_t *)pCfg)->gpioCfg[0])))
+	{
 		return GpioSrdyFd;
+	}
 	if ( NPI_LNX_FAILURE == (ret = HalGpioMrdyInit(((npiSpiCfg_t *)pCfg)->gpioCfg[1])))
+	{
 		return ret;
+	}
 	if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit(((npiSpiCfg_t *)pCfg)->gpioCfg[2])))
+	{
 		return ret;
+	}
 
 	// initialize thread synchronization resources
 	if ( NPI_LNX_FAILURE == (ret = npi_initsyncres()))
+	{
 		return ret;
+	}
 
 
 	//Polling forbid until the Reset and Sync is done
@@ -251,10 +319,14 @@ int NPI_SPI_OpenDevice(const char *portName, void *pCfg)
 	// non-privileged threads.
 
 	if (ret == NPI_LNX_SUCCESS)
+	{
 		// create Polling thread
 		ret = npi_initThreads();
+	}
 	else
+	{
 		debug_printf("Did not attempt to start Threads\n");
+	}
 
 	return ret;
 }
@@ -307,7 +379,7 @@ void NPI_SPI_CloseDevice(void)
 int NPI_SPI_SendAsynchData( npiMsgData_t *pMsg )
 {
 	int ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_SEND_ASYNCH;
-	debug_printf("Sync Lock SRDY ...");
+	debug_printf("[ASYNCH] Sync Lock SRDY ...");
 	fflush(stdout);
 	//Lock the polling until the command is send
 	pthread_mutex_lock(&npiPollLock);
@@ -321,9 +393,9 @@ int NPI_SPI_SendAsynchData( npiMsgData_t *pMsg )
 	else
 	{
 		PollLockVar = 1;
-		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+		debug_printf("[ASYNCH][SPI POLL] PollLockVar set to %d\n", PollLockVar);
 	}
-	debug_printf("(Sync) success \n");
+	debug_printf("[ASYNCH] (Sync) success \n");
 
 	debug_printf("\n******************** START SEND ASYNC DATA ********************\n");
 	// Add Proper RPC type to header
@@ -353,13 +425,13 @@ int NPI_SPI_SendAsynchData( npiMsgData_t *pMsg )
 	else
 	{
 		PollLockVar = 0;
-		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+		debug_printf("[ASYNCH] [SPI POLL] PollLockVar set to %d\n", PollLockVar);
 	}
 	pthread_mutex_unlock(&npiPollLock);
 #ifdef SRDY_INTERRUPT
 	pthread_mutex_unlock(&npiSrdyLock);
 #endif
-	debug_printf("Sync unLock SRDY ...\n\n");
+	debug_printf("[ASYNCH] Sync unLock SRDY ...\n\n");
 	debug_printf("\n******************** STOP SEND ASYNC DATA ********************\n");
 
 	return ret;
@@ -387,9 +459,6 @@ int NPI_SPI_SendAsynchData( npiMsgData_t *pMsg )
 int npi_spi_pollData(npiMsgData_t *pMsg)
 {
 	int i, ret = NPI_LNX_SUCCESS;
-#ifdef SRDY_INTERRUPT
-	pthread_mutex_lock(&npiSrdyLock);
-#endif
 	debug_printf("\n-------------------- START POLLING DATA --------------------\n");
 
 #ifdef __BIG_DEBUG__
@@ -438,6 +507,11 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 	printf("[POLL] %.5ld.%.6ld]\n", t1.tv_sec, t1.tv_usec);
 #endif
 
+	int bigDebugWas = __BIG_DEBUG_ACTIVE;
+	if (bigDebugWas == FALSE)
+	{
+		__BIG_DEBUG_ACTIVE = FALSE;
+	}
 	//Wait for SRDY set
 	if (ret == NPI_LNX_SUCCESS)
 		ret = HalGpioWaitSrdySet();
@@ -445,7 +519,6 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 	// Check how long it took to wait for SRDY to go High. May indicate that this Poll was considered
 	// a handshake by the RNP.
 	gettimeofday(&t2, NULL);
-	debug_printf("[POLL] %.5ld.%.6ld]\n", t2.tv_sec, t2.tv_usec);
 	long int diffPrev;
 	if (t2.tv_usec >= t1.tv_usec)
 	{
@@ -458,21 +531,29 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 		diffPrev += (t2.tv_sec - t1.tv_sec - 1) * 1000000;
 	}
 
-	// If it took more than 100ms then it's likely a reset handshake.
-	if (diffPrev > (100 * 1000) )
+	if (detectResetFromSlowSrdyAssert == TRUE)
 	{
-		debug_printf("[POLL] SRDY took %ld us to go high\n", diffPrev);
-		npi_ipc_errno = NPI_LNX_ERROR_SPI_POLL_DATA_SRDY_CLR_TIMEOUT_POSSIBLE_RESET;
-		return NPI_LNX_FAILURE;
+		// If it took more than NPI_LNX_SPI_NUM_OF_MS_TO_DETECT_RESET_AFTER_SLOW_SRDY_ASSERT ms
+		// then it's likely a reset handshake.
+		if (diffPrev > (NPI_LNX_SPI_NUM_OF_MS_TO_DETECT_RESET_AFTER_SLOW_SRDY_ASSERT * 1000) )
+		{
+			debug_printf("[POLL] SRDY took %ld us to go high\n", diffPrev);
+			npi_ipc_errno = NPI_LNX_ERROR_SPI_POLL_DATA_SRDY_CLR_TIMEOUT_POSSIBLE_RESET;
+			return NPI_LNX_FAILURE;
+		}
 	}
 
-	//We Set MRDY here to avoid GPIO latency with the beagle board
-	// if we do here later, the RNP see it low at the end of the transaction and
-	// therefore think a new transaction is starting and lower its SRDY...
-	if (ret == NPI_LNX_SUCCESS)
-		ret = HAL_RNP_MRDY_SET();
-	else
-		(void)HAL_RNP_MRDY_SET();
+	if (earlyMrdyDeAssert == TRUE)
+	{
+		//We Set MRDY here to avoid GPIO latency with the beagle board
+		// if we do here later, the RNP see it low at the end of the transaction and
+		// therefore think a new transaction is starting and lower its SRDY...
+		if (ret == NPI_LNX_SUCCESS)
+			ret = HAL_RNP_MRDY_SET();
+		else
+			(void)HAL_RNP_MRDY_SET();
+	}
+	__BIG_DEBUG_ACTIVE = bigDebugWas;
 
 	//Do a Three Byte Dummy Write to read the RPC Header
 	for (i = 0 ;i < RPC_FRAME_HDR_SZ; i++ ) ((uint8*)pMsg)[i] = 0;
@@ -482,8 +563,10 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 
 	//Do a write/read of the corresponding length
 	for (i = 0 ;i < ((uint8*)pMsg)[0]; i++ ) ((uint8*)pMsg)[i+RPC_FRAME_HDR_SZ] = 0;
-	if (ret == NPI_LNX_SUCCESS)
+	if ( (ret == NPI_LNX_SUCCESS) && (((uint8*)pMsg)[0] > 0) )
+	{
 		ret = HalSpiWrite( 0, pMsg->pData, ((uint8*)pMsg)[0]);
+	}
 
 #ifdef __BIG_DEBUG__
 	if (TRUE == HAL_RNP_SRDY_CLR())
@@ -497,10 +580,20 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 	for (i = 0 ; i < (RPC_FRAME_HDR_SZ+pMsg->len); i++ ) printf(" 0x%.2x", ((uint8*)pMsg)[i]);
 	printf("\n");
 #endif
+
+	if (earlyMrdyDeAssert == FALSE)
+	{
+		if (ret == NPI_LNX_SUCCESS)
+		{
+			ret = HAL_RNP_MRDY_SET();
+		}
+		else
+		{
+			(void)HAL_RNP_MRDY_SET();
+		}
+	}
+
 	debug_printf("\n-------------------- END POLLING DATA --------------------\n");
-#ifdef SRDY_INTERRUPT
-	pthread_mutex_unlock(&npiSrdyLock);
-#endif
 
 	return ret;
 }
@@ -529,13 +622,27 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	int i, ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_SEND_SYNCH;
 	// Do not attempt to send until polling is finished
 
-	int lockRet = 0;
-	debug_printf("\nSync Lock SRDY ...");
-	fflush(stdout);
+	int lockRetPoll = 0, lockRetSrdy = 0;
+	if (__DEBUG_TIME_ACTIVE == TRUE)
+	{
+		time_printf("[SYNCH] Lock POLL mutex");
+	}
 	//Lock the polling until the command is send
-	lockRet = pthread_mutex_lock(&npiPollLock);
+	lockRetPoll = pthread_mutex_lock(&npiPollLock);
+	if (__DEBUG_TIME_ACTIVE == TRUE)
+	{
+		time_printf("[SYNCH] POLL mutex locked");
+	}
 #ifdef SRDY_INTERRUPT
-	pthread_mutex_lock(&npiSrdyLock);
+	if (__DEBUG_TIME_ACTIVE == TRUE)
+	{
+		time_printf("[SYNCH] Lock SRDY mutex");
+	}
+	lockRetSrdy = pthread_mutex_lock(&npiSrdyLock);
+	if (__DEBUG_TIME_ACTIVE == TRUE)
+	{
+		time_printf("[SYNCH] SRDY mutex locked");
+	}
 #endif
 	if (PollLockVar)
 	{
@@ -544,13 +651,18 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	else
 	{
 		PollLockVar = 1;
-		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+		debug_printf("[SYNCH] PollLockVar set to %d\n", PollLockVar);
 	}
-	debug_printf("(Sync) success \n");
+	debug_printf("[SYNCH] (Sync) success \n");
 	debug_printf("==================== START SEND SYNC DATA ====================\n");
-	if (lockRet != 0)
+	if (lockRetPoll != 0)
 	{
-		printf("[ERR] Could not get lock\n");
+		printf("[SYNCH] [ERR] Could not get POLL mutex lock\n");
+		perror("mutex lock");
+	}
+	if (lockRetSrdy != 0)
+	{
+		printf("[SYNCH] [ERR] Could not get SRDY mutex lock\n");
 		perror("mutex lock");
 	}
 
@@ -560,34 +672,10 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 
 #ifdef __BIG_DEBUG__
 	if (TRUE == HAL_RNP_SRDY_CLR())
-		printf("SRDY set\n");
+		printf("[SYNCH] SRDY set\n");
 	else
-		printf("SRDY Clear\n");
+		printf("[SYNCH] SRDY Clear\n");
 #endif
-
-#ifdef __STRESS_TEST__
-	//	debug_
-	gettimeofday(&curTime, NULL);
-	long int diffPrev;
-	int t = 0;
-	if (curTime.tv_usec >= prevTimeI2C.tv_usec)
-	{
-		diffPrev = curTime.tv_usec - prevTimeI2C.tv_usec;
-	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTimeI2C.tv_usec;
-		t = 1;
-	}
-
-	prevTimeI2C = curTime;
-
-	printf("[--> %.5ld.%.6ld (+%ld.%6ld)] MRDY Low \n",
-			curTime.tv_sec - startTime.tv_sec,
-			curTime.tv_usec,
-			curTime.tv_sec - prevTimeI2C.tv_sec - t,
-			diffPrev);
-#endif //__STRESS_TEST__
 
 	if (ret == NPI_LNX_SUCCESS)
 		if ( NPI_LNX_SUCCESS != (ret = HAL_RNP_MRDY_CLR()))
@@ -596,22 +684,27 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	//Wait for SRDY Clear
 	ret = HalGpioWaitSrdyClr();
 
-	debug_printf("Sync Data Command ...");
+	debug_printf("[SYNCH] Sync Data Command ...");
 	for (i = 0 ; i < (RPC_FRAME_HDR_SZ+pMsg->len); i++ ) debug_printf(" 0x%.2x", ((uint8*)pMsg)[i]);
 	debug_printf("\n");
 	if (ret == NPI_LNX_SUCCESS)
 		ret = HalSpiWrite( 0, (uint8*) pMsg, (pMsg->len)+RPC_FRAME_HDR_SZ);
 
-	debug_printf("[SREQ]");
+	debug_printf("[SYNCH] [SREQ]");
 	//Wait for SRDY set
 	if (ret == NPI_LNX_SUCCESS)
 		ret = HalGpioWaitSrdySet();
 
-	//We Set MRDY here to avoid GPIO latency with the beagle board
-	// if we do here later, the RNP see it low at the end of the transaction and
-	// therefore think a new transaction is starting and lower its SRDY...
-	if (ret == NPI_LNX_SUCCESS)
-		ret = HAL_RNP_MRDY_SET();
+	if (earlyMrdyDeAssert == TRUE)
+	{
+		//We Set MRDY here to avoid GPIO latency with the beagle board
+		// if we do here later, the RNP see it low at the end of the transaction and
+		// therefore think a new transaction is starting and lower its SRDY...
+		if (ret == NPI_LNX_SUCCESS)
+			ret = HAL_RNP_MRDY_SET();
+		else
+			(void)HAL_RNP_MRDY_SET();
+	}
 
 	//Do a Three Byte Dummy Write to read the RPC Header
 	for (i = 0 ;i < RPC_FRAME_HDR_SZ; i++ ) ((uint8*)pMsg)[i] = 0;
@@ -619,44 +712,48 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	{
 		ret = HalSpiWrite( 0, (uint8*) pMsg, RPC_FRAME_HDR_SZ);
 	}
-	debug_printf("Read %d bytes ...", RPC_FRAME_HDR_SZ);
+	debug_printf("[SYNCH] Read %d bytes ...", RPC_FRAME_HDR_SZ);
 	for (i = 0 ; i < (RPC_FRAME_HDR_SZ); i++ ) debug_printf(" 0x%.2x", ((uint8*)pMsg)[i]);
 	debug_printf("\n");
 
 	//Do a write/read of the corresponding length
 	for (i = 0 ;i < ((uint8*)pMsg)[0]; i++ ) ((uint8*)pMsg)[i+RPC_FRAME_HDR_SZ] = 0;
-	if (ret == NPI_LNX_SUCCESS)
+	if ( (ret == NPI_LNX_SUCCESS) && (((uint8*)pMsg)[0] > 0) )
 	{
 		ret = HalSpiWrite( 0, pMsg->pData, ((uint8*)pMsg)[0]);
 	}
 
-	debug_printf("Read %d more bytes ...", ((uint8*)pMsg)[0]);
+	debug_printf("[SYNCH] Read %d more bytes ...", ((uint8*)pMsg)[0]);
 	for (i = RPC_FRAME_HDR_SZ ; i < (pMsg->len); i++ ) debug_printf(" 0x%.2x", ((uint8*)pMsg)[i]);
 	debug_printf("\n");
 
-	//End of transaction
-	if (ret == NPI_LNX_SUCCESS)
-		ret = HAL_RNP_MRDY_SET();
-	else
-		(void)HAL_RNP_MRDY_SET();
+	if (earlyMrdyDeAssert == FALSE)
+	{
+		//End of transaction
+		if (ret == NPI_LNX_SUCCESS)
+		{
+			ret = HAL_RNP_MRDY_SET();
+		}
+		else
+		{
+			(void)HAL_RNP_MRDY_SET();
+		}
+	}
 
 #ifdef __BIG_DEBUG__
 	if (TRUE == HAL_RNP_SRDY_CLR())
-		printf("SRDY set\n");
+		printf("[SYNCH] SRDY set\n");
 	else
-		printf("SRDY Clear\n");
+		printf("[SYNCH] SRDY Clear\n");
 #endif
 
 #ifdef __BIG_DEBUG__
-	printf("Sync Data Receive ...");
+	printf("[SYNCH] Sync Data Receive ...");
 	for (i = 0 ; i < (RPC_FRAME_HDR_SZ+pMsg->len); i++ ) printf(" 0x%.2x", ((uint8*)pMsg)[i]);
 	printf("\n");
 #endif
 
 	//Release the polling lock
-	//This is the SRSP, clear out the PC type in header
-	((uint8 *)pMsg)[RPC_POS_CMD0] &=  RPC_SUBSYSTEM_MASK;
-
     debug_printf("\n==================== END SEND SYNC DATA ====================\n");
 	if (!PollLockVar)
 	{
@@ -665,13 +762,13 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	else
 	{
 		PollLockVar = 0;
-		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+		debug_printf("[SYNCH] PollLockVar set to %d\n", PollLockVar);
 	}
 	pthread_mutex_unlock(&npiPollLock);
 #ifdef SRDY_INTERRUPT
     pthread_mutex_unlock(&npiSrdyLock);
 #endif
-    debug_printf("Sync unLock SRDY ...\n\n");
+    debug_printf("[SYNCH] Sync unLock SRDY ...\n\n");
 
 	return ret;
 }
@@ -724,6 +821,29 @@ int NPI_SPI_ResetSlave( void )
 #endif //(defined __DEBUG_TIME__)
 
   ret = HalGpioReset();
+
+  if (forceRun != NPI_LNX_UINT8_ERROR)
+  {
+	  if (ret == NPI_LNX_SUCCESS)
+	  {
+		  ret = HalGpioWaitSrdyClr();
+	  }
+	  //Send force run command
+	  if (ret == NPI_LNX_SUCCESS)
+	  {
+		  ret = HalSpiWrite( 0, &forceRun, 1);
+	  }
+	  //Wait for SRDY High, do this regardless of error
+	  if (ret == NPI_LNX_SUCCESS)
+	  {
+		  ret = HalGpioWaitSrdySet();
+	  }
+	  else
+	  {
+		  // Keep previous error message, but still de-assert to unlock Network Processor
+		  HalGpioWaitSrdySet();
+	  }
+  }
 
   printf("Wait 500us for RNP to initialize after a Reset... This may change in the future, check for RTI_ResetInd()...\n");
   usleep(500); //wait 500us for RNP to initialize
@@ -809,158 +929,189 @@ static int npi_initThreads(void)
 int NPI_SPI_SynchSlave( void )
 {
 	int ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_SYNCH_SLAVE;
-   printf("\n\n-------------------- START GPIO HANDSHAKE -------------------\n");
 
+	if (srdyMrdyHandshakeSupport == TRUE)
+	{
+		printf("\n\n-------------------- START GPIO HANDSHAKE -------------------\n");
+
+		// At this point we already have npiPollMutex lock
+		int lockRetSrdy = 0;
 #ifdef SRDY_INTERRUPT
-	pthread_mutex_lock(&npiSrdyLock);
+		if (__DEBUG_TIME_ACTIVE == TRUE)
+		{
+			time_printf("[HANDSHAKE] Lock SRDY mutex");
+		}
+		lockRetSrdy = pthread_mutex_lock(&npiSrdyLock);
+		if (__DEBUG_TIME_ACTIVE == TRUE)
+		{
+			time_printf("[HANDSHAKE] SRDY mutex locked");
+		}
 #endif
-
-	pthread_mutex_lock(&npiPollLock);
-	if (PollLockVar)
-	{
-		ret = PollLockVarError(funcID);
-	}
-	else
-	{
-		PollLockVar = 1;
-		debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
-	}
+		if (!PollLockVar)
+		{
+			ret = PollLockVarError(funcID);
+		}
+		else
+		{
+			PollLockVar = 1;
+			debug_printf("[HANDSHAKE] PollLockVar set to %d\n", PollLockVar);
+		}
+		if (lockRetSrdy != 0)
+		{
+			printf("[HANDSHAKE] [ERR] Could not get SRDY mutex lock\n");
+			perror("mutex lock");
+		}
 
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
-	long int diffPrev;
-	int t = 0;
-	if (curTime.tv_usec >= prevTime.tv_usec)
-	{
-		diffPrev = curTime.tv_usec - prevTime.tv_usec;
-	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-		t = 1;
-	}
+		gettimeofday(&curTime, NULL);
+		long int diffPrev;
+		int t = 0;
+		if (curTime.tv_usec >= prevTime.tv_usec)
+		{
+			diffPrev = curTime.tv_usec - prevTime.tv_usec;
+		}
+		else
+		{
+			diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+			t = 1;
+		}
 
-	prevTime = curTime;
+		prevTime = curTime;
 
-	//	debug_
-	printf("[%.5ld.%.6ld (+%ld.%6ld)] Handshake Lock SRDY... Wait for SRDY to go Low\n",
-			curTime.tv_sec - startTime.tv_sec,
-			curTime.tv_usec,
-			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev);
+		//	debug_
+		printf("[%.5ld.%.6ld (+%ld.%6ld)] Handshake Lock SRDY... Wait for SRDY to go Low\n",
+				curTime.tv_sec - startTime.tv_sec,
+				curTime.tv_usec,
+				curTime.tv_sec - prevTime.tv_sec - t,
+				diffPrev);
 #else //(!defined __DEBUG_TIME__)
-  printf("Handshake Lock SRDY ...\n");
+		printf("Handshake Lock SRDY ...\n");
 #endif // defined __DEBUG_TIME__
 
-  // Check that SRDY is low
-  ret = HalGpioWaitSrdyClr();
+		// Check that SRDY is low
+		ret = HalGpioWaitSrdyClr();
 
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
-	t = 0;
-	if (curTime.tv_usec >= prevTime.tv_usec)
-	{
-		diffPrev = curTime.tv_usec - prevTime.tv_usec;
-	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-		t = 1;
-	}
+		gettimeofday(&curTime, NULL);
+		t = 0;
+		if (curTime.tv_usec >= prevTime.tv_usec)
+		{
+			diffPrev = curTime.tv_usec - prevTime.tv_usec;
+		}
+		else
+		{
+			diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+			t = 1;
+		}
 
-	prevTime = curTime;
+		prevTime = curTime;
 
-	//	debug_
-	printf("[%.5ld.%.6ld (+%ld.%6ld)] Set MRDY Low\n",
-			curTime.tv_sec - startTime.tv_sec,
-			curTime.tv_usec,
-			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev);
+		//	debug_
+		printf("[%.5ld.%.6ld (+%ld.%6ld)] Set MRDY Low\n",
+				curTime.tv_sec - startTime.tv_sec,
+				curTime.tv_usec,
+				curTime.tv_sec - prevTime.tv_sec - t,
+				diffPrev);
 #endif // defined __DEBUG_TIME__
 
-  // set MRDY to Low
-	if (ret == NPI_LNX_SUCCESS)
-		if ( NPI_LNX_SUCCESS != (ret = HAL_RNP_MRDY_CLR()))
-			return ret;
+		// set MRDY to Low
+		if (ret == NPI_LNX_SUCCESS)
+		{
+			if ( NPI_LNX_SUCCESS != (ret = HAL_RNP_MRDY_CLR()))
+			{
+				return ret;
+			}
+		}
 
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
-	t = 0;
-	if (curTime.tv_usec >= prevTime.tv_usec)
-	{
-		diffPrev = curTime.tv_usec - prevTime.tv_usec;
-	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-		t = 1;
-	}
+		gettimeofday(&curTime, NULL);
+		t = 0;
+		if (curTime.tv_usec >= prevTime.tv_usec)
+		{
+			diffPrev = curTime.tv_usec - prevTime.tv_usec;
+		}
+		else
+		{
+			diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+			t = 1;
+		}
 
-	prevTime = curTime;
+		prevTime = curTime;
 
-	//	debug_
-	printf("[%.5ld.%.6ld (+%ld.%6ld)] Wait for SRDY to go High\n",
-			curTime.tv_sec - startTime.tv_sec,
-			curTime.tv_usec,
-			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev);
+		//	debug_
+		printf("[%.5ld.%.6ld (+%ld.%6ld)] Wait for SRDY to go High\n",
+				curTime.tv_sec - startTime.tv_sec,
+				curTime.tv_usec,
+				curTime.tv_sec - prevTime.tv_sec - t,
+				diffPrev);
 #endif // defined __DEBUG_TIME__
 
-  // Wait for SRDY to go High
-	ret = HalGpioWaitSrdySet();
+		// Wait for SRDY to go High
+		ret = HalGpioWaitSrdySet();
 
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
-	t = 0;
-	if (curTime.tv_usec >= prevTime.tv_usec)
-	{
-		diffPrev = curTime.tv_usec - prevTime.tv_usec;
-	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-		t = 1;
-	}
+		gettimeofday(&curTime, NULL);
+		t = 0;
+		if (curTime.tv_usec >= prevTime.tv_usec)
+		{
+			diffPrev = curTime.tv_usec - prevTime.tv_usec;
+		}
+		else
+		{
+			diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+			t = 1;
+		}
 
-	prevTime = curTime;
+		prevTime = curTime;
 
-	//	debug_
-	printf("[%.5ld.%.6ld (+%ld.%6ld)] Set MRDY High\n",
-			curTime.tv_sec - startTime.tv_sec,
-			curTime.tv_usec,
-			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev);
+		//	debug_
+		printf("[%.5ld.%.6ld (+%ld.%6ld)] Set MRDY High\n",
+				curTime.tv_sec - startTime.tv_sec,
+				curTime.tv_usec,
+				curTime.tv_sec - prevTime.tv_sec - t,
+				diffPrev);
 #endif // defined __DEBUG_TIME__
-  // Set MRDY to High
-	if (ret == NPI_LNX_SUCCESS)
-		ret = HAL_RNP_MRDY_SET();
-	else
-		(void)HAL_RNP_MRDY_SET();
+		// Set MRDY to High
+		if (ret == NPI_LNX_SUCCESS)
+			ret = HAL_RNP_MRDY_SET();
+		else
+			(void)HAL_RNP_MRDY_SET();
 
-  	if (ret == NPI_LNX_SUCCESS)
-		ret = HalGpioSrdyCheck(1);
+		if (ret == NPI_LNX_SUCCESS)
+			ret = HalGpioSrdyCheck(1);
 
-  if (!PollLockVar)
-  {
-	  ret = PollLockVarError(funcID++);
-  }
-  else
-  {
-	  PollLockVar = 0;
-	  debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
-  }
+		if (!PollLockVar)
+		{
+			ret = PollLockVarError(funcID++);
+		}
+		else
+		{
+			PollLockVar = 0;
+			debug_printf("[HANDSHAKE] PollLockVar set to %d\n", PollLockVar);
+		}
 
-  printf("Handshake unLock Poll ...");
-  pthread_mutex_unlock(&npiPollLock);
-  printf("(Handshake) success \n");
+		printf("[HANDSHAKE] unLock Poll ...");
+		pthread_mutex_unlock(&npiPollLock);
+		printf("(Handshake) success \n");
 #ifdef SRDY_INTERRUPT
-	pthread_mutex_unlock(&npiSrdyLock);
+		pthread_mutex_unlock(&npiSrdyLock);
 #endif
-  printf("-------------------- END GPIO HANDSHAKE -------------------\n");
+		printf("-------------------- END GPIO HANDSHAKE -------------------\n");
+	}
+	else
+	{
+		printf("\n\n----------------- SYNCHRONISING MUTEX'S ----------------\n");
+		pthread_mutex_unlock(&npiPollLock);
+		printf("unLock Poll ...\n");
+#ifdef SRDY_INTERRUPT
+		pthread_mutex_unlock(&npiSrdyLock);
+		printf("unLock SRDY ...\n");
+#endif
+		printf("----------------- END SYNCHRONISING MUTEX'S ----------------\n");
+	}
 
-  return ret;
+	return ret;
 }
-
 
 /**************************************************************************************************
  * @fn          npi_initsyncres
@@ -1040,24 +1191,26 @@ static void *npi_poll_entry(void *ptr)
 {
 	int ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_POLL_ENTRY;
 	uint8 readbuf[128];
-//	uint8 pollStatus = FALSE;
+#ifndef SRDY_INTERRUPT
+	uint8 pollStatus = FALSE;
+#endif //SRDY_INTERRUPT
 
-	printf("POLL: Locking Mutex for Poll Thread \n");
+	printf("[POLL] Locking Mutex for Poll Thread \n");
 
 	/* lock mutex in order not to lose signal */
 	pthread_mutex_lock(&npi_poll_mutex);
 
-	printf("POLL: Thread Started \n");
+	printf("[POLL] Thread Started \n");
 
 	//This lock wait for Initialization to finish (reset+sync)
 	pthread_mutex_lock(&npiPollLock);
 
-	printf("POLL: Thread Continues After Synchronization\n");
+	printf("[POLL] Thread Continues After Synchronization\n");
 
 #ifdef SRDY_INTERRUPT
-	debug_printf("POLL: Lock Poll mutex (SRDY=%d) \n", global_srdy);
+	debug_printf("[POLL] Lock Poll mutex (SRDY=%d) \n", global_srdy);
 	pthread_cond_wait(&npi_srdy_H2L_poll, &npiPollLock);
-	debug_printf("POLL: Locked Poll mutex (SRDY=%d) \n", global_srdy);
+	debug_printf("[POLL] Locked Poll mutex (SRDY=%d) \n", global_srdy);
 #else
 	pthread_mutex_unlock(&npiPollLock);
 #endif
@@ -1076,39 +1229,37 @@ static void *npi_poll_entry(void *ptr)
 		else
 		{
 			PollLockVar = 1;
-			debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+			debug_printf("[POLL] PollLockVar set to %d\n", PollLockVar);
 		}
 
-		debug_printf("(Poll) success \n");
 		//Ready SRDY Status
 		// This Test check if RNP has asserted SRDY line because it has some Data pending.
 		// If SRDY is not Used, then this line need to be commented, and the Poll command need
 		// to be sent regularly to check if any data is pending. this is done every 10ms (see below npi_poll_cond)
-#ifndef SRDY_INTERRUPT
+//#ifndef SRDY_INTERRUPT
 		ret =  HAL_RNP_SRDY_CLR();
 		if(TRUE == ret)
-#else
-		//Interruption case, In case of a SREQ, SRDY will go low a end generate an event.
-		// the npiPollLock will prevent us to arrive to this test,
-		// BUT an AREQ can immediately follow  a SREQ: SRDY will stay low for the whole process
-		// In this case, we need to check that the SRDY line is still LOW or is HIGH.
-		if(1)
-#endif
+//#else
+//		//Interruption case, In case of a SREQ, SRDY will go low a end generate an event.
+//		// the npiPollLock will prevent us to arrive to this test,
+//		// BUT an AREQ can immediately follow  a SREQ: SRDY will stay low for the whole process
+//		// In this case, we need to check that the SRDY line is still LOW or is HIGH.
+//		if(1)
+//#endif
 		{
-			debug_printf("Polling received...\n");
+			debug_printf("[POLL] Polling received...\n");
 
 			//RNP is polling, retrieve the data
 			*readbuf = 0; //Poll Command has zero data bytes.
 			*(readbuf+1) = RPC_CMD_POLL;
 			*(readbuf+2) = 0;
 			ret = npi_spi_pollData((npiMsgData_t *)readbuf);
-			debug_printf("Poll unLock SRDY ...\n");
 			if (ret == NPI_LNX_SUCCESS)
 			{
 				//Check if polling was successful
 				if ((readbuf[RPC_POS_CMD0] & RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ)
 				{
-					((uint8 *)readbuf)[RPC_POS_CMD0] &=  RPC_SUBSYSTEM_MASK;
+//					((uint8 *)readbuf)[RPC_POS_CMD0] =  RPC_SUBSYSTEM_MASK;
 					ret = NPI_AsynchMsgCback((npiMsgData_t *)(readbuf));
 					if (ret != NPI_LNX_SUCCESS)
 					{
@@ -1116,15 +1267,15 @@ static void *npi_poll_entry(void *ptr)
 						npi_poll_terminate = 1;
 					}
 				}
-				else if (ret == NPI_LNX_ERROR_SPI_POLL_DATA_SRDY_CLR_TIMEOUT_POSSIBLE_RESET)
-				{
-					printf("[WARNING] Unexpected handshake received. RNP may have reset. \n");
-				}
 			}
 			else
 			{
 				// Exit thread to invoke report to main thread
 				npi_poll_terminate = 1;
+				if (ret == NPI_LNX_ERROR_SPI_POLL_DATA_SRDY_CLR_TIMEOUT_POSSIBLE_RESET)
+				{
+					printf("[POLL][WARNING] Unexpected handshake received. RNP may have reset. \n");
+				}
 			}
 
 			if (!PollLockVar)
@@ -1134,21 +1285,23 @@ static void *npi_poll_entry(void *ptr)
 			else
 			{
 				PollLockVar = 0;
-				debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+				debug_printf("[POLL] PollLockVar set to %d\n", PollLockVar);
 			}
 
+#ifndef SRDY_INTERRUPT
 			if ( 0 == pthread_mutex_unlock(&npiPollLock))
 			{
-//				pollStatus = TRUE;
-				debug_printf("Poll unLock SRDY ...\n");
+				pollStatus = TRUE;
+				debug_printf("[POLL] UnLock SRDY ...\n");
 			}
 			else
 			{
-				debug_printf("Poll unLock SRDY FAILED...\n");
+				debug_printf("[POLL] UnLock SRDY FAILED...\n");
 			    npi_ipc_errno = NPI_LNX_ERROR_SPI_POLL_THREAD_POLL_UNLOCK;
 			    ret = NPI_LNX_FAILURE;
 				npi_poll_terminate = 1;
 			}
+#endif //SRDY_INTERRUPT
 		}
 		else
 		{
@@ -1159,28 +1312,37 @@ static void *npi_poll_entry(void *ptr)
 			else
 			{
 				PollLockVar = 0;
-				debug_printf("[SPI POLL] PollLockVar set to %d\n", PollLockVar);
+				debug_printf("[POLL] PollLockVar set to %d\n", PollLockVar);
 			}
 
+#ifndef SRDY_INTERRUPT
 			if ( 0 == pthread_mutex_unlock(&npiPollLock))
 			{
-				debug_printf("Poll unLock SRDY ...\n");
+				debug_printf("[POLL] UnLock SRDY ...\n");
 			}
 			else
 			{
-				debug_printf("Poll unLock SRDY FAILED...\n");
+				debug_printf("[POLL] UnLock SRDY FAILED...\n");
 			    npi_ipc_errno = NPI_LNX_ERROR_SPI_POLL_THREAD_POLL_UNLOCK;
 			    ret = NPI_LNX_FAILURE;
 				npi_poll_terminate = 1;
 			}
-//			pollStatus = FALSE;
+			pollStatus = FALSE;
+#endif //SRDY_INTERRUPT
 		}
 
-
 #ifdef SRDY_INTERRUPT
-		debug_printf("POLL: Lock SRDY mutex (SRDY=%d) \n", global_srdy);
-		pthread_cond_wait(&npi_srdy_H2L_poll, &npiPollLock);
-		debug_printf("POLL: Locked SRDY mutex (SRDY=%d) \n", global_srdy);
+		debug_printf("[POLL] Unlock POLL mutex by conditional wait (SRDY=%d) \n", global_srdy);
+		if (!npi_poll_terminate)
+		{
+			pthread_cond_wait(&npi_srdy_H2L_poll, &npiPollLock);
+		}
+		else
+		{
+			// Just unlock mutex, while loop will exit next
+			pthread_mutex_unlock(&npiPollLock);
+		}
+		debug_printf("[POLL] Locked POLL mutex because condition was met (SRDY=%d) \n", global_srdy);
 #else
 		if (!pollStatus) //If previous poll failed, wait 10ms to do another one, else do it right away to empty the RNP queue.
 		{
@@ -1198,17 +1360,17 @@ static void *npi_poll_entry(void *ptr)
 		}
 #endif
 	}
-	printf("POLL: Thread Exiting... \n");
+	printf("[POLL] Thread Exiting... \n");
 	pthread_mutex_unlock(&npi_poll_mutex);
 
 	char *errorMsg;
 	if ( (ret != NPI_LNX_SUCCESS) && (npi_ipc_errno != NPI_LNX_ERROR_SPI_POLL_THREAD_SREQ_CONFLICT) )
 	{
-		errorMsg = "SPI Poll thread exited with error. Please check global error message\n";
+		errorMsg = "[POLL] Thread exited with error. Please check global error message\n";
 	}
 	else
 	{
-		errorMsg = "SPI Poll thread exited without error\n";
+		errorMsg = "[POLL] Thread exited without error\n";
 	}
 
 	NPI_LNX_IPC_NotifyError(NPI_LNX_ERROR_MODULE_MASK(NPI_LNX_ERROR_SPI_POLL_THREAD_POLL_LOCK), errorMsg);
@@ -1287,30 +1449,61 @@ static void *npi_event_entry(void *ptr)
 	/* Timeout in msec. Drop down to SPI_ISR_POLL_TIMEOUT_MS_MIN if two consecutive interrupts are missed */
 	struct pollfd pollfds[1];
 	int val;
+	char tmpStr[512];
 
-	printf("EVENT: Thread Started \n");
+	printf("[INT]: Interrupt Event Thread Started \n");
 
 	/* thread loop */
-	while (!npi_poll_terminate) {
+	while (!npi_poll_terminate)
+	{
+		whileIt++;
+		memset((void*) pollfds, 0, sizeof(pollfds));
+		pollfds[0].fd = GpioSrdyFd; /* Wait for input */
+		pollfds[0].events = POLLPRI; /* Wait for input */
+		result = poll(pollfds, 1, timeout);
+
+		// Make sure we're not in Asynch data or Synch data, so check if npiSrdyLock is available
+		if (pthread_mutex_trylock(&npiSrdyLock) != 0)
 		{
-			whileIt++;
-			memset((void*) pollfds, 0, sizeof(pollfds));
-			pollfds[0].fd = GpioSrdyFd; /* Wait for input */
-			pollfds[0].events = POLLPRI; /* Wait for input */
-			result = poll(pollfds, 1, timeout);
-//			debug_printf("poll() timeout\n");
-			switch (result) {
+			if ( __BIG_DEBUG_ACTIVE == TRUE )
+			{
+				// We are in Asynch or Synch, so return to poll
+				if (HAL_RNP_SRDY_SET() == TRUE)
+				{
+					time_printf("[INT]: SRDY found to be de-asserted while we are transmitting");
+				}
+				else
+				{
+					time_printf("[INT]: SRDY found to be asserted while we are transmitting");
+				}
+			}
+			continue;
+		}
+		else
+		{
+			if ( __BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread has SRDY mutex lock, result = %d", result);
+				time_printf(tmpStr);
+			}
+			// We got lock, move on
+			switch (result)
+			{
 			case 0:
 			{
 				//Should not happen by default no Timeout.
-				result = 2; //FORCE WRONG RESULT TO AVOID DEADLOCK CAUSE BY TIMEOUT
 				int bigDebugWas = __BIG_DEBUG_ACTIVE;
 				if (bigDebugWas == TRUE)
 				{
-					__BIG_DEBUG_ACTIVE = FALSE;
+//					__BIG_DEBUG_ACTIVE = FALSE;
 				}
-				debug_printf("[INT]:poll() timeout\n");
-//#ifdef __BIG_DEBUG__
+				if (__BIG_DEBUG_ACTIVE == TRUE)
+				{
+					snprintf(tmpStr, sizeof(tmpStr), "[INT]: poll() timeout (timeout set to %d), poll() returned %d", timeout, result);
+					time_printf(tmpStr);
+				}
+				result = 2; //Force wrong result to avoid deadlock caused by timeout
+				//#ifdef __BIG_DEBUG__
 				if (  NPI_LNX_FAILURE == (val = HalGpioSrdyCheck(1)))
 				{
 					ret = val;
@@ -1321,31 +1514,16 @@ static void *npi_event_entry(void *ptr)
 					// Accept this case as a missed interrupt. We may stall if not attempting to handle asserted SRDY
 					if (!val)
 					{
-						//	debug_
-						gettimeofday(&curTime, NULL);
-						long int diffPrev;
-						int t = 0;
-						if (curTime.tv_usec >= prevTime.tv_usec)
+						if ( __BIG_DEBUG_ACTIVE == TRUE )
 						{
-							diffPrev = curTime.tv_usec - prevTime.tv_usec;
+							snprintf(tmpStr, sizeof(tmpStr), "%d (it #%d)", missedInterrupt, whileIt);
+							time_printf(tmpStr);
 						}
-						else
-						{
-							diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-							t = 1;
-						}
-
-						prevTime = curTime;
-
-						debug_printf("[+%ld.%6ld]",
-								curTime.tv_sec - prevTime.tv_sec - t,
-								diffPrev);
-						debug_printf("%d (it #%d)\n", missedInterrupt, whileIt);
 						missedInterrupt++;
 					}
 					result = val;
 				}
-//#endif
+				//#endif
 				debug_printf("[INT]: SRDY: %d\n", val);
 				__BIG_DEBUG_ACTIVE = bigDebugWas;
 				break;
@@ -1354,68 +1532,56 @@ static void *npi_event_entry(void *ptr)
 			{
 				debug_printf("[INT]:poll() error \n");
 				npi_ipc_errno = NPI_LNX_ERROR_SPI_EVENT_THREAD_FAILED_POLL;
-			    ret = NPI_LNX_FAILURE;
+				ret = NPI_LNX_FAILURE;
 				// Exit clean so main knows...
 				npi_poll_terminate = 1;
 				break;
 			}
 			default:
 			{
-				char * buf[64];
-				read(pollfds[0].fd, buf, 64);
+				//				char * buf[64];
+				//				read(pollfds[0].fd, buf, 64);
 				if (missedInterrupt)
 				{
-					//	debug_
-					gettimeofday(&curTime, NULL);
-					long int diffPrev;
-					int t = 0;
-					if (curTime.tv_usec >= prevTime.tv_usec)
+					if ( (pollfds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0 )
 					{
-						diffPrev = curTime.tv_usec - prevTime.tv_usec;
-					}
-					else
-					{
-						diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-						t = 1;
-					}
-
-					prevTime = curTime;
-
-					debug_printf("[+%ld.%6ld]",
-							curTime.tv_sec - prevTime.tv_sec - t,
-							diffPrev);
-					if ( ( (pollfds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0 ) &&
-							( (diffPrev < 500000) || ((curTime.tv_sec - prevTime.tv_sec) > 1 )) )
-					{
-						debug_printf("Poll returned error (it #%d), revent[0] = %d\n",
+						if ( __BIG_DEBUG_ACTIVE == TRUE )
+						{
+							snprintf(tmpStr, sizeof(tmpStr), "[INT]:Poll returned error (it #%d), revent[0] = %d",
 								whileIt,
 								pollfds[0].revents);
+						}
 					}
 					else
 					{
-						debug_printf("Clearing missed INT (it #%d), results = %d, revent[0] = %d\n",
+						if ( __BIG_DEBUG_ACTIVE == TRUE )
+						{
+							snprintf(tmpStr, sizeof(tmpStr), "[INT]:Clearing missed INT (it #%d), results = %d, revent[0] = %d",
 								whileIt,
 								result,
 								pollfds[0].revents);
+						}
 						missedInterrupt = 0;
 						// Set timeout back to 100ms
 						timeout = SPI_ISR_POLL_TIMEOUT_MS_MAX;
 					}
+					time_printf(tmpStr);
 				}
 				result = global_srdy = HalGpioSrdyCheck(1);
 				debug_printf("[INT]:Set global SRDY: %d\n", global_srdy);
 
-			}
-			break;
-			}
-		}
+				break;
+			} //default:
+			} //switch (result)
+		} // else of if (pthread_mutex_trylock(npiSrdyLock) != 0)
+
 		fflush(stdout);
 
 		if (FALSE == result) //Means SRDY switch to low state
 		{
 			if (gettimeofday(&curTimeSPIisrPoll, NULL) == 0)
-			// Adjust poll timeout based on time between packets, limited downwards
-			// to SPI_ISR_POLL_TIMEOUT_MS_MIN and upwards to SPI_ISR_POLL_TIMEOUT_MS_MAX
+				// Adjust poll timeout based on time between packets, limited downwards
+				// to SPI_ISR_POLL_TIMEOUT_MS_MIN and upwards to SPI_ISR_POLL_TIMEOUT_MS_MAX
 			{
 				// Calculate delta
 				long int diffPrev;
@@ -1453,7 +1619,7 @@ static void *npi_event_entry(void *ptr)
 			if ( (NPI_LNX_FAILURE == (ret = HalGpioMrdyCheck(1))))
 			{
 				debug_printf("[INT]:Fail to check MRDY \n");
-			    ret = NPI_LNX_FAILURE;
+				ret = NPI_LNX_FAILURE;
 				// Exit clean so main knows...
 				npi_poll_terminate = 1;
 			}
@@ -1464,47 +1630,53 @@ static void *npi_event_entry(void *ptr)
 				{
 					// Two consecutive interrupts; turn down timeout to SPI_ISR_POLL_TIMEOUT_MS_MIN
 					timeout = SPI_ISR_POLL_TIMEOUT_MS_MIN;
-					//	debug_
-					gettimeofday(&curTime, NULL);
-					long int diffPrev;
-					int t = 0;
-					if (curTime.tv_usec >= prevTime.tv_usec)
+	
+					if ( __BIG_DEBUG_ACTIVE == TRUE )
 					{
-						diffPrev = curTime.tv_usec - prevTime.tv_usec;
+						snprintf(tmpStr, sizeof(tmpStr), "[INT] Missed interrupt, but SRDY is asserted! %d (it #%d)", 
+missedInterrupt, whileIt);
+						time_printf(tmpStr);
 					}
-					else
-					{
-						diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-						t = 1;
-					}
-
-					prevTime = curTime;
-
-					debug_printf("[+%ld.%6ld]",
-							curTime.tv_sec - prevTime.tv_sec - t,
-							diffPrev);
-					debug_printf("[INT] Missed interrupt, but SRDY is asserted! %d (it #%d)\n", missedInterrupt, whileIt);
 				}
 
-				//MRDY High, This is a request from the RNP
-				debug_printf("[INT]: MRDY High??: %d \n", ret);
-				debug_printf("[INT]: send H2L to poll (srdy = %d)\n",
-						global_srdy);
+				if ( __BIG_DEBUG_ACTIVE == TRUE )
+				{
+					snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread is releasing SRDY mutex lock");
+					time_printf(tmpStr);
+				}
+
+				// Unlock before signaling poll thread
+				pthread_mutex_unlock(&npiSrdyLock);
+				if ( __BIG_DEBUG_ACTIVE == TRUE )
+				{
+					//MRDY High, This is a request from the RNP
+					snprintf(tmpStr, sizeof(tmpStr), "[INT]: MRDY High??: %d, send H2L to POLL (srdy = %d)", ret, global_srdy);
+					time_printf(tmpStr);
+				}
 				pthread_cond_signal(&npi_srdy_H2L_poll);
 			}
-		} 
-		else 
+			else
+			{
+				if ( __BIG_DEBUG_ACTIVE == TRUE )
+				{
+					snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread is releasing SRDY mutex lock");
+					time_printf(tmpStr);
+				}
+				pthread_mutex_unlock(&npiSrdyLock);
+			}
+		}
+		else
 		{
 			//Unknown Event
 			//Do nothing for now ...
 			//debug_printf("Unknown Event or timeout, ignore it, result:%d \n",result);
+			if ( __BIG_DEBUG_ACTIVE == TRUE )
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread is releasing SRDY mutex lock, result = %d",result);
+				time_printf(tmpStr);
+			}
+			pthread_mutex_unlock(&npiSrdyLock);
 		}
-
-		// Make sure we don't go back to polling for interrupt until end of
-		// synch data transmission, or poll message transmission.
-		pthread_mutex_lock(&npiPollLock);
-		pthread_mutex_unlock(&npiPollLock);
-
 	}
 
 	return NULL;

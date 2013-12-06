@@ -62,6 +62,7 @@ extern "C" {
 PACK_1 typedef struct ATTR_PACKED
 {
 	  uint32 speed;
+	  uint8 flowcontrol;
 } npiUartCfg_t;
 
   /////////////////////////////////////////////////////////////////////////////

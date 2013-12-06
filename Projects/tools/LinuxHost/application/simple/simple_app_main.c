@@ -184,6 +184,7 @@ uint8 destIdx;
 struct pollfd fds[1];
 
 const char *device = "";
+const char *debugOption = "";
 
 enum 
 {
@@ -197,7 +198,8 @@ sem_t event_mutex;
 static void print_usage(const char *prog) {
 	printf("Usage: %s [-DlHOLC3]\n", prog);
 	puts(
-			"  -D --device     device to use (default /dev/spidev4.0). For Socket use format IPaddress:port\n"
+			"  -D --device      device to use (default /dev/spidev4.0). For Socket use format IPaddress:port\n"
+			"  -d --debugOption debugAll: both time and big, debugTime: only timestamps, debugBig: verbose debug\n"
 		);
 	exit(1);
 }
@@ -209,11 +211,12 @@ static void parse_opts(int argc, char *argv[])
 		static const struct option lopts[] =
 		{
 			{ "device", 1, 0, 'D' },
+			{ "debug", 1, 0, 'd' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "D:", lopts, NULL);
+		c = getopt_long(argc, argv, "D:d:", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -222,6 +225,9 @@ static void parse_opts(int argc, char *argv[])
 		{
 		case 'D':
 			device = optarg;
+			break;
+		case 'd':
+			debugOption = optarg;
 			break;
 		default:
 			print_usage(argv[0]);
@@ -262,8 +268,25 @@ int main(int argc, char **argv)
 		return ret;
 	}
 
+	// Toggle Timer Print on Server state variable
+	uint8 mode = 0;
+	if (strcmp(debugOption, "debugAll") == 0)
+	{
+		printf("!!! 1\n");
+		mode = 3;
+	}
+	else if (strcmp(debugOption,"debugBig") == 0)
+	{
+		printf("!!! 2\n");
+		mode = 2;
+	}
+	else if (strcmp(debugOption,"debugTime") == 0)
+	{
+		printf("!!! 3\n");
+		mode = 1;
+	}
 	//Start RTI thread, management of RTI command in separate thread.
-	if ((ret = appInit(0, RTI_App_threadId)) != 0) 
+	if ((ret = appInit(mode, RTI_App_threadId)) != 0)
 	{
 		return ret;
 	}

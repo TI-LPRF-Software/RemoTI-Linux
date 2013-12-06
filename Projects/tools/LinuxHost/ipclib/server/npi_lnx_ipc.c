@@ -720,9 +720,21 @@ int main(int argc, char ** argv)
 			npiUartCfg_t uartCfg;
 			strBuf = pStrBufRoot;
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "UART", "speed", strBuf)))
+			{
 				uartCfg.speed = atoi(strBuf);
+			}
 			else
+			{
 				uartCfg.speed=115200;
+			}
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "UART", "flowcontrol", strBuf)))
+			{
+				uartCfg.flowcontrol = atoi(strBuf);
+			}
+			else
+			{
+				uartCfg.flowcontrol=0;
+			}
 			ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiUartCfg_t *)&uartCfg);
 		}
 		#endif
@@ -730,16 +742,76 @@ int main(int argc, char ** argv)
 	case NPI_SPI_FN_ARR_IDX:
 		#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 		{
-			npiSpiCfg_t spiCfg;
+			halSpiCfg_t halSpiCfg;
+			npiSpiCfg_t npiSpiCfg;
 			strBuf = pStrBufRoot;
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
-				spiCfg.speed = atoi(strBuf);
+			{
+				halSpiCfg.speed = strtol(strBuf, NULL, 10);
+			}
 			else
-				spiCfg.speed=500000;
-			spiCfg.gpioCfg = gpioCfg;
+			{
+				halSpiCfg.speed = 500000;
+			}
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "mode", strBuf)))
+			{
+				halSpiCfg.mode = strtol(strBuf, NULL, 16);
+			}
+			else
+			{
+				halSpiCfg.mode = 0;
+			}
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "bitsPerWord", strBuf)))
+			{
+				halSpiCfg.bitsPerWord = strtol(strBuf, NULL, 10);
+			}
+			else
+			{
+				halSpiCfg.bitsPerWord = 0;
+			}
+
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "earlyMrdyDeAssert", strBuf)))
+			{
+				npiSpiCfg.earlyMrdyDeAssert = strtol(strBuf, NULL, 10);
+			}
+			else
+			{
+				// If it is not defined then set value for RNP
+				npiSpiCfg.earlyMrdyDeAssert = TRUE;
+			}
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "detectResetFromSlowSrdyAssert", strBuf)))
+			{
+				npiSpiCfg.detectResetFromSlowSrdyAssert = strtol(strBuf, NULL, 10);
+			}
+			else
+			{
+				// If it is not defined then set value for RNP
+				npiSpiCfg.detectResetFromSlowSrdyAssert = TRUE;
+			}
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "forceRunOnReset", strBuf)))
+			{
+				npiSpiCfg.forceRunOnReset = strtol(strBuf, NULL, 16);
+			}
+			else
+			{
+				// If it is not defined then set value for RNP
+				npiSpiCfg.forceRunOnReset = NPI_LNX_UINT8_ERROR;
+			}
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "srdyMrdyHandshakeSupport", strBuf)))
+			{
+				npiSpiCfg.srdyMrdyHandshakeSupport = strtol(strBuf, NULL, 10);
+			}
+			else
+			{
+				// If it is not defined then set value for RNP
+				npiSpiCfg.srdyMrdyHandshakeSupport = TRUE;
+			}
+
+			npiSpiCfg.spiCfg = &halSpiCfg;
+			npiSpiCfg.gpioCfg = gpioCfg;
 
 			// Now open device for processing
-			ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiSpiCfg_t *) &spiCfg);
+			ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiSpiCfg_t *) &npiSpiCfg);
 
 			// Perform Reset of the RNP
 			(NPI_ResetSlaveFnArr[devIdx])();
@@ -1452,20 +1524,40 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			}
 			else
 			{
+				uint8 sreqHdr[RPC_FRAME_HDR_SZ] = {0};
+				// Retain the header for later integrety check
+				memcpy(sreqHdr, npi_ipc_buf[0], RPC_FRAME_HDR_SZ);
 				// Synchronous request requires an answer...
 				ret = (NPI_SendSynchDataFnArr[devIdx])(
 						(npiMsgData_t *) npi_ipc_buf[0]);
 				if ( (ret != NPI_LNX_SUCCESS) &&
-						(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT) )
+						( (npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT) ||
+							(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_POLL_TIMEDOUT) ))
 				{
 					// Report this error to client through a pseudo response
 					((npiMsgData_t *) npi_ipc_buf[0])->len = 1;
 					((npiMsgData_t *) npi_ipc_buf[0])->pData[0] = 0xFF;
 				}
+				else
+				{
+					// Capture incoherent SRSP, check type and subsystem
+					if ( ( (((npiMsgData_t *) npi_ipc_buf[0])->subSys & ~(RPC_SUBSYSTEM_MASK)) != RPC_CMD_SRSP )
+						||
+						 ( (((npiMsgData_t *) npi_ipc_buf[0])->subSys & (RPC_SUBSYSTEM_MASK)) != (sreqHdr[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK))
+						)
+					{
+						// Report this error to client through a pseudo response
+						((npiMsgData_t *) npi_ipc_buf[0])->len = 1;
+						((npiMsgData_t *) npi_ipc_buf[0])->subSys = (sreqHdr[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_SRSP;
+						((npiMsgData_t *) npi_ipc_buf[0])->cmdId = sreqHdr[RPC_POS_CMD1];
+						((npiMsgData_t *) npi_ipc_buf[0])->pData[0] = 0xFF;
+					}
+				}
 			}
 
 			if ( (ret == NPI_LNX_SUCCESS) ||
-					(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT) )
+						(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT) ||
+						(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_POLL_TIMEDOUT) )
 			{
 				n = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
 
@@ -1665,6 +1757,9 @@ int NPI_LNX_IPC_SendData(uint8 len, int connection)
 			if (activeConnections.list[i] != sNPIlisten)
 			{
 				bytesSent = send(activeConnections.list[i], npi_ipc_buf[1], len, MSG_NOSIGNAL);
+				
+				debug_printf("...sent %d bytes to Client #%d\n", bytesSent, activeConnections.list[i]);
+				
 				if (bytesSent < 0)
 				{
 					if (errno != ENOTSOCK)
@@ -1687,6 +1782,10 @@ int NPI_LNX_IPC_SendData(uint8 len, int connection)
 							ret = NPI_LNX_FAILURE;
 						}
 					}
+				}
+				else if (bytesSent != len)
+				{
+					printf("[ERROR] Failed to send all %d bytes on socket\n", len);
 				}
 			}
 		}
@@ -1942,9 +2041,6 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg)
 
 	memcpy(npi_ipc_buf[1], (uint8*) pMsg, pMsg->len + RPC_FRAME_HDR_SZ);
 
-	// Command type is not set, so set it here
-	((npiMsgData_t *) npi_ipc_buf[1])->subSys |= RPC_CMD_AREQ;
-
 	return NPI_LNX_IPC_SendData(pMsg->len + RPC_FRAME_HDR_SZ, -1);
 }
 
@@ -1972,17 +2068,26 @@ void NPI_LNX_IPC_Exit(int ret)
 
 	// Close file for parsing
 	if (serialCfgFd != NULL)
+	{
 		fclose(serialCfgFd);
+		serialCfgFd = NULL;
+	}
 
 	// Free memory for configuration buffers
 	if (pStrBufRoot != NULL)
+	{
 		free(pStrBufRoot);
+		pStrBufRoot = NULL;
+	}
 
 	if (ret != NPI_LNX_SUCCESS)
 	{
 		// Keep path for later use
 		if (devPath != NULL)
+		{
 			free(devPath);
+			devPath = NULL;
+		}
 	}
 
 	uint8 gpioIdx;
@@ -1992,10 +2097,16 @@ void NPI_LNX_IPC_Exit(int ret)
 		for (gpioIdx = 0; gpioIdx < 3; gpioIdx++)
 		{
 			if (gpioCfg[gpioIdx] != NULL)
+			{
 				free(gpioCfg[gpioIdx]);
+				gpioCfg[gpioIdx] = NULL;
+			}
 		}
 		if (gpioCfg != NULL)
+		{
 			free(gpioCfg);
+			gpioCfg = NULL;
+		}
 	}
 
 	if (ret == NPI_LNX_FAILURE)
@@ -2157,16 +2268,16 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg)
 	return ret;
 }
 
-static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf)
+static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 {
 	int ret = NPI_LNX_SUCCESS;
 
-	switch(npi_ipc_buf->cmdId)
+	switch(pNpi_ipc_buf->cmdId)
 	{
 		case NPI_LNX_CMD_ID_CTRL_TIME_PRINT_REQ:
 			{
 		#ifdef __DEBUG_TIME__
-				__DEBUG_TIME_ACTIVE = npi_ipc_buf->pData[0];
+				__DEBUG_TIME_ACTIVE = pNpi_ipc_buf->pData[0];
 				if (__DEBUG_TIME_ACTIVE == FALSE)
 				{
 					printf("__DEBUG_TIME_ACTIVE set to FALSE\n");
@@ -2176,21 +2287,21 @@ static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf)
 					printf("__DEBUG_TIME_ACTIVE set to TRUE\n");
 				}
 				// Set return status
-				npi_ipc_buf->len = 1;
-				npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+				pNpi_ipc_buf->len = 1;
+				pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
 		#else //__DEBUG_TIME__
 				printf("NPI_Server not compiled to support time stamps\n");
 				// Set return status
-				npi_ipc_buf->len = 1;
-				npi_ipc_buf->pData[0] = (uint8) NPI_LNX_FAILURE;
+				pNpi_ipc_buf->len = 1;
+				pNpi_ipc_buf->pData[0] = (uint8) NPI_LNX_FAILURE;
 		#endif //__DEBUG_TIME__
-				npi_ipc_buf->subSys = RPC_SYS_SRV_CTRL;
+				pNpi_ipc_buf->subSys = RPC_SYS_SRV_CTRL;
 				ret = NPI_LNX_SUCCESS;
 		}
 		break;
 		case NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT_REQ:
 		{
-			__BIG_DEBUG_ACTIVE = npi_ipc_buf->pData[0];
+			__BIG_DEBUG_ACTIVE = pNpi_ipc_buf->pData[0];
 			if (__BIG_DEBUG_ACTIVE == FALSE)
 			{
 				printf("__BIG_DEBUG_ACTIVE set to FALSE\n");
@@ -2200,42 +2311,42 @@ static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf)
 				printf("__BIG_DEBUG_ACTIVE set to TRUE\n");
 			}
 			// Set return status
-			npi_ipc_buf->len = 1;
-			npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+			pNpi_ipc_buf->len = 1;
+			pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
 			ret = NPI_LNX_SUCCESS;
 			break;
 		}
 		case NPI_LNX_CMD_ID_VERSION_REQ:
 		{
 			// Set return status
-			npi_ipc_buf->len = 4;
-			npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
-			npi_ipc_buf->pData[1] = NPI_LNX_MAJOR_VERSION;
-			npi_ipc_buf->pData[2] = NPI_LNX_MINOR_VERSION;
-			npi_ipc_buf->pData[3] = NPI_LNX_REVISION;
+			pNpi_ipc_buf->len = 4;
+			pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+			pNpi_ipc_buf->pData[1] = NPI_LNX_MAJOR_VERSION;
+			pNpi_ipc_buf->pData[2] = NPI_LNX_MINOR_VERSION;
+			pNpi_ipc_buf->pData[3] = NPI_LNX_REVISION;
 			ret = NPI_LNX_SUCCESS;
 		}
 		break;
 		case NPI_LNX_CMD_ID_GET_PARAM_REQ:
 		{
 			// Set return status
-			switch(npi_ipc_buf->pData[0])
+			switch(pNpi_ipc_buf->pData[0])
 			{
 				case NPI_LNX_PARAM_NB_CONNECTIONS:
-					npi_ipc_buf->len = 3;
-					npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+					pNpi_ipc_buf->len = 3;
+					pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
 					//Number of Active Connections
-					npi_ipc_buf->pData[1] = activeConnections.size;
+					pNpi_ipc_buf->pData[1] = activeConnections.size;
 					//Max number of possible connections.
-					npi_ipc_buf->pData[2] = NPI_SERVER_CONNECTION_QUEUE_SIZE;
+					pNpi_ipc_buf->pData[2] = NPI_SERVER_CONNECTION_QUEUE_SIZE;
 
 					ret = NPI_LNX_SUCCESS;
 					break;
 				case NPI_LNX_PARAM_DEVICE_USED:
-					npi_ipc_buf->len = 2;
-					npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+					pNpi_ipc_buf->len = 2;
+					pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
 					//device open and used by the sever
-					npi_ipc_buf->pData[1] = devIdx;
+					pNpi_ipc_buf->pData[1] = devIdx;
 
 					ret = NPI_LNX_SUCCESS;
 					break;
@@ -2276,8 +2387,8 @@ static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf)
 			debug_printf("Trying to disconnect device %d\n", devIdx);
 			(NPI_CloseDeviceFnArr[devIdx])();
 			debug_printf("Preparing return message after disconnecting device %d\n", devIdx);
-			npi_ipc_buf->len = 1;
-			npi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+			pNpi_ipc_buf->len = 1;
+			pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
 		}
 		break;
 		case NPI_LNX_CMD_ID_CONNECT_DEVICE:
@@ -2288,30 +2399,139 @@ static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf)
 			case NPI_UART_FN_ARR_IDX:
 #if (defined NPI_UART) && (NPI_UART == TRUE)
 			{
-				ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, NULL);
+				npiUartCfg_t uartCfg;
+				char* strBuf;
+				strBuf = (char*) malloc(128);
+				strBuf = pStrBufRoot;
+				if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "UART", "speed", strBuf)))
+				{
+					uartCfg.speed = atoi(strBuf);
+				}
+				else
+				{
+					uartCfg.speed=115200;
+				}
+				if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "UART", "flowcontrol", strBuf)))
+				{
+					uartCfg.flowcontrol = atoi(strBuf);
+				}
+				else
+				{
+					uartCfg.flowcontrol=0;
+				}
+				free(strBuf);
+				ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiUartCfg_t *)&uartCfg);
 			}
 #endif
 			break;
 			case NPI_SPI_FN_ARR_IDX:
 #if (defined NPI_SPI) && (NPI_SPI == TRUE)
 			{
-				npiSpiCfg_t spiCfg;
+				halSpiCfg_t halSpiCfg;
+				npiSpiCfg_t npiSpiCfg;
 				char* strBuf;
 				strBuf = (char*) malloc(128);
 				if (serialCfgFd != NULL)
 				{
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
-						spiCfg.speed = atoi(strBuf);
+					{
+						halSpiCfg.speed = atoi(strBuf);
+					}
 					else
-						spiCfg.speed=500000;
+					{
+						halSpiCfg.speed=500000;
+					}
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "mode", strBuf)))
+					{
+						halSpiCfg.mode = strtol(strBuf, NULL, 16);
+					}
+					else
+					{
+						halSpiCfg.mode = 0;
+					}
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "bitsPerWord", strBuf)))
+					{
+						halSpiCfg.bitsPerWord = strtol(strBuf, NULL, 10);
+					}
+					else
+					{
+						halSpiCfg.bitsPerWord = 0;
+					}
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "earlyMrdyDeAssert", strBuf)))
+					{
+						npiSpiCfg.earlyMrdyDeAssert = strtol(strBuf, NULL, 10);
+					}
+					else
+					{
+						// If it is not defined then set value for RNP
+						npiSpiCfg.earlyMrdyDeAssert = TRUE;
+					}
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "detectResetFromSlowSrdyAssert", strBuf)))
+					{
+						npiSpiCfg.detectResetFromSlowSrdyAssert = strtol(strBuf, NULL, 10);
+					}
+					else
+					{
+						// If it is not defined then set value for RNP
+						npiSpiCfg.detectResetFromSlowSrdyAssert = TRUE;
+					}
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "forceRunOnReset", strBuf)))
+					{
+						npiSpiCfg.forceRunOnReset = strtol(strBuf, NULL, 16);
+					}
+					else
+					{
+						// If it is not defined then set value for RNP
+						npiSpiCfg.forceRunOnReset = NPI_LNX_UINT8_ERROR;
+					}
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "srdyMrdyHandshakeSupport", strBuf)))
+					{
+						npiSpiCfg.srdyMrdyHandshakeSupport = strtol(strBuf, NULL, 10);
+					}
+					else
+					{
+						// If it is not defined then set value for RNP
+						npiSpiCfg.srdyMrdyHandshakeSupport = TRUE;
+					}
 				}
 				else
-					spiCfg.speed=500000;
-				spiCfg.gpioCfg = gpioCfg;
+				{
+					halSpiCfg.speed=500000;
+					halSpiCfg.mode = 0;
+					halSpiCfg.bitsPerWord = 8;
+					// If it is not defined then set value for RNP
+					npiSpiCfg.earlyMrdyDeAssert = TRUE;
+					// If it is not defined then set value for RNP
+					npiSpiCfg.detectResetFromSlowSrdyAssert = TRUE;
+					// If it is not defined then set value for RNP
+					npiSpiCfg.forceRunOnReset = NPI_LNX_UINT8_ERROR;
+					// If it is not defined then set value for RNP
+					npiSpiCfg.srdyMrdyHandshakeSupport = TRUE;
+				}
+				// GPIO config is stored
+				npiSpiCfg.gpioCfg = gpioCfg;
+				npiSpiCfg.spiCfg = &halSpiCfg;
 				free(strBuf);
 
 				// Now open device for processing
-				ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiSpiCfg_t *) &spiCfg);
+				ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiSpiCfg_t *) &npiSpiCfg);
+
+				// Must also reset and synch
+
+				// Perform Reset of the RNP
+				(NPI_ResetSlaveFnArr[devIdx])();
+
+				// Do the Hw Handshake
+				(NPI_SynchSlaveFnArr[devIdx])();
+
+				// Since SPI does not indicate reset to host we should notify here
+				// but there's no unified way of doing it for RNP and ZNP...
+				// For RemoTI we can send RTI_ResetInd(). This message should just
+				// be discarded by anything but RNP, so should be safe.
+				((npiMsgData_t *) npi_ipc_buf[1])->len = 0;
+				((npiMsgData_t *) npi_ipc_buf[1])->subSys = 0x4A;
+				((npiMsgData_t *) npi_ipc_buf[1])->cmdId = 0x0D;
+				NPI_LNX_IPC_SendData(((npiMsgData_t *) npi_ipc_buf[1])->len + RPC_FRAME_HDR_SZ, -1);
 			}
 #endif
 			break;
@@ -2333,8 +2553,8 @@ static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf)
 			}
 			debug_printf("Preparing return message after connecting to device %d (ret == 0x%.2X, npi_ipc_errno == 0x%.2X)\n",
 					devIdx, ret, npi_ipc_errno);
-			npi_ipc_buf->len = 1;
-			npi_ipc_buf->pData[0] = ret;
+			pNpi_ipc_buf->len = 1;
+			pNpi_ipc_buf->pData[0] = ret;
 		}
 		break;
 		default:
