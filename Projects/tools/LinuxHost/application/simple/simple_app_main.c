@@ -599,6 +599,7 @@ void DispMenuReady(void)
 	printf("t- Toggle __DEBUG_TIME_ACTIVE on Server\n");
 	printf("y- Toggle __BIG_DEBUG on Server\n");
 	printf("c- Toggle simple data display\n");
+	printf("s- Toggle standby mode\n");
 	printf("a- Check States\n");
 	printf("g- Get MAC Channel\n");
 	printf("r- Reset RNP\n");

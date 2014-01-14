@@ -19,9 +19,9 @@ LIBS_x86= -lpthread
 LIBS_armBeagleBoard= -lpthread 
 LIBS_armBeagleBone= -lpthread 
 
-#gprof profiling. To check the profile run (e.g): ~$ gprof RTI_lnx_x86_client gmon.out -p
-#GPROF= -pg
-GPROF=
+#gprof profiling. To check the profile run: ~$ gprof  MSO_lnx_x86_client gmon.out -p
+GPROF= -pg
+#GPROF=
 #gcov profiling
 
 #include path

@@ -624,6 +624,24 @@ static void *appThreadFunc(void *ptr)
 //				}
 //				printf(" %d]\n\n", (91*energySamples[sizeof(energySamples)-1])/255 - 91);
 			}
+			else if (ch == 's')
+			{
+				// Toggle Standby Mode
+				static uint8 standbyState = RTI_STANDBY_ON;
+
+				RTI_StandbyReq(standbyState);
+
+				printf ("Currently %s in standby mode\n", (standbyState == RTI_STANDBY_ON) ? " " : " not ");
+
+				if (standbyState == RTI_STANDBY_ON)
+				{
+					standbyState = RTI_STANDBY_OFF;
+				}
+				else
+				{
+					standbyState = RTI_STANDBY_ON;
+				}
+			}
 			else if (ch != '\n')
 			{
 //				printf("unknown command %c (0x%.2X) \n", ch, ch);
@@ -1014,8 +1032,8 @@ void RTI_StandbyCnf(rStatus_t status)
 			printf("\nEntered Standby\n");
 			appRNPpowerState |= RTI_APP_RNP_POWER_STATE_STANDBY_BIT;
 
-			// Enable Sleep here, NPI is not responsive after this
-			RTI_EnableSleepReq();
+//			// Enable Sleep here, NPI is not responsive after this
+//			RTI_EnableSleepReq();
 		}
 	}
 	else
@@ -1341,6 +1359,11 @@ void RTI_ResetInd( void )
 	printf("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
 }
 
+void RTI_IrInd( uint8 irData )
+{
+	// Print received IR Data
+	printf("Received IR Data: \t0x%.2X\n", irData);
+}
 
 // List of supported target device types: maximum up to 6 device types.
 static uint8 tgtListCTL[RTI_MAX_NUM_SUPPORTED_TGT_TYPES] =

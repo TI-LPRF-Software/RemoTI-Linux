@@ -197,6 +197,10 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 			RTI_ResetInd();
 			break;
 
+		case RTIS_CMD_ID_RTI_IR_IND:
+			RTI_IrInd( pMsg->pData[0] ); // irData
+			break;
+
 #ifdef MSO_PROFILE
 		case RTIS_CMD_ID_RTI_PAIR_IND:
 			RTI_PairInd(pMsg->pData[0], pMsg->pData[2], pMsg->pData[3]);

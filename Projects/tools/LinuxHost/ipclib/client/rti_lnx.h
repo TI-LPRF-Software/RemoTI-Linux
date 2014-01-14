@@ -375,6 +375,10 @@ extern "C"
 #define RTI_SA_ITEM_PT_CURRENT_ENTRY_INDEX               0xB1
 #define RTI_SA_ITEM_PT_CURRENT_ENTRY                     0xB2
 #define RTI_SA_ITEM_PT_END                               0xB3
+#define RTI_SA_ITEM_PAIR_TYPE                            0xB4
+#define RTI_SA_ITEM_KEY_REPEAT_INTERVAL                  0xB5   // Time between transmission of keypress commands
+#define RTI_SA_ITEM_NODE_SUPPORTED_TGT_TYPES_RAM         0xB6   // Allows update of RAM copy of RTI_CP_ITEM_NODE_SUPPORTED_TGT_TYPES
+#define RTI_SA_ITEM_APPL_PROFILE_ID_LIST_RAM             0xB7   // Allows update of RAM copy of RTI_CP_ITEM_APPL_PROFILE_ID_LIST
 
 // Constants (CONST) Table Item Idenifiers
 #define RTI_CONST_ITEM_START                             0xC0
@@ -443,6 +447,12 @@ enum
   CLEAR_CONFIG_CLEAR_STATE
 };
 
+// Pairing type
+enum
+{
+  PAIR_TYPE_ZRC,
+  PAIR_TYPE_MSO
+};
 
 // Pairing table entry
 PACK_1 typedef struct ATTR_PACKED
@@ -585,6 +595,7 @@ extern RTILIB_API void RTI_RxEnableReq( uint16 duration );
 extern RTILIB_API void RTI_EnableSleepReq( void );
 extern RTILIB_API void RTI_DisableSleepReq( void );
 extern RTILIB_API void RTI_EnterBootModeReq( void );
+extern RTILIB_API void RTI_GetValidationStatusRsp( uint8 dstIndex, uint8 status );
 
 // RTI Callbacks
 extern void RTI_InitCnf( rStatus_t status );
@@ -600,6 +611,16 @@ extern void RTI_RxEnableCnf( rStatus_t status );
 extern void RTI_EnableSleepCnf( rStatus_t status );
 extern void RTI_DisableSleepCnf( rStatus_t status );
 extern void RTI_ResetInd( void );
+extern void RTI_IrInd( uint8 irData );
+extern void RTI_PairInd( rStatus_t status, uint8 dstIndex, uint8 devType );
+extern void RTI_StartValidationInd( uint8 srcIndex );
+extern void RTI_GetValidationStatusInd( uint8 srcIndex, uint8 control );
+extern RTILIB_API void RTI_GetValidationStatusRsp( uint8 dstIndex, uint8 status );
+//extern void RTI_TransmitPairReq( rcnNlmeDiscoveredEvent_t *pDiscoveredEvent, uint8 keyExchangeTransferCount );
+extern void RTI_TransmitDiscoveryReq( uint8 searchDevType );
+//extern bool RTI_MatchDiscoveredNodeDeviceCapabilities( rcnCbackEvent_t *pData );
+extern bool RTI_CancelPairInd( void );
+extern void RTI_SetupDiscoveryParams( void );
 
 // The following function is used by a module within radio processor.
 // The functionsi not intended for use by application in host processor.

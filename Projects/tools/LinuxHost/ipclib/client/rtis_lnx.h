@@ -114,6 +114,7 @@ extern "C"
   #define RTIS_CMD_ID_RTI_UNPAIR_IND             0x0B
   #define RTIS_CMD_ID_RTI_PAIR_ABORT_CNF         0x0C
   #define RTIS_CMD_ID_RTI_RESET_IND              0x0D
+  #define RTIS_CMD_ID_RTI_IR_IND              	 0xA0
 
   // RTI States
   enum
