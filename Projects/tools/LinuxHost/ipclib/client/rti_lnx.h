@@ -596,6 +596,7 @@ extern RTILIB_API void RTI_EnableSleepReq( void );
 extern RTILIB_API void RTI_DisableSleepReq( void );
 extern RTILIB_API void RTI_EnterBootModeReq( void );
 extern RTILIB_API void RTI_GetValidationStatusRsp( uint8 dstIndex, uint8 status );
+extern RTILIB_API void RTI_SetBindingParamsReq(uint32 bindingParams);
 
 // RTI Callbacks
 extern void RTI_InitCnf( rStatus_t status );
@@ -615,12 +616,12 @@ extern void RTI_IrInd( uint8 irData );
 extern void RTI_PairInd( rStatus_t status, uint8 dstIndex, uint8 devType );
 extern void RTI_StartValidationInd( uint8 srcIndex );
 extern void RTI_GetValidationStatusInd( uint8 srcIndex, uint8 control );
-extern RTILIB_API void RTI_GetValidationStatusRsp( uint8 dstIndex, uint8 status );
 //extern void RTI_TransmitPairReq( rcnNlmeDiscoveredEvent_t *pDiscoveredEvent, uint8 keyExchangeTransferCount );
 extern void RTI_TransmitDiscoveryReq( uint8 searchDevType );
 //extern bool RTI_MatchDiscoveredNodeDeviceCapabilities( rcnCbackEvent_t *pData );
 extern bool RTI_CancelPairInd( void );
 extern void RTI_SetupDiscoveryParams( void );
+extern void RTI_BindingParamsInd(void);
 
 // The following function is used by a module within radio processor.
 // The functionsi not intended for use by application in host processor.

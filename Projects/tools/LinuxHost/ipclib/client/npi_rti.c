@@ -213,6 +213,10 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 		case RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_IND:
 			RTI_GetValidationStatusInd(pMsg->pData[0], pMsg->pData[1]);
 			break;
+
+		case RTIS_CMD_ID_RTI_BIND_PARAMS_IND:
+			RTI_BindingParamsInd();
+			break;
 #endif //MSO_PROFILE
 		default:
 			// nothing can be done here!
@@ -1043,6 +1047,41 @@ RTILIB_API void RTI_GetValidationStatusRsp(uint8 index, uint8 flag)
   pMsg.len      = 2;
   pMsg.pData[0] = index;
   pMsg.pData[1] = flag;
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_SetBindingParamsReq
+ *
+ * @brief       This function is used to respond to RTI_BindingParamsInd.
+ *
+ * input parameters
+ *
+ * @param       bindingParams - 4 bytes binding parameters
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      counter value
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_SetBindingParamsReq(uint32 bindingParams)
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_BIND_PARAMS_RSP;
+  pMsg.len      = 4;
+  pMsg.pData[0] = ((uint8 *)&bindingParams)[0];
+  pMsg.pData[1] = ((uint8 *)&bindingParams)[1];
+  pMsg.pData[2] = ((uint8 *)&bindingParams)[2];
+  pMsg.pData[3] = ((uint8 *)&bindingParams)[3];
 
   // send serialized request to NP RTIS synchronously
   NPI_SendAsynchData( &pMsg );

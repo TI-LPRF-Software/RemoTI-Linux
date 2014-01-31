@@ -1236,16 +1236,16 @@ static void *npi_poll_entry(void *ptr)
 		// This Test check if RNP has asserted SRDY line because it has some Data pending.
 		// If SRDY is not Used, then this line need to be commented, and the Poll command need
 		// to be sent regularly to check if any data is pending. this is done every 10ms (see below npi_poll_cond)
-//#ifndef SRDY_INTERRUPT
+#ifndef SRDY_INTERRUPT
 		ret =  HAL_RNP_SRDY_CLR();
 		if(TRUE == ret)
-//#else
-//		//Interruption case, In case of a SREQ, SRDY will go low a end generate an event.
-//		// the npiPollLock will prevent us to arrive to this test,
-//		// BUT an AREQ can immediately follow  a SREQ: SRDY will stay low for the whole process
-//		// In this case, we need to check that the SRDY line is still LOW or is HIGH.
-//		if(1)
-//#endif
+#else
+		//Interruption case, In case of a SREQ, SRDY will go low a end generate an event.
+		// the npiPollLock will prevent us to arrive to this test,
+		// BUT an AREQ can immediately follow  a SREQ: SRDY will stay low for the whole process
+		// In this case, we need to check that the SRDY line is still LOW or is HIGH.
+		if(1)
+#endif
 		{
 			debug_printf("[POLL] Polling received...\n");
 

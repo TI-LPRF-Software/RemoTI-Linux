@@ -91,6 +91,10 @@
 #include "npi_capSense.h"
 #endif
 
+#ifdef NPI_NFC
+#include "npi_nfc.h"
+#endif
+
 #include "npi_ipc_client.h"
 
 #define NPI_PORT "2533"
@@ -165,7 +169,12 @@ npiProcessMsg_t NpiAsyncMsgCbackParserTable[] =
 #else
 		  NULL,
 #endif
-		  NULL   					//RPC_SYS_MAX         17   // Maximum value, must be last
+#ifdef NPI_NFC
+		  NFC_AsynchMsgCback,		// RPC_SYS_NFC	  	  17   // Interface for NFC
+#else
+		  NULL,
+#endif
+		  NULL   					//RPC_SYS_MAX         18   // Maximum value, must be last
 };
 
 #define NAME_ELEMENT(element) [element] = #element

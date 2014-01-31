@@ -995,6 +995,8 @@ int main(int argc, char ** argv)
 	if (bind(sNPIlisten, (struct sockaddr *)&local, len) == -1)
 	{
 		perror("bind");
+		writeToNpiLnxLog("Port is probably already in use, please select an available port\n");
+		debug_printf("Port is probably already in use, please select an available port\n");
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_BIND;
 		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
 	}
