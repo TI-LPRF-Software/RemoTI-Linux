@@ -413,6 +413,8 @@ uint8 timer_start_timerEx(uint8 threadId, uint16 event, uint32 timeout)
 	else
 	{
 		timerThreadTbl[threadId].timerEnabled &= ~event;
+		// Clear event in case it just fired.
+		timer_clear_event(threadId, event);
 	}
 
 #ifdef __DEBUG_TIME__
