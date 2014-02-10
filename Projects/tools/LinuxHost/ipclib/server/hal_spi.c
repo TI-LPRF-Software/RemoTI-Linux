@@ -146,22 +146,15 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
     npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_OPEN_DEVICE;
     return NPI_LNX_FAILURE;
   }
-  /*
-   * spi mode
-   */
+
+/*
+* spi mode
+*/
   ret = ioctl(spiDevFd, SPI_IOC_WR_MODE, &mode);
   if (ret < 0 )
   {
     perror("can't set spi mode\n");
     npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_SET_MODE;
-    return NPI_LNX_FAILURE;
-  }
-
-  ret = ioctl(spiDevFd, SPI_IOC_RD_MODE, &mode);
-  if (ret < 0 )
-  {
-    perror("can't get spi mode\n");
-    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_GET_MODE;
     return NPI_LNX_FAILURE;
   }
 
@@ -176,14 +169,6 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
     return NPI_LNX_FAILURE;
   }
 
-  ret = ioctl(spiDevFd, SPI_IOC_RD_BITS_PER_WORD, &bits);
-  if (ret < 0 )
-  {
-    perror("can't get bits per word\n");
-    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_GET_BPW;
-    return NPI_LNX_FAILURE;
-  }
-
 /*
  * max speed hz
  */
@@ -195,6 +180,25 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
     return NPI_LNX_FAILURE;
   }
 
+/*
+ * Read back for verification
+ */
+  ret = ioctl(spiDevFd, SPI_IOC_RD_BITS_PER_WORD, &bits);
+  if (ret < 0 )
+  {
+    perror("can't get bits per word\n");
+    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_GET_BPW;
+    return NPI_LNX_FAILURE;
+  }
+
+  ret = ioctl(spiDevFd, SPI_IOC_RD_MODE, &mode);
+  if (ret < 0 )
+  {
+    perror("can't get spi mode\n");
+    npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_GET_MODE;
+    return NPI_LNX_FAILURE;
+  }
+
   ret = ioctl(spiDevFd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);
   if (ret < 0 )
   {
@@ -203,11 +207,9 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
     return NPI_LNX_FAILURE;
   }
 
-#ifdef __BIG_DEBUG__
-  printf("spi mode: %d\n", mode);
-  printf("bits per word: %d\n", bits);
-  printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000);
-#endif
+  debug_printf("[HAL SPI] spi mode: 0x%02X\n", mode);
+  debug_printf("[HAL SPI] bits per word: %d\n", bits);
+  debug_printf("[HAL SPI] max speed: %d Hz (%d KHz)\n", speed, speed/1000);
 
   return NPI_LNX_SUCCESS;
 }

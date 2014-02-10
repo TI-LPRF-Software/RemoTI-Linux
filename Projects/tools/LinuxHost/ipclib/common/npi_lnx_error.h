@@ -44,6 +44,7 @@
 #ifndef NPI_LNX_ERROR_H_
 #define NPI_LNX_ERROR_H_
 
+#include "hal_types.h"
 
 // Global error variable
 extern int npi_ipc_errno;

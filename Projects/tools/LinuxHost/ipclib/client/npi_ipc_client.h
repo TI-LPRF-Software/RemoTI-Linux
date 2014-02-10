@@ -72,7 +72,7 @@ extern "C"
 
   void NPI_SetWorkaroundReq( uint8 workaroundID, uint8 *pStatus );
 
-  uint8 __DEBUG_CLIENT_ACTIVE;
+  extern uint8 __DEBUG_CLIENT_ACTIVE;
 
   /**************************************************************************************************
    * TYPEDEFS

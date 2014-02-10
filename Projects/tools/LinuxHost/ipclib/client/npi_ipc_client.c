@@ -95,6 +95,10 @@
 #include "npi_nfc.h"
 #endif
 
+#ifdef __DEBUG_TIME__
+#include "time_printf.h"
+#endif //__DEBUG_TIME__
+
 #include "npi_ipc_client.h"
 
 #define NPI_PORT "2533"
@@ -107,6 +111,8 @@
 #define debug_printf(fmt, ...) 			st(if (__DEBUG_CLIENT_ACTIVE == 1) printf( fmt, ##__VA_ARGS__);)
 #define debug_verbose_printf(fmt, ...) 	st(if (__DEBUG_CLIENT_ACTIVE == 2) printf( fmt, ##__VA_ARGS__);)
 #endif
+
+uint8 __DEBUG_CLIENT_ACTIVE = FALSE;
 
 #define msg_memcpy(src, dst, len)	memcpy(src, dst, len)
 
@@ -443,6 +449,11 @@ int NPI_ClientInit(const char *devPath)
     }
 #endif
 
+#ifdef __DEBUG_TIME__
+	// Start time_print module here. This way it will be fairly synchronized with the NPI Server time prints
+	time_printf_start();
+#endif //__DEBUG_TIME__
+
     if (res == TRUE)
     {
     	printf("Connected.\n");
@@ -746,7 +757,13 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 					}
 					else if ( ( (uint8)(((npiMsgData_t *)&(npi_ipc_buf[0][0]))->subSys) & (uint8)RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ )
 					{
+#ifdef __DEBUG_TIME__
+						char str[128];
+						snprintf(str, sizeof(str), "[CLIENT READ] RPC_CMD_AREQ cmdId: 0x%.2X\n", ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->cmdId);
+						time_printf(str);
+#else
 						debug_printf("[CLIENT READ] RPC_CMD_AREQ cmdId: 0x%.2X\n", ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->cmdId);
+#endif //__DEBUG_TIME__
 						// Verify the size of the incoming message before passing it
 						if ( (((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len + RPC_FRAME_HDR_SZ) <= sizeof(npiMsgData_t) )
 						{
@@ -1206,8 +1223,25 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg )
     func = NpiAsyncMsgCbackParserTable[pMsg->subSys];
     if (func)
     {
+#ifdef __DEBUG_TIME__
+    	char str[256];
+    	uint8 charWritten, i;
+    	charWritten = snprintf(str, sizeof(str), "[CLIENT CBACK START] subSys 0x%.2X, cmdId 0x%.2X, pData:",
+		pMsg->subSys,
+		pMsg->cmdId);
+    	charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\t");
+    	for (i = 0; i < pMsg->len; i++)
+    	{
+    		charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", pMsg->pData[i]);
+    	}
+    	charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\n");
+    	time_printf(str);
+#endif //__DEBUG_TIME__
       /* execute processing function */
       res = (*func)(pMsg);
+#ifdef __DEBUG_TIME__
+      time_printf("[CLIENT CBACK ENDED] \n");
+#endif //__DEBUG_TIME__
     }
     else
     {

@@ -658,7 +658,7 @@ int main(int argc, char ** argv)
 							gpioIdx, gpioCfg[gpioIdx]->gpio.active_high_low);
 			}
 			else
-				printf("[CONFIG] Warning , key 'active_high_low' is missing for optionnal GPIO %s\n", sectionNamesArray[gpioIdx][0]);
+				printf("[CONFIG] Warning , key 'active_high_low' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][0]);
 
 			// Get SRDY, MRDY or RESET Level Shifter
 			debug_printf("gpioCfg[gpioIdx]->levelshifter \t\t\t%p\n",
@@ -676,7 +676,7 @@ int main(int argc, char ** argv)
 						gpioIdx, gpioCfg[gpioIdx]->levelshifter.value);
 			}
 			else
-				printf("[CONFIG] Warning , key 'value' is missing for optionnal GPIO %s\n", sectionNamesArray[gpioIdx][1]);
+				printf("[CONFIG] Warning , key 'value' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][1]);
 
 			// Get SRDY, MRDY or RESET Level Shifter direction
 			strBuf = pStrBufRoot;
@@ -690,7 +690,7 @@ int main(int argc, char ** argv)
 						gpioIdx, gpioCfg[gpioIdx]->levelshifter.direction);
 			}
 			else
-				printf("[CONFIG] Warning , key 'direction' is missing for optionnal GPIO %s\n", sectionNamesArray[gpioIdx][1]);
+				printf("[CONFIG] Warning , key 'direction' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][1]);
 
 
 			// Get SRDY, MRDY or RESET Level Shifter Active High/Low
@@ -704,7 +704,7 @@ int main(int argc, char ** argv)
 					gpioIdx, gpioCfg[gpioIdx]->levelshifter.active_high_low);
 			}
 			else
-				printf("[CONFIG] Warning , key 'active_high_low' is missing for optionnal GPIO %s\n", sectionNamesArray[gpioIdx][1]);
+				printf("[CONFIG] Warning , key 'active_high_low' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][1]);
 		}
 	}
 
