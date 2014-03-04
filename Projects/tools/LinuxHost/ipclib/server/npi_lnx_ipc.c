@@ -769,7 +769,14 @@ int main(int argc, char ** argv)
 			{
 				halSpiCfg.bitsPerWord = 0;
 			}
-
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "useFullDuplexAPI", strBuf)))
+			{
+				halSpiCfg.useFullDuplexAPI = strtol(strBuf, NULL, 10);
+			}
+			else
+			{
+				halSpiCfg.useFullDuplexAPI = TRUE;
+			}
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "earlyMrdyDeAssert", strBuf)))
 			{
 				npiSpiCfg.earlyMrdyDeAssert = strtol(strBuf, NULL, 10);
@@ -2458,6 +2465,14 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					else
 					{
 						halSpiCfg.bitsPerWord = 0;
+					}
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "useFullDuplexAPI", strBuf)))
+					{
+						halSpiCfg.useFullDuplexAPI = strtol(strBuf, NULL, 10);
+					}
+					else
+					{
+						halSpiCfg.useFullDuplexAPI = TRUE;
 					}
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "earlyMrdyDeAssert", strBuf)))
 					{

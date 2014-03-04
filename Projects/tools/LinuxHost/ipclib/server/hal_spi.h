@@ -61,6 +61,7 @@ PACK_1 typedef struct ATTR_PACKED
 	  uint32 speed;
 	  uint8 mode;
 	  uint8 bitsPerWord;
+	  uint8 useFullDuplexAPI;
 } halSpiCfg_t;
 
 
@@ -131,7 +132,9 @@ st ( \
 void HalSpiFlush(uint8 port, uint8 len);
 int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg);
 void HalSpiPoll(void);
+int HalSpiRead(uint8 port, uint8 *pBuf, uint8 len);
 int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len);
+int HalSpiWriteRead(uint8 port, uint8 *pBuf, uint8 len);
 void HalSpiClose( void );
 
 

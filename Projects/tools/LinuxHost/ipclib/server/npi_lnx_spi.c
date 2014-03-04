@@ -558,14 +558,14 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 	//Do a Three Byte Dummy Write to read the RPC Header
 	for (i = 0 ;i < RPC_FRAME_HDR_SZ; i++ ) ((uint8*)pMsg)[i] = 0;
 	if (ret == NPI_LNX_SUCCESS)
-		ret = HalSpiWrite( 0, (uint8*) pMsg, RPC_FRAME_HDR_SZ);
+		ret = HalSpiRead( 0, (uint8*) pMsg, RPC_FRAME_HDR_SZ);
 
 
 	//Do a write/read of the corresponding length
 	for (i = 0 ;i < ((uint8*)pMsg)[0]; i++ ) ((uint8*)pMsg)[i+RPC_FRAME_HDR_SZ] = 0;
 	if ( (ret == NPI_LNX_SUCCESS) && (((uint8*)pMsg)[0] > 0) )
 	{
-		ret = HalSpiWrite( 0, pMsg->pData, ((uint8*)pMsg)[0]);
+		ret = HalSpiRead( 0, pMsg->pData, ((uint8*)pMsg)[0]);
 	}
 
 #ifdef __BIG_DEBUG__
@@ -710,7 +710,7 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	for (i = 0 ;i < RPC_FRAME_HDR_SZ; i++ ) ((uint8*)pMsg)[i] = 0;
 	if (ret == NPI_LNX_SUCCESS)
 	{
-		ret = HalSpiWrite( 0, (uint8*) pMsg, RPC_FRAME_HDR_SZ);
+		ret = HalSpiRead( 0, (uint8*) pMsg, RPC_FRAME_HDR_SZ);
 	}
 	debug_printf("[SYNCH] Read %d bytes ...", RPC_FRAME_HDR_SZ);
 	for (i = 0 ; i < (RPC_FRAME_HDR_SZ); i++ ) debug_printf(" 0x%.2x", ((uint8*)pMsg)[i]);
@@ -720,7 +720,7 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	for (i = 0 ;i < ((uint8*)pMsg)[0]; i++ ) ((uint8*)pMsg)[i+RPC_FRAME_HDR_SZ] = 0;
 	if ( (ret == NPI_LNX_SUCCESS) && (((uint8*)pMsg)[0] > 0) )
 	{
-		ret = HalSpiWrite( 0, pMsg->pData, ((uint8*)pMsg)[0]);
+		ret = HalSpiRead( 0, pMsg->pData, ((uint8*)pMsg)[0]);
 	}
 
 	debug_printf("[SYNCH] Read %d more bytes ...", ((uint8*)pMsg)[0]);
@@ -1442,7 +1442,8 @@ static void *npi_event_entry(void *ptr)
 #define SPI_ISR_POLL_TIMEOUT_MS_MIN		3
 #define SPI_ISR_POLL_TIMEOUT_MS_MAX		100
 	int result = -1;
-	int missedInterrupt = FALSE;
+	int missedInterrupt = 0;
+	int consecutiveTimeout = 0;
 	int whileIt = 0;
 	int ret = NPI_LNX_SUCCESS;
 	int timeout = SPI_ISR_POLL_TIMEOUT_MS_MAX;
@@ -1495,7 +1496,7 @@ static void *npi_event_entry(void *ptr)
 				int bigDebugWas = __BIG_DEBUG_ACTIVE;
 				if (bigDebugWas == TRUE)
 				{
-//					__BIG_DEBUG_ACTIVE = FALSE;
+					__BIG_DEBUG_ACTIVE = FALSE;
 				}
 				if (__BIG_DEBUG_ACTIVE == TRUE)
 				{
@@ -1520,6 +1521,25 @@ static void *npi_event_entry(void *ptr)
 							time_printf(tmpStr);
 						}
 						missedInterrupt++;
+						consecutiveTimeout = 0;
+					}
+					else
+					{
+						// Timed out. If we're in rapid poll mode, i.e. timeout == SPI_ISR_POLL_TIMEOUT_MS_MAX
+						// then we should only allow 10 consecutive such timeouts before resuming normal
+						// timeout
+						consecutiveTimeout++;
+						if ( (timeout == SPI_ISR_POLL_TIMEOUT_MS_MAX) &&
+								(consecutiveTimeout > 100) )
+						{
+							// Timed out 100 times, for 300ms, without a single
+							// SRDY assertion. Set back to 100ms timeout.
+							consecutiveTimeout = 0;
+							// Set timeout back to 100ms
+							timeout = SPI_ISR_POLL_TIMEOUT_MS_MAX;
+						}
+
+						missedInterrupt = 0;
 					}
 					result = val;
 				}
@@ -1533,12 +1553,14 @@ static void *npi_event_entry(void *ptr)
 				debug_printf("[INT]:poll() error \n");
 				npi_ipc_errno = NPI_LNX_ERROR_SPI_EVENT_THREAD_FAILED_POLL;
 				ret = NPI_LNX_FAILURE;
+				consecutiveTimeout = 0;
 				// Exit clean so main knows...
 				npi_poll_terminate = 1;
 				break;
 			}
 			default:
 			{
+				consecutiveTimeout = 0;
 				//				char * buf[64];
 				//				read(pollfds[0].fd, buf, 64);
 				if (missedInterrupt)
