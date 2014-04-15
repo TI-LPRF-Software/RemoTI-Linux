@@ -58,7 +58,7 @@ extern "C" {
 
 extern void DispMenuInit( void );
 extern void DispCFGProfileIDmenu(void);
-extern void DispCFGCurrentCfg(appDevInfo_t testReq);
+extern void DispCFGCurrentCfg(appDevInfo_t appCfg, uint16 nwkAddr, uint16 panId);
 extern void DispCFGNodeCapMenu(void);
 extern void DispCFGProfileIDMenu(void);
 extern void DispCFGdevTypesMenu(void);
@@ -68,6 +68,12 @@ extern void DispCFGVendorIDMenu(void);
 extern void DispMenuReady( void );
 extern void DispStringList( char** strList, uint16 len );
 extern void DispNumberedStringList( char** strList, uint16 len );
+
+extern void DispPhyTestModeMenu(void);
+extern void DispPhyTestModeActiveMenu(void);
+extern void DispPhyTestModeRxMenu(void);
+extern void DispPhyTestModeTxRawMenu(void);
+extern void DispPhyTestModeTxModulatedMenu(void);
 
 extern void DispSendDataDestIndexMenu();
 extern void DispSendDataPayloadMenu();

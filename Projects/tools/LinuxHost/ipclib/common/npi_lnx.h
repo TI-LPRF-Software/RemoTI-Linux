@@ -64,6 +64,11 @@ extern "C"
 
 #define NPI_PORT			"2533"
 
+#define NPI_SERVER_DEVICE_INDEX_UART		0
+#define NPI_SERVER_DEVICE_INDEX_SPI			1
+#define NPI_SERVER_DEVICE_INDEX_I2C			2
+#define NPI_SERVER_DEVICE_INDEX_UART_USB	3
+
 /**************************************************************************************************
  * TYPEDEFS
  **************************************************************************************************/

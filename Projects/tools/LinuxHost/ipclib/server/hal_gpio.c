@@ -585,7 +585,7 @@ int HalGpioMrdySet(uint8 state)
 {
 	if(state == 0)
 	{
-		debug_printf("[%u][GPIO] MRDY set to low\n", (unsigned int) pthread_self());
+//		debug_printf("[%u][GPIO] MRDY set to low\n", (unsigned int) pthread_self());
 		if (ERROR == write(gpioMrdyFd, "0", 1))
 		{
 			perror(mrdyGpioCfg.gpio.value);
@@ -596,7 +596,7 @@ int HalGpioMrdySet(uint8 state)
 	}
 	else
 	{
-		debug_printf("[%u][GPIO] MRDY set to High\n", (unsigned int) pthread_self());
+//		debug_printf("[%u][GPIO] MRDY set to High\n", (unsigned int) pthread_self());
     	if(ERROR == write(gpioMrdyFd, "1", 1))
 		{
 			perror(mrdyGpioCfg.gpio.value);
@@ -631,7 +631,7 @@ int HalGpioMrdyCheck(uint8 state)
 		return NPI_LNX_FAILURE;
 	}
 
-	debug_printf("[%u][GPIO]===>check MRDY: %c  (%c) \n", (unsigned int) pthread_self(), mrdy, mrdy);
+//	debug_printf("[%u][GPIO]===>check MRDY: %c  (%c) \n", (unsigned int) pthread_self(), mrdy, mrdy);
 
 	return (state == ((mrdy == '1') ? 1 : 0));
 }
@@ -816,7 +816,7 @@ int HalGpioSrdyCheck(uint8 state)
 		return NPI_LNX_FAILURE;
 	}
 
-	debug_printf("[%u][GPIO]===>check SRDY: %c [%d]  (%c) \n", (unsigned int) pthread_self(), srdy, srdy, atoi(&srdy));
+//	debug_printf("[%u][GPIO]===>check SRDY: %c [%d]  (%c) \n", (unsigned int) pthread_self(), srdy, srdy, atoi(&srdy));
 
 	return (state == ((srdy == '1') ? 1 : 0));
 }
@@ -1043,7 +1043,7 @@ int HalGpioWaitSrdySet()
 
 	int ret = NPI_LNX_SUCCESS, accTimeout = 0;
 
-	debug_printf("[%u][GPIO]Wait SRDY High, \n", (unsigned int) pthread_self());
+//	debug_printf("[%u][GPIO]Wait SRDY High, \n", (unsigned int) pthread_self());
 
 	struct pollfd ufds[1];
 	int pollRet;
@@ -1170,7 +1170,7 @@ int HalGpioWaitSrdySet()
 			srdy);
 #endif //__DEBUG_TIME__
 
-	debug_printf("[%u][GPIO]==>SRDY change to : %c  (%d) \n", (unsigned int) pthread_self(), srdy, srdy);
+//	debug_printf("[%u][GPIO]==>SRDY change to : %c  (%d) \n", (unsigned int) pthread_self(), srdy, srdy);
 
 	return ret;
 }

@@ -85,11 +85,12 @@ extern "C" {
 #define RPC_SYS_RCN         11   // Remote Control Network Layer
 #define RPC_SYS_RCN_CLIENT  12   // Remote Control Network Layer Client
 #define RPC_SYS_BOOT        13   // Serial Bootloader
-#define RPC_SYS_DEBUG	    14   // Debug Interface for Flash Programming
-#define RPC_SYS_SRV_CTRL	15   // Interface to control Server
-#define RPC_SYS_CAPSENSE    16   // CapSense callback
+// Reserved, maybe RPC_SYS_ZIPTEST
+#define RPC_SYS_DEBUG	    15   // Debug Interface for Flash Programming
+#define RPC_SYS_PERIPHERALS 16   // Peripheral control and callback, e.g. CapSense callback
 #define RPC_SYS_NFC    		17   // NFC
 #define RPC_SYS_MAX         18   // Maximum value, must be last
+#define RPC_SYS_SRV_CTRL	31   // Interface to control Server, not required in function table
 
 /* 1st byte is the length of the data field, 2nd/3rd bytes are command field. */
 #define RPC_FRAME_HDR_SZ    3
@@ -112,6 +113,12 @@ extern "C" {
 #define RPC_ERR_COMMAND_ID  2     /* invalid command ID */
 #define RPC_ERR_PARAMETER   3     /* invalid parameter */
 #define RPC_ERR_LENGTH      4     /* invalid length */
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Peripheral control interface specific
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+#define RPC_CMD_ID_PERIPHERALS_CAPSENSE			1
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // UART Specific

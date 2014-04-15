@@ -531,6 +531,17 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 		diffPrev += (t2.tv_sec - t1.tv_sec - 1) * 1000000;
 	}
 
+	if (earlyMrdyDeAssert == TRUE)
+	{
+		//We Set MRDY here to avoid GPIO latency with the beagle board
+		// if we do here later, the RNP see it low at the end of the transaction and
+		// therefore think a new transaction is starting and lower its SRDY...
+		if (ret == NPI_LNX_SUCCESS)
+			ret = HAL_RNP_MRDY_SET();
+		else
+			(void)HAL_RNP_MRDY_SET();
+	}
+
 	if (detectResetFromSlowSrdyAssert == TRUE)
 	{
 		// If it took more than NPI_LNX_SPI_NUM_OF_MS_TO_DETECT_RESET_AFTER_SLOW_SRDY_ASSERT ms
@@ -543,16 +554,6 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 		}
 	}
 
-	if (earlyMrdyDeAssert == TRUE)
-	{
-		//We Set MRDY here to avoid GPIO latency with the beagle board
-		// if we do here later, the RNP see it low at the end of the transaction and
-		// therefore think a new transaction is starting and lower its SRDY...
-		if (ret == NPI_LNX_SUCCESS)
-			ret = HAL_RNP_MRDY_SET();
-		else
-			(void)HAL_RNP_MRDY_SET();
-	}
 	__BIG_DEBUG_ACTIVE = bigDebugWas;
 
 	//Do a Three Byte Dummy Write to read the RPC Header
@@ -560,12 +561,22 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 	if (ret == NPI_LNX_SUCCESS)
 		ret = HalSpiRead( 0, (uint8*) pMsg, RPC_FRAME_HDR_SZ);
 
-
-	//Do a write/read of the corresponding length
-	for (i = 0 ;i < ((uint8*)pMsg)[0]; i++ ) ((uint8*)pMsg)[i+RPC_FRAME_HDR_SZ] = 0;
-	if ( (ret == NPI_LNX_SUCCESS) && (((uint8*)pMsg)[0] > 0) )
+	// If we read 0xFF, 0xFF, 0xFF then it's an illegal header
+	if ( (pMsg->len == 0xFF) &&
+		 (pMsg->subSys == 0xFF) &&
+		 (pMsg->cmdId == 0xFF) )
 	{
-		ret = HalSpiRead( 0, pMsg->pData, ((uint8*)pMsg)[0]);
+		// Do nothing
+		printf("[POLL] Invalid header received\n");
+	}
+	else
+	{
+		//Do a write/read of the corresponding length
+		for (i = 0 ;i < ((uint8*)pMsg)[0]; i++ ) ((uint8*)pMsg)[i+RPC_FRAME_HDR_SZ] = 0;
+		if ( (ret == NPI_LNX_SUCCESS) && (((uint8*)pMsg)[0] > 0) )
+		{
+			ret = HalSpiRead( 0, pMsg->pData, ((uint8*)pMsg)[0]);
+		}
 	}
 
 #ifdef __BIG_DEBUG__
@@ -1402,7 +1413,6 @@ static void npi_termpoll(void)
 #ifdef SRDY_INTERRUPT
 	pthread_cond_signal(&npi_srdy_H2L_poll);
 #else
-
 	// In case of polling mechanism, send the Signal to continue
 	pthread_cond_signal(&npi_poll_cond);
 #endif

@@ -79,7 +79,7 @@ extern "C"
 #define RTI_VENDOR_FREESCALE                          0x0005
 #define RTI_VENDOR_OKI                                0x0006
 #define RTI_VENDOR_TEXAS_INSTRUMENTS                  0x0007
-#define RTI_VENDOR_TEST_VENDOR						  0x109D
+#define RTI_VENDOR_TEST_VENDOR						  0x109D //0x1116 //
 
 // profile identifiers
 #define RTI_PROFILE_RTI                               0xFF

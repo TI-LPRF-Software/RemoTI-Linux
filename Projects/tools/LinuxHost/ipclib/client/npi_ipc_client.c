@@ -164,14 +164,14 @@ npiProcessMsg_t NpiAsyncMsgCbackParserTable[] =
 #else
 		NULL,
 #endif
+		NULL,   					//RPC_SYS_ZIPTEST	  14   // Used by ZIP
 #ifdef NPI_DBG
-		DBG_AsynchMsgCback,   		//RPC_SYS_DEBUG	      14   // Debug Interface for Flash Programming
+		DBG_AsynchMsgCback,   		//RPC_SYS_DEBUG	      15   // Debug Interface for Flash Programming
 #else
-		NULL,   					//RPC_SYS_DEBUG	      14   // Debug Interface for Flash Programming
+		NULL,
 #endif
-		  NULL,   					//RPC_SYS_SRV_CTRL	  15   // Interface to control Server
 #ifdef NPI_CAPSENSE
-		  CAP_AsynchMsgCback,		// RPC_SYS_CAPSENSE	  16   // Interface for CapSense control
+		  CAP_AsynchMsgCback,		// RPC_SYS_PERIPHERALS	  16   // Interface for CapSense control
 #else
 		  NULL,
 #endif

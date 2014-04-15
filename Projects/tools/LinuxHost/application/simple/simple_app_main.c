@@ -436,7 +436,7 @@ void DispMenuInit(void)
 	printf("\nt- Start As Target (default settings)\n");
 }
 
-void DispCFGCurrentCfg(appDevInfo_t appCfg)
+void DispCFGCurrentCfg(appDevInfo_t appCfg, uint16 nwkAddr, uint16 panId)
 {
 	int16 i;
 	char* tmpStr[4];
@@ -513,6 +513,8 @@ void DispCFGCurrentCfg(appDevInfo_t appCfg)
 			printf("- \t \t \t \t 0x%.2X (Unknown)\n", appCfg.tgtTypeList[i]);
 		}
 	}
+	printf("- \tNWK Address: \t \t \t 0x%.4X\n", nwkAddr);
+	printf("- \tPAN ID: \t \t \t 0x%.4X\n", panId);
 	printf("------------------------------------------------------\n");
 }
 
@@ -593,6 +595,7 @@ void DispMenuReady(void)
 	printf("0- Config \n");
 	printf("1- Pairing\n");
 	printf("2- Unpairing\n");
+	printf("6- Physically Reset RNP (do not work for USB)\n");
 	printf("7- Send Data\n");
 	printf("8- Clear Pairing Table\n");
 	printf("9- Display Pairing Table\n");
@@ -603,6 +606,69 @@ void DispMenuReady(void)
 	printf("a- Check States\n");
 	printf("g- Get MAC Channel\n");
 	printf("r- Reset RNP\n");
+	printf("m- Show This Menu\n");
+}
+
+void DispPhyTestModeMenu(void)
+{
+	printf("------------------------------------------------------\n");
+	printf("Physical Test Mode MENU:\n");
+	printf("r- Return to Main Menu\n");
+	printf("1- Tx Raw Carrier\n");
+	printf("2- Tx Modulated Carrier\n");
+	printf("3- Rx Test\n");
+	printf("m- Show This Menu\n");
+}
+
+void DispPhyTestModeActiveMenu(void)
+{
+	printf("------------------------------------------------------\n");
+	printf("Test Running:\n");
+	printf("s- Stop Test\n");
+}
+
+void DispPhyTestModeRxMenu(void)
+{
+	printf("------------------------------------------------------\n");
+	printf("Physical Test Mode Rx MENU:\n");
+	printf("r- Return to Previous Menu\n");
+	printf("1- Channel 15 (2425MHz)\n");
+	printf("2- Channel 20 (2450MHz)\n");
+	printf("3- Channel 25 (2475MHz)\n");
+	printf("m- Show This Menu\n");
+}
+
+void DispPhyTestModeTxRawMenu(void)
+{
+	printf("------------------------------------------------------\n");
+	printf("Physical Test Mode Tx Raw Carrier MENU:\n");
+	printf("r- Return to Previous Menu\n");
+	printf("1-  +7dBm @2425MHz\n");
+	printf("2-  +7dBm @2450MHz\n");
+	printf("3-  +7dBm @2475MHz\n");
+	printf("4-   0dBm @2425MHz\n");
+	printf("5-   0dBm @2450MHz\n");
+	printf("6-   0dBm @2475MHz\n");
+	printf("7- -20dBm @2425MHz\n");
+	printf("8- -20dBm @2450MHz\n");
+	printf("9- -20dBm @2475MHz\n");
+	printf("m- Show This Menu\n");
+}
+
+void DispPhyTestModeTxModulatedMenu(void)
+{
+	printf("------------------------------------------------------\n");
+	printf("Physical Test Mode Tx Modulated Carrier MENU:\n");
+	printf("r- Return to Previous Menu\n");
+	printf("1-  +7dBm @2425MHz\n");
+	printf("2-  +7dBm @2450MHz\n");
+	printf("3-  +7dBm @2475MHz\n");
+	printf("4-   0dBm @2425MHz\n");
+	printf("5-   0dBm @2450MHz\n");
+	printf("6-   0dBm @2475MHz\n");
+	printf("7- -20dBm @2425MHz\n");
+	printf("8- -20dBm @2450MHz\n");
+	printf("9- -20dBm @2475MHz\n");
 	printf("m- Show This Menu\n");
 }
 

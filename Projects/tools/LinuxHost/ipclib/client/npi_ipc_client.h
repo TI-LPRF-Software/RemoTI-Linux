@@ -201,6 +201,7 @@ extern "C"
   #define RTIS_CMD_ID_RTI_UNPAIR_REQ             0x0B
   #define RTIS_CMD_ID_RTI_PAIR_ABORT_REQ         0x0C
   #define RTIS_CMD_ID_RTI_ALLOW_PAIR_ABORT_REQ   0x0D
+  #define RTIS_CMD_ID_RTI_BIND_PARAMS_REQ   	 0x0E
   //
   #define RTIS_CMD_ID_TEST_PING_REQ              0x10
   #define RTIS_CMD_ID_RTI_TEST_MODE_REQ          0x11

@@ -80,7 +80,9 @@ enum {
 	AP_STATE_WAIT_WAKEUP_FOR_PAIR, // Waiting for RTI wakeup from sleep to do pairing
 	AP_STATE_WAIT_WAKEUP_FOR_UNPAIR, // Waiting for RTI wakeup from sleep to do unpairing
 	AP_STATE_WAIT_WAKEUP_FOR_NDATA, // Waiting for RTI wakeup from sleep to send data
-	AP_STATE_SIMPLE_TEST_MODE, // Comcast special testmode
+	AP_STATE_SIMPLE_TEST_MODE, // Special testmode
+	AP_STATE_RESET_FOR_PHY_TESTMODE, // Expect reset for safely entering physical testmode
+	AP_STATE_PHY_TESTMODE, // State to call RTI_TestModeReq() APIs
 };
 
 extern const char * const AppState_list[AP_STATE_SIMPLE_TEST_MODE + 1];//18 Application States

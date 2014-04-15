@@ -142,13 +142,6 @@ const char* sectionNamesArray[3][2] =
 //const char *port = "";
 char port[128];
 
-enum
-{
-	NPI_UART_FN_ARR_IDX,  	//0
-	NPI_SPI_FN_ARR_IDX,		//1
-	NPI_I2C_FN_ARR_IDX,		//2
-};
-
 const pNPI_OpenDeviceFn NPI_OpenDeviceFnArr[] =
 {
 #if (defined NPI_UART) && (NPI_UART == TRUE)
@@ -199,7 +192,12 @@ const pNPI_SendAsynchDataFn NPI_SendAsynchDataFnArr[] =
 		NULL,
 #endif
 #if (defined NPI_I2C) && (NPI_I2C == TRUE)
-		NPI_I2C_SendAsynchData
+		NPI_I2C_SendAsynchData,
+#else
+		NULL,
+#endif
+#if (defined NPI_UART_USB) && (NPI_UART_USB == TRUE)
+		NPI_UART_SendAsynchData,
 #else
 		NULL,
 #endif
@@ -217,7 +215,12 @@ const pNPI_SendSynchDataFn NPI_SendSynchDataFnArr[] =
 		NULL,
 #endif
 #if (defined NPI_I2C) && (NPI_I2C == TRUE)
-		NPI_I2C_SendSynchData
+		NPI_I2C_SendSynchData,
+#else
+		NULL,
+#endif
+#if (defined NPI_UART_USB) && (NPI_UART_USB == TRUE)
+		NPI_UART_SendSynchData,
 #else
 		NULL,
 #endif
@@ -572,7 +575,9 @@ int main(int argc, char ** argv)
 	printf("logPath = '%s'\n", logPath);
 
 	// GPIO configuration
-	if ((devIdx == 1) || (devIdx == 2))
+	if ((devIdx == NPI_SERVER_DEVICE_INDEX_UART) ||
+			(devIdx == NPI_SERVER_DEVICE_INDEX_SPI) ||
+			(devIdx == NPI_SERVER_DEVICE_INDEX_I2C))
 	{
 		for (gpioIdx = 0; gpioIdx < 3; gpioIdx++) {
 			// Get SRDY, MRDY or RESET GPIO
@@ -714,8 +719,11 @@ int main(int argc, char ** argv)
 	 */
 	switch(devIdx)
 	{
-		case NPI_UART_FN_ARR_IDX:
-		#if (defined NPI_UART) && (NPI_UART == TRUE)
+		case NPI_SERVER_DEVICE_INDEX_UART_USB:
+			// Initialization of UART for USB is the same as for physical UART.
+			// Except for Reset GPIO
+		case NPI_SERVER_DEVICE_INDEX_UART:
+	#if (defined NPI_UART) && (NPI_UART == TRUE)
 		{
 			npiUartCfg_t uartCfg;
 			strBuf = pStrBufRoot;
@@ -735,12 +743,21 @@ int main(int argc, char ** argv)
 			{
 				uartCfg.flowcontrol=0;
 			}
-			ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiUartCfg_t *)&uartCfg);
+			ret = (NPI_OpenDeviceFnArr[NPI_SERVER_DEVICE_INDEX_UART])(devPath, (npiUartCfg_t *)&uartCfg);
+
+			// Now configure reset GPIO for physical UART
+			if (devIdx == NPI_SERVER_DEVICE_INDEX_UART)
+			{
+				if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit(gpioCfg[2])))
+				{
+					return ret;
+				}
+			}
 		}
-		#endif
+	#endif
 		break;
-	case NPI_SPI_FN_ARR_IDX:
-		#if (defined NPI_SPI) && (NPI_SPI == TRUE)
+		case NPI_SERVER_DEVICE_INDEX_SPI:
+	#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 		{
 			halSpiCfg_t halSpiCfg;
 			npiSpiCfg_t npiSpiCfg;
@@ -826,22 +843,22 @@ int main(int argc, char ** argv)
 			// Do the Hw Handshake
 			(NPI_SynchSlaveFnArr[devIdx])();
 		}
-		#endif
+	#endif
 		break;
 
-	case NPI_I2C_FN_ARR_IDX:
-		#if (defined NPI_I2C) && (NPI_I2C == TRUE)
-			{
-				npiI2cCfg_t i2cCfg;
-				i2cCfg.gpioCfg = gpioCfg;
+		case NPI_SERVER_DEVICE_INDEX_I2C:
+	#if (defined NPI_I2C) && (NPI_I2C == TRUE)
+		{
+			npiI2cCfg_t i2cCfg;
+			i2cCfg.gpioCfg = gpioCfg;
 
-				// Open the Device and perform a reset
-				ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiI2cCfg_t *) &i2cCfg);
-			}
-		#endif
+			// Open the Device and perform a reset
+			ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiI2cCfg_t *) &i2cCfg);
+		}
+	#endif
 		break;
-	default:
-		ret = NPI_LNX_FAILURE;
+		default:
+			ret = NPI_LNX_FAILURE;
 		break;
 	}
 
@@ -1534,7 +1551,7 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			else
 			{
 				uint8 sreqHdr[RPC_FRAME_HDR_SZ] = {0};
-				// Retain the header for later integrety check
+				// Retain the header for later integrity check
 				memcpy(sreqHdr, npi_ipc_buf[0], RPC_FRAME_HDR_SZ);
 				// Synchronous request requires an answer...
 				ret = (NPI_SendSynchDataFnArr[devIdx])(
@@ -1637,7 +1654,8 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			printf("\n");
 
 			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INCOMPATIBLE_CMD_TYPE;
-			ret = NPI_LNX_FAILURE;
+			// Ignore error. It's not deadly
+			ret = NPI_LNX_SUCCESS;
 		}
 	}
 
@@ -1776,8 +1794,8 @@ int NPI_LNX_IPC_SendData(uint8 len, int connection)
 						char *errorStr = (char *)malloc(30);
 						sprintf(errorStr, "send %d, %d", activeConnections.list[i], errno);
 						perror(errorStr);
-						// Remove from list if detected bad file descriptor
-						if (errno == EBADF)
+						// Remove from list if detected bad file descriptor, or broken pipe
+						if ( (errno == EBADF) || (errno == EPIPE) )
 						{
 							printf("Removing connection #%d\n", activeConnections.list[i]);
 							close(activeConnections.list[i]);
@@ -2075,11 +2093,14 @@ void NPI_LNX_IPC_Exit(int ret)
 {
 	printf("... freeing memory (ret %d)\n", ret);
 
-	// Close file for parsing
-	if (serialCfgFd != NULL)
+	if (ret != NPI_LNX_SUCCESS)
 	{
-		fclose(serialCfgFd);
-		serialCfgFd = NULL;
+		// Keep file for later use
+		if (serialCfgFd != NULL)
+		{
+			fclose(serialCfgFd);
+			serialCfgFd = NULL;
+		}
 	}
 
 	// Free memory for configuration buffers
@@ -2281,6 +2302,8 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 {
 	int ret = NPI_LNX_SUCCESS;
 
+	debug_printf("[NPI SERVER] Control: cmdId 0x%.2X\n", pNpi_ipc_buf->cmdId);
+
 	switch(pNpi_ipc_buf->cmdId)
 	{
 		case NPI_LNX_CMD_ID_CTRL_TIME_PRINT_REQ:
@@ -2323,8 +2346,8 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 			pNpi_ipc_buf->len = 1;
 			pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
 			ret = NPI_LNX_SUCCESS;
-			break;
 		}
+		break;
 		case NPI_LNX_CMD_ID_VERSION_REQ:
 		{
 			// Set return status
@@ -2369,7 +2392,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 		break;
 		case NPI_LNX_CMD_ID_RESET_DEVICE:
 		{
-			if (devIdx == NPI_SPI_FN_ARR_IDX)
+			if (devIdx == NPI_SERVER_DEVICE_INDEX_SPI)
 			{
 				// Perform Reset of the RNP
 				(NPI_ResetSlaveFnArr[devIdx])();
@@ -2377,15 +2400,15 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 				// Do the Hw Handshake
 				(NPI_SynchSlaveFnArr[devIdx])();
 			}
-			else if (devIdx == NPI_I2C_FN_ARR_IDX)
+			else if (devIdx == NPI_SERVER_DEVICE_INDEX_I2C)
 			{
 				// Perform Reset of the RNP
 				(NPI_ResetSlaveFnArr[devIdx])();
 			}
 			else
 			{
+				printf("Resetting device upon request by client\n");
 				ret = HalGpioResetSet(FALSE);
-				debug_printf("Resetting device\n");
 				usleep(1);
 				ret = HalGpioResetSet(TRUE);
 			}
@@ -2405,7 +2428,10 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 			debug_printf("Trying to connect to device %d, %s\n", devIdx, devPath);
 			switch(devIdx)
 			{
-			case NPI_UART_FN_ARR_IDX:
+			case NPI_SERVER_DEVICE_INDEX_UART_USB:
+				// Initialization of UART for USB is the same as for physical UART.
+				// Except for Reset GPIO
+			case NPI_SERVER_DEVICE_INDEX_UART:
 #if (defined NPI_UART) && (NPI_UART == TRUE)
 			{
 				npiUartCfg_t uartCfg;
@@ -2429,11 +2455,20 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					uartCfg.flowcontrol=0;
 				}
 				free(strBuf);
-				ret = (NPI_OpenDeviceFnArr[devIdx])(devPath, (npiUartCfg_t *)&uartCfg);
+				ret = (NPI_OpenDeviceFnArr[NPI_SERVER_DEVICE_INDEX_UART])(devPath, (npiUartCfg_t *)&uartCfg);
+
+				// Now configure reset GPIO for physical UART
+				if (devIdx == NPI_SERVER_DEVICE_INDEX_UART)
+				{
+					if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit(gpioCfg[2])))
+					{
+						return ret;
+					}
+				}
 			}
 #endif
 			break;
-			case NPI_SPI_FN_ARR_IDX:
+			case NPI_SERVER_DEVICE_INDEX_SPI:
 #if (defined NPI_SPI) && (NPI_SPI == TRUE)
 			{
 				halSpiCfg_t halSpiCfg;
@@ -2445,14 +2480,17 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
 					{
 						halSpiCfg.speed = atoi(strBuf);
+						debug_printf("[CONNECT DEVICE - SPI] Speed %d\n", halSpiCfg.speed);
 					}
 					else
 					{
 						halSpiCfg.speed=500000;
+						debug_printf("[CONNECT DEVICE - SPI] Speed not found in configuration file, set to %d\n", halSpiCfg.speed);
 					}
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "mode", strBuf)))
 					{
 						halSpiCfg.mode = strtol(strBuf, NULL, 16);
+						debug_printf("[CONNECT DEVICE - SPI] Mode 0x%.2X\n", halSpiCfg.mode);
 					}
 					else
 					{
@@ -2461,6 +2499,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "bitsPerWord", strBuf)))
 					{
 						halSpiCfg.bitsPerWord = strtol(strBuf, NULL, 10);
+						debug_printf("[CONNECT DEVICE - SPI] Bits per word %d\n", halSpiCfg.bitsPerWord);
 					}
 					else
 					{
@@ -2469,6 +2508,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "useFullDuplexAPI", strBuf)))
 					{
 						halSpiCfg.useFullDuplexAPI = strtol(strBuf, NULL, 10);
+						debug_printf("[CONNECT DEVICE - SPI] Use Full Duplex API - %s\n", (halSpiCfg.useFullDuplexAPI) ? "Yes" : "No");
 					}
 					else
 					{
@@ -2477,6 +2517,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "earlyMrdyDeAssert", strBuf)))
 					{
 						npiSpiCfg.earlyMrdyDeAssert = strtol(strBuf, NULL, 10);
+						debug_printf("[CONNECT DEVICE - SPI] Early MRDY DeAssert - %s\n", (npiSpiCfg.earlyMrdyDeAssert) ? "Yes" : "No");
 					}
 					else
 					{
@@ -2486,6 +2527,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "detectResetFromSlowSrdyAssert", strBuf)))
 					{
 						npiSpiCfg.detectResetFromSlowSrdyAssert = strtol(strBuf, NULL, 10);
+						debug_printf("[CONNECT DEVICE - SPI] Detect Reset From Slow SRDY Assert - %s\n", (npiSpiCfg.detectResetFromSlowSrdyAssert) ? "Yes" : "No");
 					}
 					else
 					{
@@ -2495,6 +2537,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "forceRunOnReset", strBuf)))
 					{
 						npiSpiCfg.forceRunOnReset = strtol(strBuf, NULL, 16);
+						debug_printf("[CONNECT DEVICE - SPI] Force Run Bootloader on Reset - %s\n", (npiSpiCfg.forceRunOnReset) ? "Yes" : "No");
 					}
 					else
 					{
@@ -2504,6 +2547,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "srdyMrdyHandshakeSupport", strBuf)))
 					{
 						npiSpiCfg.srdyMrdyHandshakeSupport = strtol(strBuf, NULL, 10);
+						debug_printf("[CONNECT DEVICE - SPI] SRDY/MRDY Hand Shake Supported - %s\n", (npiSpiCfg.srdyMrdyHandshakeSupport) ? "Yes" : "No");
 					}
 					else
 					{
@@ -2553,7 +2597,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 #endif
 			break;
 
-			case NPI_I2C_FN_ARR_IDX:
+			case NPI_SERVER_DEVICE_INDEX_I2C:
 #if (defined NPI_I2C) && (NPI_I2C == TRUE)
 			{
 				npiI2cCfg_t i2cCfg;

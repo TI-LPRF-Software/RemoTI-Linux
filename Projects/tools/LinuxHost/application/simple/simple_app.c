@@ -251,11 +251,25 @@ enum {
 };
 
 appDevInfo_t appCFGParam;
+uint16 ownNwkAddr;
+uint16 ownPANID;
 uint8 appCFGstate;
 
 // Toggle Timer Print on Server state variable
 static uint8 toggleTimerPrintOnServer = FALSE;
 static uint8 toggleBigDebugPrintOnServer = FALSE;
+
+
+// Physical Test Mode States
+enum {
+	APP_PHY_TEST_STATE_INIT,		// Initial Application Sub State for Physical Test Mode
+	APP_PHY_TEST_STATE_TX_RAW,		// Sub state for Tx Raw Carrier
+	APP_PHY_TEST_STATE_TX_MOD,		// Sub state for Tx Modulated Carrier
+	APP_PHY_TEST_STATE_RX,			// Sub state for Rx
+	APP_PHY_TEST_STATE_ACTIVE		// Sub state for test being executed
+};
+uint8 appPhyTestState = APP_PHY_TEST_STATE_INIT;
+void appPhysicalTestModeProcessKey (char* strIn);
 
 appSendData_t appSendData_s;
 uint8 appSendDataState;
@@ -389,7 +403,7 @@ static void *appThreadFunc(void *ptr)
 
 
 	// Display current configuration
-	DispCFGCurrentCfg(appCFGParam);
+	DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
 	//Display menu...
 	DispMenuInit();
 
@@ -422,6 +436,11 @@ static void *appThreadFunc(void *ptr)
 			{
 				// Pass key onto Send Data processing
 				appSendDataProcessKey(str);
+			}
+			else if (appState == AP_STATE_PHY_TESTMODE)
+			{
+				// Pass key onto physical test mode processing
+				appPhysicalTestModeProcessKey(str);
 			}
 			// Other states
 			else if (ch == '0')
@@ -488,6 +507,47 @@ static void *appThreadFunc(void *ptr)
 					printf("Cannot call RTI_UnpairReq, because we're in state: 0x%.2X\n", appState);
 				}
 			}
+			else if (ch == '6')
+			{
+				appState = AP_STATE_RESET_FOR_PHY_TESTMODE;
+				appPhyTestState = APP_PHY_TEST_STATE_INIT;
+
+				npiMsgData_t pMsg;
+				pMsg.len = 0;
+				pMsg.subSys = RPC_SYS_SRV_CTRL | RPC_CMD_AREQ;
+				pMsg.cmdId = NPI_LNX_CMD_ID_RESET_DEVICE;
+
+				// send debug flag value
+				NPI_SendAsynchData( &pMsg );
+			}
+			else if (ch == '3')
+			{
+				// Prepare connection request
+				npiMsgData_t pMsg;
+				pMsg.subSys = RPC_SYS_SRV_CTRL;
+				pMsg.cmdId  = NPI_LNX_CMD_ID_CONNECT_DEVICE;
+				pMsg.len    = 1;
+
+				pMsg.pData[0] = NPI_SERVER_DEVICE_INDEX_SPI;
+				printf("Connecting to %d ...", pMsg.pData[0]);
+
+				NPI_SendSynchData( &pMsg );
+				printf(" status %d\n", pMsg.pData[0]);
+			}
+			else if (ch == '4')
+			{
+				// Prepare connection request
+				npiMsgData_t pMsg;
+				pMsg.subSys = RPC_SYS_SRV_CTRL;
+				pMsg.cmdId  = NPI_LNX_CMD_ID_DISCONNECT_DEVICE;
+				pMsg.len    = 1;
+
+				pMsg.pData[0] = NPI_SERVER_DEVICE_INDEX_SPI;
+				printf("Disconnecting from %d ...", pMsg.pData[0]);
+
+				NPI_SendSynchData( &pMsg );
+				printf("Disconnected, status %d\n", pMsg.pData[0]);
+			}
 			else if (ch == '7')
 			{
 				if (appState == AP_STATE_READY)
@@ -517,7 +577,7 @@ static void *appThreadFunc(void *ptr)
 			{
 				npiMsgData_t pMsg;
 				pMsg.len = 1;
-				pMsg.subSys = RPC_SYS_SRV_CTRL | RPC_CMD_AREQ;
+				pMsg.subSys = RPC_SYS_SRV_CTRL | RPC_CMD_SREQ;
 				pMsg.cmdId = NPI_LNX_CMD_ID_CTRL_TIME_PRINT_REQ;
 
 				if (toggleTimerPrintOnServer == FALSE)
@@ -534,7 +594,7 @@ static void *appThreadFunc(void *ptr)
 				pMsg.pData[0] = toggleTimerPrintOnServer;
 
 				// send debug flag value
-				NPI_SendAsynchData( &pMsg );
+				NPI_SendSynchData( &pMsg );
 				if (RTI_SUCCESS == pMsg.pData[0])
 				{
 					printf("__DEBUG_TIME_ACTIVE set to: 0x%.2X\n", toggleTimerPrintOnServer);
@@ -867,7 +927,7 @@ void RTI_InitCnf(rStatus_t status)
 		// Get configuration parameters from RNP, to make sure we display the correct settings
 		appGetCFGParamFromRNP();
 		// Display what we have configured
-		DispCFGCurrentCfg(appCFGParam);
+		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
 
 		printf("Entered %s [0x%.2X]\n", AppState_list[appState], appState);
 		//Display menu...
@@ -1334,6 +1394,11 @@ void RTI_ResetInd( void )
 		// note that this is a new feature as of RemoTI-1.3.1
 		RTI_main_start_timerEx(RTI_app_threadId, RTI_APP_EVT_INIT, 0);
 	}
+	else if (appState == AP_STATE_RESET_FOR_PHY_TESTMODE)
+	{
+		// Warn user of reset
+		printf("RNP reset as expected\n");
+	}
 	else
 	{
 		// Warn user of reset
@@ -1342,21 +1407,31 @@ void RTI_ResetInd( void )
 
 	// RNP is now back in default state
 	appRNPpowerState = RTI_APP_RNP_POWER_STATE_ACTIVE;
-
-	// Initialize node and RF4CE stack
-	printf("Calling RTI_InitReq...\n");
-	//When Launching the Thread, Mutex is unlocked.
-	debug_printf("[MUTEX] Lock appInit Mutex\n");
-	if ( (mutexRet = pthread_mutex_trylock(&appInitMutex)) == EBUSY)
+	if (appState == AP_STATE_RESET_FOR_PHY_TESTMODE)
 	{
-		debug_printf("[MUTEX] appInit Mutex busy\n");
+		// Now we work with the RTI_TestModeReq() API.
+		appState = AP_STATE_PHY_TESTMODE;
+		appPhyTestState = APP_PHY_TEST_STATE_INIT;
+		// Display GUI for these APIs
+		DispPhyTestModeMenu();
 	}
 	else
 	{
-		debug_printf("[MUTEX] appInit Lock status: %d\n", mutexRet);
+		// Initialize node and RF4CE stack
+		printf("Calling RTI_InitReq...\n");
+		//When Launching the Thread, Mutex is unlocked.
+		debug_printf("[MUTEX] Lock appInit Mutex\n");
+		if ( (mutexRet = pthread_mutex_trylock(&appInitMutex)) == EBUSY)
+		{
+			debug_printf("[MUTEX] appInit Mutex busy\n");
+		}
+		else
+		{
+			debug_printf("[MUTEX] appInit Lock status: %d\n", mutexRet);
+		}
+		RTI_InitReq();
+		printf("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
 	}
-	RTI_InitReq();
-	printf("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
 }
 
 void RTI_IrInd( uint8 irData )
@@ -1446,7 +1521,7 @@ static void appConfigParamProcessKey(char* strIn)
 			// Get configuration parameters from RNP, to make sure we display the correct settings
 			appGetCFGParamFromRNP();
 			// Display what we have configured
-			DispCFGCurrentCfg(appCFGParam);
+			DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
 			break;
 		case 'r':
 			appState = AP_STATE_READY;
@@ -1502,7 +1577,7 @@ static void appConfigParamProcessKey(char* strIn)
 			break;
 		case 'l':
 			// List current chosen configuration (not the one programmed to RNP)
-			DispCFGCurrentCfg(appCFGParam);
+			DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
 			break;
 		default:
 			appCFGstate = APP_CFG_STATE_INIT;
@@ -1532,7 +1607,7 @@ static void appConfigParamProcessKey(char* strIn)
 			pStr = strtok (NULL, " ,:;-|");
 		}
 		// Display current configuration to give feedback to user about the changes
-		DispCFGCurrentCfg(appCFGParam);
+		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
 		// Return to CFG state
 		appCFGstate = APP_CFG_STATE_INIT;
 		DispMenuInit();
@@ -1557,7 +1632,7 @@ static void appConfigParamProcessKey(char* strIn)
 		// Update the number of supported Profile IDs (max 7)
 		RCN_APP_CAPA_SET_NUM_PROFILES(appCFGParam.appCapabilities, i);
 		// Display current configuration to give feedback to user about the changes
-		DispCFGCurrentCfg(appCFGParam);
+		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
 		// Return to CFG state
 		appCFGstate = APP_CFG_STATE_INIT;
 		DispMenuInit();
@@ -1588,7 +1663,7 @@ static void appConfigParamProcessKey(char* strIn)
 			}
 		}
 		// Display current configuration to give feedback to user about the changes
-		DispCFGCurrentCfg(appCFGParam);
+		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
 		// Return to CFG state
 		appCFGstate = APP_CFG_STATE_INIT;
 		DispMenuInit();
@@ -1619,7 +1694,7 @@ static void appConfigParamProcessKey(char* strIn)
 			}
 		}
 		// Display current configuration to give feedback to user about the changes
-		DispCFGCurrentCfg(appCFGParam);
+		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
 		// Return to CFG state
 		appCFGstate = APP_CFG_STATE_INIT;
 		DispMenuInit();
@@ -1816,7 +1891,296 @@ void appGetCFGParamFromRNP( void )
 		printf("ERR: Failed to read Vendor String\n");
 	}
 
+	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_SHORT_ADDRESS,
+			sizeof(uint16), (uint8 *)&ownNwkAddr) != RTI_SUCCESS) {
+		//  AP_FATAL_ERROR();
+		printf("ERR: Failed to read network address\n");
+	}
+
+	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_PAN_ID,
+			sizeof(uint16), (uint8 *)&ownPANID) != RTI_SUCCESS) {
+		//  AP_FATAL_ERROR();
+		printf("ERR: Failed to read PAN ID\n");
+	}
+
 }
+
+/**************************************************************************************************
+ * @fn          appPhysicalTestModeProcessKey
+ *
+ * @brief       This function executes the Physical Test Mode
+ *
+ * input parameters
+ *
+ * @param strIn - string from console to be processed
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ **************************************************************************************************
+ */
+void appPhysicalTestModeProcessKey (char* strIn)
+{
+
+//	printf("------------------------------------------------------\n");
+//	printf("Physical Test Mode MENU:\n");
+//	printf("r- Return to Main Menu\n");
+//	printf("1- Tx Raw Carrier\n");
+//	printf("2- Tx Modulated Carrier\n");
+//	printf("3- Rx Test\n");
+//	printf("m- Show This Menu\n");
+
+//	// Physical Test Mode States
+//	enum {
+//		APP_PHY_TEST_STATE_INIT,		// Initial Application Sub State for Physical Test Mode
+//		APP_PHY_TEST_STATE_TX_RAW,		// Sub state for Tx Raw Carrier
+//		APP_PHY_TEST_STATE_TX_MOD,		// Sub state for Tx Modulated Carrier
+//		APP_PHY_TEST_STATE_RX,			// Sub state for Rx
+//		APP_PHY_TEST_STATE_ACTIVE		// Sub state for test being executed
+//	};
+
+	if (appPhyTestState == APP_PHY_TEST_STATE_INIT)
+	{
+		switch (strIn[0])
+		{
+		case 'r':
+			appState = AP_STATE_READY;
+			// Display menu
+			DispMenuReady();
+			return;
+		case 'm':
+			// Display Test Mode menu
+			DispPhyTestModeMenu();
+			return;
+		case '1':
+			// Go to Tx Raw
+			appPhyTestState = APP_PHY_TEST_STATE_TX_RAW;
+			DispPhyTestModeTxRawMenu();
+			break;
+		case '2':
+			// Go to Tx Modulated
+			appPhyTestState = APP_PHY_TEST_STATE_TX_MOD;
+			DispPhyTestModeTxModulatedMenu();
+			break;
+		case '3':
+			// Go to Rx
+			appPhyTestState = APP_PHY_TEST_STATE_RX;
+			DispPhyTestModeRxMenu();
+			break;
+		default:
+			printf("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
+			DispPhyTestModeMenu();
+			return;
+		}
+	}
+	else if (appPhyTestState == APP_PHY_TEST_STATE_ACTIVE)
+	{
+		appPhyTestState = APP_PHY_TEST_STATE_INIT;
+		appState = AP_STATE_RESET_FOR_PHY_TESTMODE;
+
+		npiMsgData_t pMsg;
+		pMsg.len = 0;
+		pMsg.subSys = RPC_SYS_SRV_CTRL | RPC_CMD_AREQ;
+		pMsg.cmdId = NPI_LNX_CMD_ID_RESET_DEVICE;
+
+		// send debug flag value
+		NPI_SendAsynchData( &pMsg );
+
+	}
+	else if (appPhyTestState == APP_PHY_TEST_STATE_TX_RAW)
+	{
+		switch (strIn[0])
+		{
+		case 'r':
+			appPhyTestState = APP_PHY_TEST_STATE_INIT;
+			// Display menu
+			DispPhyTestModeMenu();
+			return;
+		case 'm':
+			// Display This menu
+			DispPhyTestModeTxRawMenu();
+			return;
+		case '1':
+		case '2':
+		case '3':
+			// Call RTI_TestModeReq()
+			appPhyTestState = APP_PHY_TEST_STATE_ACTIVE;
+			if (strIn[0] == '1')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RAW_CARRIER, 7, 15);
+			}
+			else if (strIn[0] == '2')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RAW_CARRIER, 7, 20);
+			}
+			else
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RAW_CARRIER, 7, 25);
+			}
+			DispPhyTestModeActiveMenu();
+			break;
+		case '4':
+		case '5':
+		case '6':
+			// Call RTI_TestModeReq()
+			appPhyTestState = APP_PHY_TEST_STATE_ACTIVE;
+			if (strIn[0] == '4')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RAW_CARRIER, 0, 15);
+			}
+			else if (strIn[0] == '5')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RAW_CARRIER, 0, 20);
+			}
+			else
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RAW_CARRIER, 0, 25);
+			}
+			DispPhyTestModeActiveMenu();
+			break;
+		case '7':
+		case '8':
+		case '9':
+			// Call RTI_TestModeReq()
+			appPhyTestState = APP_PHY_TEST_STATE_ACTIVE;
+			if (strIn[0] == '7')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RAW_CARRIER, -20, 15);
+			}
+			else if (strIn[0] == '8')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RAW_CARRIER, -20, 20);
+			}
+			else
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RAW_CARRIER, -20, 25);
+			}
+			DispPhyTestModeActiveMenu();
+			break;
+		default:
+			printf("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
+			DispPhyTestModeTxRawMenu();
+			return;
+		}
+	}
+	else if (appPhyTestState == APP_PHY_TEST_STATE_TX_MOD)
+	{
+		switch (strIn[0])
+		{
+		case 'r':
+			appPhyTestState = APP_PHY_TEST_STATE_INIT;
+			// Display menu
+			DispPhyTestModeMenu();
+			return;
+		case 'm':
+			// Display This menu
+			DispPhyTestModeTxModulatedMenu();
+			return;
+		case '1':
+		case '2':
+		case '3':
+			// Call RTI_TestModeReq()
+			appPhyTestState = APP_PHY_TEST_STATE_ACTIVE;
+			if (strIn[0] == '1')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RANDOM_DATA, 7, 15);
+			}
+			else if (strIn[0] == '2')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RANDOM_DATA, 7, 20);
+			}
+			else
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RANDOM_DATA, 7, 25);
+			}
+			DispPhyTestModeActiveMenu();
+			break;
+		case '4':
+		case '5':
+		case '6':
+			// Call RTI_TestModeReq()
+			appPhyTestState = APP_PHY_TEST_STATE_ACTIVE;
+			if (strIn[0] == '4')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RANDOM_DATA, 0, 15);
+			}
+			else if (strIn[0] == '5')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RANDOM_DATA, 0, 20);
+			}
+			else
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RANDOM_DATA, 0, 25);
+			}
+			DispPhyTestModeActiveMenu();
+			break;
+		case '7':
+		case '8':
+		case '9':
+			// Call RTI_TestModeReq()
+			appPhyTestState = APP_PHY_TEST_STATE_ACTIVE;
+			if (strIn[0] == '7')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RANDOM_DATA, -20, 15);
+			}
+			else if (strIn[0] == '8')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RANDOM_DATA, -20, 20);
+			}
+			else
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_TX_RANDOM_DATA, -20, 25);
+			}
+			DispPhyTestModeActiveMenu();
+			break;
+		default:
+			printf("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
+			DispPhyTestModeTxModulatedMenu();
+			return;
+		}
+	}
+	else if (appPhyTestState == APP_PHY_TEST_STATE_RX)
+	{
+		switch (strIn[0])
+		{
+		case 'r':
+			appPhyTestState = APP_PHY_TEST_STATE_INIT;
+			// Display menu
+			DispPhyTestModeMenu();
+			return;
+		case 'm':
+			// Display This menu
+			DispPhyTestModeRxMenu();
+			return;
+		case '1':
+		case '2':
+		case '3':
+			// Call RTI_TestModeReq()
+			appPhyTestState = APP_PHY_TEST_STATE_ACTIVE;
+			if (strIn[0] == '1')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_RX_AT_FREQ, 0, 15);
+			}
+			else if (strIn[0] == '2')
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_RX_AT_FREQ, 0, 20);
+			}
+			else
+			{
+				RTI_TestModeReq(RTI_TEST_MODE_RX_AT_FREQ, 0, 25);
+			}
+			DispPhyTestModeActiveMenu();
+			break;
+		default:
+			printf("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
+			DispPhyTestModeRxMenu();
+			return;
+		}
+	}
+}
+
 /**************************************************************************************************
  * @fn          appTestModeProcessKey
  *
