@@ -201,7 +201,6 @@ extern "C"
   #define RTIS_CMD_ID_RTI_UNPAIR_REQ             0x0B
   #define RTIS_CMD_ID_RTI_PAIR_ABORT_REQ         0x0C
   #define RTIS_CMD_ID_RTI_ALLOW_PAIR_ABORT_REQ   0x0D
-  #define RTIS_CMD_ID_RTI_BIND_PARAMS_REQ   	 0x0E
   //
   #define RTIS_CMD_ID_TEST_PING_REQ              0x10
   #define RTIS_CMD_ID_RTI_TEST_MODE_REQ          0x11
@@ -210,6 +209,12 @@ extern "C"
   //
   #define RTIS_CMD_ID_RTI_READ_ITEM_EX           0x21
   #define RTIS_CMD_ID_RTI_WRITE_ITEM_EX          0x22
+  
+  #define RTIS_CMD_ID_RTI_BIND_PARAMS_REQ        0x0E
+  #define RTIS_CMD_ID_RTI_SET_BIND_INDICATOR_REQ 0x0F
+  #define RTIS_CMD_ID_RTI_SEND_MSO_COMMAND_REQ   0x30
+  #define RTIS_CMD_ID_RTI_BUILD_MSO_CMD_SET_REQ  0x31
+  #define RTIS_CMD_ID_RTI_BUILD_MSO_CMD_GET_REQ  0x32
 
   // RTIS Confirm Ids
   #define RTIS_CMD_ID_RTI_INIT_CNF               0x01
@@ -228,12 +233,15 @@ extern "C"
   #define RTIS_CMD_ID_RTI_IR_IND				 0xA0
 
   //MSO Profile Command
+  #define RTIS_CMD_ID_RTI_SEND_MSO_COMMAND_CNF      0x0F
+  
   #define RTIS_CMD_ID_RTI_PAIR_IND                  0x30
   #define RTIS_CMD_ID_RTI_START_VALIDATION_IND      0x31
   #define RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_IND 0x32
   #define RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_RSP 0x33
-  #define RTIS_CMD_ID_RTI_BIND_PARAMS_IND			0x34
-  #define RTIS_CMD_ID_RTI_BIND_PARAMS_RSP			0x35
+  #define RTIS_CMD_ID_RTI_BIND_PARAMS_IND           0x34
+  #define RTIS_CMD_ID_RTI_BIND_PARAMS_RSP           0x35
+  #define RTIS_CMD_ID_RTI_UPDATE_BACKUP_P_ENTRY     0x36
 
   // RTI States
   enum

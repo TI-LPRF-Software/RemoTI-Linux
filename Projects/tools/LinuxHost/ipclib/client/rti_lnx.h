@@ -222,6 +222,7 @@ extern "C"
 #define RTI_TX_OPTION_SINGLE_CHANNEL                     0x10
 #define RTI_TX_OPTION_CHANNEL_DESIGNATOR                 0x20
 #define RTI_TX_OPTION_VENDOR_SPECIFIC                    0x40
+#define RTI_TX_OPTION_USE_NIB_DUTY_CYCLE				 0x80
 
 // RTI_ReceiveDataInd RX Flags Bit Mask
 #define RTI_RX_FLAGS_BROADCAST                           0x01
@@ -623,6 +624,7 @@ extern void RTI_TransmitDiscoveryReq( uint8 searchDevType );
 extern bool RTI_CancelPairInd( void );
 extern void RTI_SetupDiscoveryParams( void );
 extern void RTI_BindingParamsInd(void);
+extern void RTI_UpdateBackupPairingEntry(void);
 
 // The following function is used by a module within radio processor.
 // The functionsi not intended for use by application in host processor.

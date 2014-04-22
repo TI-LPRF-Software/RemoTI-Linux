@@ -217,6 +217,10 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 		case RTIS_CMD_ID_RTI_BIND_PARAMS_IND:
 			RTI_BindingParamsInd();
 			break;
+
+		case RTIS_CMD_ID_RTI_UPDATE_BACKUP_P_ENTRY:
+			RTI_UpdateBackupPairingEntry();
+			break;
 #endif //MSO_PROFILE
 		default:
 			// nothing can be done here!
