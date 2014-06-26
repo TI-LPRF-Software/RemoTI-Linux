@@ -55,9 +55,9 @@
 
 typedef struct
 {
-	uint16 		eventFlag;
-	long int 	timeoutValue[16];	// 1 timer per event
-	uint16 		timerEnabled;
+	uint32 		eventFlag;
+	long int 	timeoutValue[32];	// 1 timer per event
+	uint32 		timerEnabled;		// Maps to event mask
 } timer_thread_s ;
 
 #if defined _MSC_VER || defined(unix)
@@ -66,10 +66,10 @@ typedef struct
 
 extern int    timer_init			(uint16 numOfThreads);
 
-extern uint8  timer_start_timerEx	(uint8 threadId, uint16 event, uint32 timeout);
+extern uint8  timer_start_timerEx	(uint8 threadId, uint32 event, uint32 timeout);
 
-extern uint8  timer_set_event		(uint8 threadId, uint16 event);
-extern uint8  timer_clear_event		(uint8 threadId, uint16 event);
-extern uint16 timer_get_event		(uint8 threadId);
+extern uint8  timer_set_event		(uint8 threadId, uint32 event);
+extern uint8  timer_clear_event		(uint8 threadId, uint32 event);
+extern uint32 timer_get_event		(uint8 threadId);
 
 #endif /* TIMER_H_ */

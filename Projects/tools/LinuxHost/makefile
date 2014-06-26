@@ -48,7 +48,8 @@ SERVER_OBJS= \
 	$(OBJS)/npi_lnx_i2c.o \
 	$(OBJS)/hal_gpio.o \
 	$(OBJS)/hal_i2c.o \
-	$(OBJS)/hal_spi.o
+	$(OBJS)/hal_spi.o \
+	$(OBJS)/hal_dbg_ifc.o
 
 
 #by default, do not use the library.
@@ -60,10 +61,8 @@ all: \
 	create_output \
 	clean_obj \
 	arch-all-x86 \
-	clean_obj2 \
-	arch-all-armBeagleBoard \
 	clean_obj3 \
-	arch-all-armBeagleBone \
+	arch-all-armBeagleBone
 
 create_output:
 	@echo "********************************************************" 
@@ -159,6 +158,10 @@ $(OBJS)/hal_i2c.o: ipclib/server/hal_i2c.c
 #	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
 $(OBJS)/hal_gpio.o: ipclib/server/hal_gpio.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+
+$(OBJS)/hal_dbg_ifc.o: ipclib/server/hal_dbg_ifc.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 

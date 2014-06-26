@@ -53,7 +53,6 @@ extern "C" {
 
   /////////////////////////////////////////////////////////////////////////////
   // Typedefs
-  
 
 
 extern void DispMenuInit( void );
@@ -102,25 +101,12 @@ struct consoleInput_s
 
 struct consoleInput_s consoleInput;
 
-typedef struct 
-{
-	uint16 	eventFlag;
-	long int 	timeoutValue[16];	// 1 timer per event
-	uint16 	timerEnabled;
-} RTI_main_thread_s ;
-
-
 // Constants defined in RTI_main_linux.c that are globally available
 extern const char * const rtiStatus_list[];
 extern const char * const rtiProfileId_list[];
 extern const char * const rtiVendorId_list[];
 extern const char * const rtiDevType_list[];
 extern const char * const testMode_startCondition_list[];
-
-uint8 RTI_main_start_timerEx(uint8 threadId, uint16 event, uint16 timeout);
-uint8 RTI_main_set_event(uint8 threadId, uint16 event);
-uint8 RTI_main_clear_event(uint8 threadId, uint16 event);
-uint16 RTI_main_get_event(uint8 threadId);
 
 #ifdef __cplusplus
 }

@@ -40,8 +40,8 @@
 
 **************************************************************************************************/
 
-#ifndef RTI_APP_H
-#define RTI_APP_H
+#ifndef SIMPLE_APP_H
+#define SIMPLE_APP_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,18 +53,18 @@ extern "C" {
   // Defines
 
 // RTI_app Events
-#define RTI_APP_EVT_NONE                   			0x0000 // No event
-#define RTI_APP_EVT_INIT                   			0x0001 // Initial Boot up Event
-#define RTI_APP_EVT_DATA_RCV               			0x0002 // Data Receive Event
+#define SIMPLE_APP_EVT_NONE                   			0x00000000 // No event
+#define SIMPLE_APP_EVT_INIT                   			0x00000001 // Initial Boot up Event
+#define SIMPLE_APP_EVT_DATA_RCV               			0x00000002 // Data Receive Event
 
 // RNP sleep mode have two dependencies; Rx and NPI
-#define RTI_APP_RNP_POWER_STATE_STANDBY_BIT			BV(0)
-#define RTI_APP_RNP_POWER_STATE_NPI_BIT				BV(1)
+#define SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT			BV(0)
+#define SIMPLE_APP_RNP_POWER_STATE_NPI_BIT				BV(1)
 // RNP sleep modes in order of current consumption
-#define RTI_APP_RNP_POWER_STATE_ACTIVE				0
-#define RTI_APP_RNP_POWER_STATE_NPI_SLEEP			(RTI_APP_RNP_POWER_STATE_NPI_BIT)
-#define RTI_APP_RNP_POWER_STATE_STANDBY_ACTIVE		(RTI_APP_RNP_POWER_STATE_STANDBY_BIT)
-#define RTI_APP_RNP_POWER_STATE_STANDBY_SLEEP		(RTI_APP_RNP_POWER_STATE_STANDBY_BIT | RTI_APP_RNP_POWER_STATE_NPI_BIT)
+#define SIMPLE_APP_RNP_POWER_STATE_ACTIVE				0
+#define SIMPLE_APP_RNP_POWER_STATE_NPI_SLEEP			(SIMPLE_APP_RNP_POWER_STATE_NPI_BIT)
+#define SIMPLE_APP_RNP_POWER_STATE_STANDBY_ACTIVE		(SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT)
+#define SIMPLE_APP_RNP_POWER_STATE_STANDBY_SLEEP		(SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT | SIMPLE_APP_RNP_POWER_STATE_NPI_BIT)
 
 #define NAME_ELEMENT(element) [element] = #element
 
@@ -147,11 +147,11 @@ PACK_1 typedef struct ATTR_PACKED
   /////////////////////////////////////////////////////////////////////////////
   // Function declarations
 
-extern int appInit( int mode, char threadId );
+extern int SimpleAppInit( int mode, char threadId );
 
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // RTI_APP_H
+#endif // SIMPLE_APP_H

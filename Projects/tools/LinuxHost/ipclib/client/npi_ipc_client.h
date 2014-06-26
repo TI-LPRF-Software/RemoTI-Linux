@@ -37,7 +37,7 @@
    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **************************************************************************************************/
 #ifndef NPI_IPC_CLIENT_H
-#define NPI_IPC_CLIENT_LNX_H
+#define NPI_IPC_CLIENT_H
 
 
 // -- Exported function --

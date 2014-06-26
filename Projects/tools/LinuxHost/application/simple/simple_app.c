@@ -47,6 +47,7 @@
 #include <sys/time.h>
 
 #include "common_app.h"
+#include "timer.h"
 
 #include "simple_app_main.h"
 #include "simple_app.h"
@@ -84,7 +85,7 @@ char ch;
 char str[128];
 
 // RNP in Standby
-uint8 appRNPpowerState = RTI_APP_RNP_POWER_STATE_ACTIVE;
+uint8 appRNPpowerState = SIMPLE_APP_RNP_POWER_STATE_ACTIVE;
 
 rcnNwkPairingEntry_t pEntryForRecovery;
 
@@ -96,9 +97,9 @@ static pthread_t AppThreadId;
 static void *appThreadFunc(void *ptr);
 static int appThreadTerminate;
 
-static void appProcessEvents(uint16 events);
+static void appProcessEvents(uint32 events);
 
-uint8 RTI_app_threadId;
+uint8 SIMPLE_App_threadId;
 
 #define NAME_ELEMENT(element) [element] = #element
 static const char * const profile_list[RTI_PROFILE_ID_END + 1] =
@@ -230,10 +231,10 @@ static const char * const ZRC_Key_list[255 + 1] =
 
 
 static const char * const RNPpowerState_list[4 + 1] = { //4 Application States
-		[0 ... 4] = NULL, NAME_ELEMENT(RTI_APP_RNP_POWER_STATE_ACTIVE),
-		NAME_ELEMENT(RTI_APP_RNP_POWER_STATE_NPI_SLEEP),
-		NAME_ELEMENT(RTI_APP_RNP_POWER_STATE_STANDBY_ACTIVE),
-		NAME_ELEMENT(RTI_APP_RNP_POWER_STATE_STANDBY_SLEEP)
+		[0 ... 4] = NULL, NAME_ELEMENT(SIMPLE_APP_RNP_POWER_STATE_ACTIVE),
+		NAME_ELEMENT(SIMPLE_APP_RNP_POWER_STATE_NPI_SLEEP),
+		NAME_ELEMENT(SIMPLE_APP_RNP_POWER_STATE_STANDBY_ACTIVE),
+		NAME_ELEMENT(SIMPLE_APP_RNP_POWER_STATE_STANDBY_SLEEP)
 };
 
 
@@ -284,13 +285,13 @@ void appDisplayPairingTable(void);
 void appClearPairingTable(void);
 
 
-int appInit(int mode, char threadId) 
+int SimpleAppInit(int mode, char threadId)
 {
 	appThreadTerminate = 0;
 	appInitSyncRes();
 
 	uint8 value[2];
-	RTI_app_threadId = threadId;
+	SIMPLE_App_threadId = threadId;
 
 	printf("\n-------------------- START TURN ON DEBUG TRACES -------------------\n");
 	npiMsgData_t pMsg;
@@ -413,7 +414,7 @@ static void *appThreadFunc(void *ptr)
 		// Wait for event
 		sem_wait(&event_mutex);
 
-		events = RTI_main_get_event(RTI_app_threadId);
+		events = timer_get_event(SIMPLE_App_threadId);
 		// Process events
 		if (events != 0) {
 			appProcessEvents(events);
@@ -647,7 +648,7 @@ static void *appThreadFunc(void *ptr)
 				RTI_SwResetReq();
 
 				// Schedule event to Init RNP.
-				RTI_main_start_timerEx(RTI_app_threadId, RTI_APP_EVT_INIT, 1200); // Retry initialization after 1.2 seconds
+				timer_start_timerEx(SIMPLE_App_threadId, SIMPLE_APP_EVT_INIT, 1200); // Retry initialization after 1.2 seconds
 			}
 			else if (ch == 'c')
 			{
@@ -737,22 +738,22 @@ static void *appThreadFunc(void *ptr)
  *
  * @return  void
  */
-static void appProcessEvents(uint16 events)
+static void appProcessEvents(uint32 events)
 {
-	uint16 procEvents = 0;
+	uint32 procEvents = 0;
 	int mutexRet = 0;
 
-	if ((events & RTI_APP_EVT_DATA_RCV) != 0)
+	if (events & SIMPLE_APP_EVT_DATA_RCV)
 	{
 		printf("State: %s [0x%.2X]\n", AppState_list[appState], appState);
 		// Prepare to clear event
-		procEvents |= RTI_APP_EVT_DATA_RCV;
+		procEvents |= SIMPLE_APP_EVT_DATA_RCV;
 	}
-	if ((events & RTI_APP_EVT_INIT) != 0)
+	if (events & SIMPLE_APP_EVT_INIT)
 	{
 		printf("State: %s [0x%.2X]\n", AppState_list[appState], appState);
 		// Prepare to clear event
-		procEvents |= RTI_APP_EVT_INIT;
+		procEvents |= SIMPLE_APP_EVT_INIT;
 		if (appState == AP_STATE_INIT_COLD)
 		{
 			uint8 startupFlg, retVal;
@@ -792,7 +793,7 @@ static void appProcessEvents(uint16 events)
 
 	}
 	// Clear event
-	RTI_main_clear_event(RTI_app_threadId, procEvents);
+	timer_clear_event(SIMPLE_App_threadId, procEvents);
 }
 
 /**************************************************************************************************
@@ -934,7 +935,7 @@ void RTI_InitCnf(rStatus_t status)
 		DispMenuReady();
 
 		//			 Schedule event to try again.
-		//			RTI_main_start_timerEx(RTI_app_threadId, RTI_APP_EVT_INIT, 20); // Retry initialization after 20ms for stress testing
+		//			timer_start_timerEx(SIMPLE_App_threadId, SIMPLE_APP_EVT_INIT, 20); // Retry initialization after 20ms for stress testing
 	}
 	else
 	{
@@ -943,7 +944,7 @@ void RTI_InitCnf(rStatus_t status)
 		RTI_SwResetReq();
 
 		// Schedule event to try again.
-		RTI_main_start_timerEx(RTI_app_threadId, RTI_APP_EVT_INIT, 1200); // Retry initialization after 1.2 seconds
+		timer_start_timerEx(SIMPLE_App_threadId, SIMPLE_APP_EVT_INIT, 1200); // Retry initialization after 1.2 seconds
 //		exit(-1);
 	}
 
@@ -1082,15 +1083,15 @@ void RTI_StandbyCnf(rStatus_t status)
 {
 	if (status == RTI_SUCCESS)
 	{
-		if (appRNPpowerState & RTI_APP_RNP_POWER_STATE_STANDBY_BIT)
+		if (appRNPpowerState & SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT)
 		{
 			printf("\nExited Standby\n");
-			appRNPpowerState &= ~(RTI_APP_RNP_POWER_STATE_STANDBY_BIT);
+			appRNPpowerState &= ~(SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT);
 		}
 		else
 		{
 			printf("\nEntered Standby\n");
-			appRNPpowerState |= RTI_APP_RNP_POWER_STATE_STANDBY_BIT;
+			appRNPpowerState |= SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT;
 
 //			// Enable Sleep here, NPI is not responsive after this
 //			RTI_EnableSleepReq();
@@ -1129,6 +1130,13 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 		uint8 rxLQI, uint8 rxFlags, uint8 len, uint8 *pData) {
 	int i, error = FALSE;
 	static uint8 lastSource = RTI_INVALID_PAIRING_REF;
+
+	if (appRNPpowerState & SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT)
+	{
+		// Since we received a message the RNP is no longer sleeping, although it is still in standby.
+		// Re-enable sleep
+		RTI_EnableSleepReq();
+	}
 
 	if ( appState != AP_STATE_SIMPLE_TEST_MODE)
 	{
@@ -1241,7 +1249,7 @@ void RTI_EnableSleepCnf(rStatus_t status)
 	if (status == RTI_SUCCESS)
 	{
 		printf("\nSleep enabled\n");
-		appRNPpowerState |= RTI_APP_RNP_POWER_STATE_NPI_BIT;
+		appRNPpowerState |= SIMPLE_APP_RNP_POWER_STATE_NPI_BIT;
 	}
 	else
 	{
@@ -1266,9 +1274,9 @@ void RTI_DisableSleepCnf(rStatus_t status)
 	if (status == RTI_SUCCESS)
 	{
 		printf("\nSleep disabled\n");
-		appRNPpowerState &= ~(RTI_APP_RNP_POWER_STATE_NPI_BIT);
+		appRNPpowerState &= ~(SIMPLE_APP_RNP_POWER_STATE_NPI_BIT);
 		// Toggle StandBy mode
-		if (appRNPpowerState & RTI_APP_RNP_POWER_STATE_STANDBY_BIT)
+		if (appRNPpowerState & SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT)
 		{
 			// We are in Standby, disable it
 			RTI_StandbyReq(RTI_STANDBY_OFF);
@@ -1392,7 +1400,7 @@ void RTI_ResetInd( void )
 
 		// Disable event to initialize since we caught the reset from the RNP,
 		// note that this is a new feature as of RemoTI-1.3.1
-		RTI_main_start_timerEx(RTI_app_threadId, RTI_APP_EVT_INIT, 0);
+		timer_start_timerEx(SIMPLE_App_threadId, SIMPLE_APP_EVT_INIT, 0);
 	}
 	else if (appState == AP_STATE_RESET_FOR_PHY_TESTMODE)
 	{
@@ -1406,7 +1414,7 @@ void RTI_ResetInd( void )
 	}
 
 	// RNP is now back in default state
-	appRNPpowerState = RTI_APP_RNP_POWER_STATE_ACTIVE;
+	appRNPpowerState = SIMPLE_APP_RNP_POWER_STATE_ACTIVE;
 	if (appState == AP_STATE_RESET_FOR_PHY_TESTMODE)
 	{
 		// Now we work with the RTI_TestModeReq() API.
@@ -1443,7 +1451,7 @@ void RTI_IrInd( uint8 irData )
 // List of supported target device types: maximum up to 6 device types.
 static uint8 tgtListCTL[RTI_MAX_NUM_SUPPORTED_TGT_TYPES] =
 {
-		RTI_DEVICE_TELEVISION, RTI_DEVICE_SET_TOP_BOX,
+		RTI_DEVICE_SET_TOP_BOX, RTI_DEVICE_TELEVISION,
 		RTI_DEVICE_MEDIA_CENTER_PC, RTI_DEVICE_RESERVED_INVALID,
 		RTI_DEVICE_RESERVED_INVALID, RTI_DEVICE_RESERVED_INVALID
 };
@@ -1463,8 +1471,8 @@ static uint8 devListCTL[RTI_MAX_NUM_DEV_TYPES] =
 // List of implemented device types: maximum up to 3 device types.
 static uint8 devListTGT[RTI_MAX_NUM_DEV_TYPES] =
 {
-		RTI_DEVICE_TELEVISION,
-		RTI_DEVICE_RESERVED_INVALID, RTI_DEVICE_RESERVED_INVALID };
+		RTI_DEVICE_SET_TOP_BOX, RTI_DEVICE_TELEVISION,
+		RTI_DEVICE_RESERVED_INVALID };
 
 // List of implemented device types: maximum up to 3 device types.
 static uint8 profileList[RTI_MAX_NUM_PROFILE_IDS] =
@@ -1472,6 +1480,7 @@ static uint8 profileList[RTI_MAX_NUM_PROFILE_IDS] =
 		RTI_PROFILE_ZRC, RTI_PROFILE_ZID, 0, 0, 0, 0, 0
 };
 static uint8 vendorName[RTI_VENDOR_STRING_LENGTH] = "TI-LPRF";
+static uint8 userString[RTI_USER_STRING_LENGTH] = "TI-Simple";
 
 static void appConfigParamProcessKey(char* strIn)
 {
@@ -1756,8 +1765,8 @@ void appInitConfigParam( char tgtSelection )
 		}
 
 		debug_printf("ZRC profile activated\n");
-		// No User String pairing; 1 Device (Television); 1 Profile (ZRC)
-		appCFGParam.appCapabilities = RTI_BUILD_APP_CAPABILITIES(0, 1, 1);
+		// No User String pairing; 1 Device (Television); 2 Profile (ZRC and ZID)
+		appCFGParam.appCapabilities = RTI_BUILD_APP_CAPABILITIES(1, 1, 2);
 
 		for (i = 0; i < sizeof(devListTGT); i++) {
 			appCFGParam.devTypeList[i] = devListTGT[i];
@@ -1773,6 +1782,10 @@ void appInitConfigParam( char tgtSelection )
 			appCFGParam.vendorString[i] = vendorName[i];
 		}
 
+		for (i = 0; i < sizeof(userString); i++)
+		{
+			appCFGParam.userString[i] = userString[i];
+		}
 
 	}
 }
@@ -1840,6 +1853,14 @@ static void appSetCFGParamOnRNP( void )
 	else
 		debug_printf("[DEB] Successfully wrote RTI_CP_ITEM_VENDOR_NAME\n");
 
+	if (RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_USER_STRING,
+			sizeof(userString), appCFGParam.userString) != RTI_SUCCESS) {
+		//  AP_FATAL_ERROR();
+		debug_printf("[ERR] Could not write RTI_SA_ITEM_USER_STRING\n");
+	}
+	else
+		debug_printf("[DEB] Successfully wrote RTI_SA_ITEM_USER_STRING\n");
+
 }
 
 
@@ -1889,6 +1910,12 @@ void appGetCFGParamFromRNP( void )
 			sizeof(vendorName), appCFGParam.vendorString) != RTI_SUCCESS) {
 		//  AP_FATAL_ERROR();
 		printf("ERR: Failed to read Vendor String\n");
+	}
+
+	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_USER_STRING,
+			sizeof(userString), appCFGParam.userString) != RTI_SUCCESS) {
+		//  AP_FATAL_ERROR();
+		printf("ERR: Failed to read User String\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_SHORT_ADDRESS,

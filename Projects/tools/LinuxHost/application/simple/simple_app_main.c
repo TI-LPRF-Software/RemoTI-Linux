@@ -49,6 +49,7 @@
 #include "rti_lnx.h"
 // Linux surrogate interface
 #include "npi_ipc_client.h"
+#include "npi_lnx_error.h"
 
 #include "hal_rpc.h"
 #define SB_DST_ADDR_DIV                    4
@@ -188,10 +189,8 @@ const char *debugOption = "";
 
 enum 
 {
-	RTI_main_linux_threadId, RTI_App_threadId, RTI_main_threadId_tblSize
+	RTI_main_linux_threadId, SIMPLE_App_threadId, RTI_main_threadId_tblSize
 };
-
-RTI_main_thread_s *RTI_main_thread_tbl;
 
 sem_t event_mutex;
 
@@ -247,9 +246,6 @@ int main(int argc, char **argv)
 	consoleInput.latestCh = ' ';
 	consoleInput.handle = RTI_MAIN_INPUT_RELEASED;
 
-	RTI_main_thread_tbl = (RTI_main_thread_s *) malloc(
-			sizeof(RTI_main_thread_s) * RTI_main_threadId_tblSize);
-
 	// setup filedescriptor for stdin
 	fds[0].fd = fileno(stdin);
 	fds[0].events = POLLIN;
@@ -261,7 +257,7 @@ int main(int argc, char **argv)
 
 //	FILE *tmpFile;
 
-	if ((ret = NPI_ClientInit(device)) == FALSE)
+	if ((ret = NPI_ClientInit(device)) != NPI_LNX_SUCCESS)
 	{
 		fprintf(stderr, "Failed to start RTI library module, device; %s\n", device);
 		print_usage(argv[0]);
@@ -286,7 +282,7 @@ int main(int argc, char **argv)
 		mode = 1;
 	}
 	//Start RTI thread, management of RTI command in separate thread.
-	if ((ret = appInit(mode, RTI_App_threadId)) != 0)
+	if ((ret = SimpleAppInit(mode, SIMPLE_App_threadId)) != 0)
 	{
 		return ret;
 	}
@@ -307,7 +303,6 @@ int main(int argc, char **argv)
 	//MANAGE DISPLAY HERE
 	while (1) 
 	{
-
 		//Wait for Display Mutex release before displaying anything.
 		//pthread_mutex_lock(&appDisplayMutex);
 		//pthread_mutex_unlock(&appDisplayMutex);
@@ -356,64 +351,6 @@ int main(int argc, char **argv)
 	return ret;
 }
 
-/**************************************************************************************************
- *
- * @fn      RTI_main_start_timerEx
- *
- * @brief   Modeled after OSAL_start_timerEx.
- * 			To stop timer call with same threadId, and event, and
- * 			set timeout to 0.
- *
- * @param   threadId - Id of the thread to call at the event.
- * @param	event - event bitmask
- * @param	timeout - number of milliseconds to count down
- *
- * @return  void
- */
-uint8 RTI_main_start_timerEx(uint8 threadId, uint16 event, uint16 timeout) 
-{
-	uint8 i;
-	for (i = 0; i < 16; i++) 
-	{
-		if (event & BV(i))
-			break;
-	}
-	RTI_main_thread_tbl[threadId].timeoutValue[i] = timeout * 1000;
-	// Use a 0 value of timeout to disable timer
-	if (timeout)
-	{
-		RTI_main_thread_tbl[threadId].timerEnabled |= event;
-	}
-	else
-	{
-		RTI_main_thread_tbl[threadId].timerEnabled &= ~event;
-	}
-#ifdef TIMER_DEBUG
-	printf("Timer started\n");
-#endif //TIMER_DEBUG
-	return 1;
-}
-
-uint8 RTI_main_set_event(uint8 threadId, uint16 event) 
-{
-#ifdef TIMER_DEBUG
-	printf("Setting event 0x%.2X\n", event);
-#endif //TIMER_DEBUG
-	RTI_main_thread_tbl[threadId].eventFlag |= event;
-	return TRUE;
-}
-
-uint8 RTI_main_clear_event(uint8 threadId, uint16 event) 
-{
-	RTI_main_thread_tbl[threadId].eventFlag &= ~event;
-	return TRUE;
-}
-
-uint16 RTI_main_get_event(uint8 threadId) 
-{
-	return RTI_main_thread_tbl[threadId].eventFlag;
-}
-
 void DispMenuInit(void) 
 {
 	printf("------------------------------------------------------\n");
@@ -423,10 +360,6 @@ void DispMenuInit(void)
 	printf("3- Supported Profiles\n");
 	printf("4- Supported Devices \n");
 	printf("5- Supported Target Types \n");
-	printf("6- Vendor ID\n");
-	printf("7- Vendor String\n");
-	printf("8- Toggle User String\n");
-	printf("9- User String\n");
 	printf("i- Initialize without configuration. (Restore from NV).\n");
 	printf("g- Get current configuration from RNP.\n");
 	printf("l- Show configuration. Note! Not Necessarily the One Written To RNP\n");
@@ -473,7 +406,7 @@ void DispCFGCurrentCfg(appDevInfo_t appCfg, uint16 nwkAddr, uint16 panId)
 	printf("- \t \t Number of supported devices:\t 0x%.2X\n",
 			RCN_APP_CAPA_GET_NUM_DEV_TYPES(appCfg.appCapabilities));
 	if (RCN_APP_CAPA_GET_USER_STRING(appCfg.appCapabilities))
-		printf("- \t \t User String supported\n");
+		printf("- \t \t User String supported:\t%s\n", appCfg.userString);
 	printf("- \tSupported Profiles:\n");
 	for (i = 0; i < RCN_APP_CAPA_GET_NUM_PROFILES(appCfg.appCapabilities); i++)
 	{
@@ -595,7 +528,7 @@ void DispMenuReady(void)
 	printf("0- Config \n");
 	printf("1- Pairing\n");
 	printf("2- Unpairing\n");
-	printf("6- Physically Reset RNP (do not work for USB)\n");
+	printf("6- Physically Reset RNP (does not work for USB)\n");
 	printf("7- Send Data\n");
 	printf("8- Clear Pairing Table\n");
 	printf("9- Display Pairing Table\n");

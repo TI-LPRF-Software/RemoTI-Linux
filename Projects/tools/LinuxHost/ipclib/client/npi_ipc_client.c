@@ -299,7 +299,7 @@ static void npi_ipc_delsyncres(void);
 
 int NPI_ClientInit(const char *devPath)
 {
-	int res = TRUE;
+	int res = NPI_LNX_SUCCESS;
 #ifndef NPI_UNIX
 	const char *ipAddress = "", *port = "";
 	int i = 0;
@@ -372,12 +372,7 @@ int NPI_ClientInit(const char *devPath)
 	    if ((res = getaddrinfo(ipAddress, NPI_PORT, &hints, &resAddr)) != 0)
 	    {
 	    	fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
-	    	res = 2;
-	    }
-	    else
-	    {
-	    	// Because of inverted logic on return value
-	    	res = TRUE;
+	    	res = NPI_LNX_ERROR_IPC_SOCKET_GET_ADDRESS_INFO;
 	    }
 	}
 	else
@@ -386,12 +381,7 @@ int NPI_ClientInit(const char *devPath)
 	    if ((res = getaddrinfo(ipAddress, port, &hints, &resAddr)) != 0)
 	    {
 	    	fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
-	    	res = 2;
-	    }
-	    else
-	    {
-	    	// Because of inverted logic on return value
-	    	res = TRUE;
+	    	res = NPI_LNX_ERROR_IPC_SOCKET_GET_ADDRESS_INFO;
 	    }
 	}
 
@@ -425,7 +415,7 @@ int NPI_ClientInit(const char *devPath)
     if ((sNPIconnected = socket(resAddr->ai_family, resAddr->ai_socktype, resAddr->ai_protocol)) == -1)
     {
         perror("socket");
-        exit(1);
+        res = NPI_LNX_ERROR_IPC_SOCKET_CREATE;
     }
 #endif
 
@@ -438,13 +428,13 @@ int NPI_ClientInit(const char *devPath)
     if (connect(sNPIconnected, (struct sockaddr *)&remote, len) == -1)
     {
         perror("connect");
-        res = FALSE;
+        res = NPI_LNX_ERROR_IPC_SOCKET_CONNECT;
     }
 #else
     if (connect(sNPIconnected, resAddr->ai_addr, resAddr->ai_addrlen) == -1)
     {
         perror("connect");
-        res = FALSE;
+        res = NPI_LNX_ERROR_IPC_SOCKET_CONNECT;
     	printf("Not connected. res = 0x%.2X\n", res);
     }
 #endif
@@ -454,20 +444,20 @@ int NPI_ClientInit(const char *devPath)
 	time_printf_start();
 #endif //__DEBUG_TIME__
 
-    if (res == TRUE)
+    if (res == NPI_LNX_SUCCESS)
     {
     	printf("Connected.\n");
     }
 
 
 	int no = 0;
-    if (res == TRUE)
+    if (res == NPI_LNX_SUCCESS)
     {
     	// allow out-of-band data
     	if (setsockopt(sNPIconnected, SOL_SOCKET, SO_OOBINLINE, &no, sizeof(int)) == -1)
     	{
     		perror("setsockopt");
-    		res = FALSE;
+            res = NPI_LNX_ERROR_IPC_SOCKET_SET_SOCKET_OPTIONS;
     	}
     }
 
@@ -475,13 +465,13 @@ int NPI_ClientInit(const char *devPath)
 	 * Create thread which can read new messages from the NPI server
 	 **********************************************************************/
 
-    if (res == TRUE)
+    if (res == NPI_LNX_SUCCESS)
     {
     	if (pthread_create(&NPIThreadId, NULL, npi_ipc_readThreadFunc, NULL))
     	{
     		// thread creation failed
     		printf("Failed to create NPI IPC Client read thread\n");
-    		return -1;
+            res = NPI_LNX_ERROR_IPC_THREAD_CREATION_FAILED;
     	}
     }
 
@@ -489,17 +479,17 @@ int NPI_ClientInit(const char *devPath)
 	 * Create thread which can handle new messages from the NPI server
 	 **********************************************************************/
 
-    if (res == TRUE)
+    if (res == NPI_LNX_SUCCESS)
     {
     	if (pthread_create(&NPIThreadId, NULL, npi_ipc_handleThreadFunc, NULL))
     	{
     		// thread creation failed
     		printf("Failed to create NPI IPC Client handle thread\n");
-    		return -1;
+            res = NPI_LNX_ERROR_IPC_THREAD_CREATION_FAILED;
     	}
     }
 
-    if (res == TRUE)
+    if (res == NPI_LNX_SUCCESS)
     {
     	uint8 version[3];
     	uint8 param[2];

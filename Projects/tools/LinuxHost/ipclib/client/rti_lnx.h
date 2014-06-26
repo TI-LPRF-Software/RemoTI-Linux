@@ -341,7 +341,7 @@ extern "C"
 // State Attributes (SA) Table Item Identifiers
 #define RTI_SA_ITEM_START                                RCN_NIB_NWK_START                   // 0x60
 #define RTI_SA_ITEM_STANDBY_ACTIVE_PERIOD                RCN_NIB_NWK_ACTIVE_PERIOD           // 0x60
-#define RTI_SA_ITEM_CURRENT_CHANNEL                      RCN_NIB_NWK_BASE_CHANNEL            // 0x61
+#define RTI_SA_ITEM_CURRENT_CHANNEL                      0x61 // RCN_NIB_NWK_BASE_CHANNEL
 #define RTI_SA_ITEM_DISCOVERY_LQI_THRESHOLD              RCN_NIB_NWK_DISCOVERY_LQI_THRESHOLD // 0x62
 #define RTI_SA_ITEM_DUTY_CYCLE                           RCN_NIB_NWK_DUTY_CYCLE              // 0x64
 #define RTI_SA_ITEM_FRAME_COUNTER                        RCN_NIB_NWK_FRAME_COUNTER           // 0x65
@@ -623,7 +623,7 @@ extern void RTI_TransmitDiscoveryReq( uint8 searchDevType );
 //extern bool RTI_MatchDiscoveredNodeDeviceCapabilities( rcnCbackEvent_t *pData );
 extern bool RTI_CancelPairInd( void );
 extern void RTI_SetupDiscoveryParams( void );
-extern void RTI_BindingParamsInd(void);
+extern void RTI_BindingParamsInd( uint8 *ieeeAddr, uint8* msoUserString );
 extern void RTI_UpdateBackupPairingEntry(void);
 
 // The following function is used by a module within radio processor.
@@ -651,6 +651,8 @@ extern void RTI_SetBridgeMode(rtiRcnCbackFn_t pCback);
  extern void RTIS_Init( void );
 #endif
 
+// Ping API
+extern RTILIB_API void RTI_PingReq( void );
 // Test Interface
 // Used to access test modes in the RemoTI stack.
 extern RTILIB_API void RTI_SwResetReq( void );

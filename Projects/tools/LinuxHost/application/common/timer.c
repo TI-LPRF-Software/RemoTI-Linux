@@ -49,6 +49,8 @@
 #include "timer.h"
 #include "hal_defs.h"
 
+//#define TIMER_DEBUG
+
 #ifdef __DEBUG_TIME__
 #include "time_printf.h"
 #endif //__DEBUG_TIME__
@@ -155,10 +157,10 @@ static void *timerThreadFunc(void *ptr)
 			for (i = 0; i < timerNumOfThreads; i++)
 			{
 				debug_printf("Thread %d\n", i);
-				debug_printf("\t Events:\t0x%.4X\n", timerThreadTbl[i].eventFlag);
-				debug_printf("\t Enabled:\t0x%.4X\n", timerThreadTbl[i].timerEnabled);
+				debug_printf("\t Events:\t0x%.8X\n", timerThreadTbl[i].eventFlag);
+				debug_printf("\t Enabled:\t0x%.8X\n", timerThreadTbl[i].timerEnabled);
 				debug_printf("\t Timeouts:\n");
-				for (j = 0; j < 16; j++)
+				for (j = 0; j < 32; j++)
 				{
 					debug_printf("\t\t %d:\t%ld\n", j, timerThreadTbl[i].timeoutValue[j]);
 				}
@@ -194,10 +196,10 @@ static void *timerThreadFunc(void *ptr)
 			for (i = 0; i < timerNumOfThreads; i++)
 			{
 				debug_printf("Thread %d\n", i);
-				debug_printf("\t Events:\t0x%.4X\n", timerThreadTbl[i].eventFlag);
-				debug_printf("\t Enabled:\t0x%.4X\n", timerThreadTbl[i].timerEnabled);
+				debug_printf("\t Events:\t0x%.8X\n", timerThreadTbl[i].eventFlag);
+				debug_printf("\t Enabled:\t0x%.8X\n", timerThreadTbl[i].timerEnabled);
 				debug_printf("\t Timeouts:\n");
-				for (j = 0; j < 16; j++)
+				for (j = 0; j < 32; j++)
 				{
 					debug_printf("\t\t %d:\t%ld\n", j, timerThreadTbl[i].timeoutValue[j]);
 				}
@@ -265,12 +267,12 @@ static void *timerThreadFunc(void *ptr)
 		for( i = 0 ; i < timerNumOfThreads; i++)
 		{
 			// Decrement all enabled counters, and check if they have timed out
-			for (j = 0; j < 16; j++)
+			for (j = 0; j < 32; j++)
 			{
 				// Check if event j for timer (for thread) i is enabled
 				if (timerThreadTbl[i].timerEnabled & BV(j))
 				{
-					debug_printf("[TIMER] Decrementing %.4ldus for ThreadID 0x%.2X, event 0x%.4X. Time left before decrementing: %d\n",
+					debug_printf("[TIMER] Decrementing %.4ldus for ThreadID 0x%.2X, event 0x%.8X. Time left before decrementing: %d\n",
 								decrementValue,
 								i,
 								j,
@@ -284,12 +286,12 @@ static void *timerThreadFunc(void *ptr)
 						if ( i == 1 )
 							// This only works if app happens to have thread ID 1
 						{
-							debug_printf("[TIMER] Timer Expired. \t Thread ID: %.2d \t Event Mask: [0x%.4X]\n",
+							debug_printf("[TIMER] Timer Expired. \t Thread ID: %.2d \t Event Mask: [0x%.8X]\n",
 									i,  BV(j));
 						}
 						else
 						{
-							debug_printf("[TIMER] Timer Expired. \t Thread ID: %.2d \t Event Mask: 0x%.4X\n",
+							debug_printf("[TIMER] Timer Expired. \t Thread ID: %.2d \t Event Mask: 0x%.8X\n",
 									i, BV(j));
 						}
 						// timerEnabled can only be set to 0 here
@@ -391,10 +393,10 @@ static void *timerThreadFunc(void *ptr)
  *
  * @return  void
  */
-uint8 timer_start_timerEx(uint8 threadId, uint16 event, uint32 timeout)
+uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 {
 	uint8 i;
-	for (i = 0; i < 16; i++)
+	for (i = 0; i < 32; i++)
 	{
 		if (event & BV(i))
 			break;
@@ -419,7 +421,7 @@ uint8 timer_start_timerEx(uint8 threadId, uint16 event, uint32 timeout)
 
 #ifdef __DEBUG_TIME__
 	char str[128];
-	snprintf(str, sizeof(str), "[TIMER] %dus timer started for event 0x%.4X and thread %d\n",
+	snprintf(str, sizeof(str), "[TIMER] %dus timer started for event 0x%.8X and thread %d\n",
 			(int)timerThreadTbl[threadId].timeoutValue[i], event, threadId);
 	time_printf(str);
 #elif defined TIMER_DEBUG
@@ -435,7 +437,7 @@ uint8 timer_start_timerEx(uint8 threadId, uint16 event, uint32 timeout)
 	return 1;
 }
 
-uint8 timer_set_event(uint8 threadId, uint16 event)
+uint8 timer_set_event(uint8 threadId, uint32 event)
 {
 #ifdef TIMER_DEBUG
 	printf("[TIMER] Setting event 0x%.2X\n", event);
@@ -447,7 +449,7 @@ uint8 timer_set_event(uint8 threadId, uint16 event)
 	pthread_mutex_lock(&timerEventMutex);
 #ifdef __DEBUG_TIME__
 	char str[128];
-	snprintf(str, sizeof(str), "[TIMER] Event 0x%.4X set for thread %d\n", event, threadId);
+	snprintf(str, sizeof(str), "[TIMER] Event 0x%.8X set for thread %d\n", event, threadId);
 	time_printf(str);
 #endif //__DEBUG_TIME__
 	timerThreadTbl[threadId].eventFlag |= event;
@@ -461,15 +463,15 @@ uint8 timer_set_event(uint8 threadId, uint16 event)
 	return TRUE;
 }
 
-uint8 timer_clear_event(uint8 threadId, uint16 event)
+uint8 timer_clear_event(uint8 threadId, uint32 event)
 {
 #ifdef TIMER_DEBUG
-	printf("clearing event 0x%.4X\n", event);
+	printf("clearing event 0x%.8X\n", event);
 #endif //TIMER_DEBUG
 	pthread_mutex_lock(&timerEventMutex);
 #ifdef __DEBUG_TIME__
 	char str[128];
-	snprintf(str, sizeof(str), "[TIMER] Event 0x%.4X cleared for thread %d\n", event, threadId);
+	snprintf(str, sizeof(str), "[TIMER] Event 0x%.8X cleared for thread %d\n", event, threadId);
 	time_printf(str);
 #endif //__DEBUG_TIME__
 	timerThreadTbl[threadId].eventFlag &= ~event;
@@ -477,13 +479,13 @@ uint8 timer_clear_event(uint8 threadId, uint16 event)
 	return TRUE;
 }
 
-uint16 timer_get_event(uint8 threadId)
+uint32 timer_get_event(uint8 threadId)
 {
 	pthread_mutex_lock(&timerEventMutex);
 	pthread_mutex_unlock(&timerEventMutex);
 #ifdef __DEBUG_TIME__
 	char str[128];
-	snprintf(str, sizeof(str), "[TIMER] Event 0x%.4X read for thread %d\n", timerThreadTbl[threadId].eventFlag, threadId);
+	snprintf(str, sizeof(str), "[TIMER] Event 0x%.8X read for thread %d\n", timerThreadTbl[threadId].eventFlag, threadId);
 	time_printf(str);
 #endif //__DEBUG_TIME__
 	return timerThreadTbl[threadId].eventFlag;

@@ -52,6 +52,9 @@
 #include "npi_ipc_client.h"
 #include "rti_lnx.h"
 
+#ifdef MSO_PROFILE
+#include "mso_common.h"
+#endif
 
 #ifdef __BIG_DEBUG__
 #define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
@@ -215,7 +218,15 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 			break;
 
 		case RTIS_CMD_ID_RTI_BIND_PARAMS_IND:
-			RTI_BindingParamsInd();
+			if (pMsg->len == 0)
+			{
+				// Earlier versions of this API does not have any arguments
+				RTI_BindingParamsInd(NULL, NULL);
+			}
+			else if (pMsg->len == (SADDR_EXT_LEN + MSO_USER_STRING_SIZE))
+			{
+				RTI_BindingParamsInd((uint8 *)&pMsg->pData[0], (uint8 *)&pMsg->pData[SADDR_EXT_LEN]);
+			}
 			break;
 
 		case RTIS_CMD_ID_RTI_UPDATE_BACKUP_P_ENTRY:
@@ -907,12 +918,12 @@ RTILIB_API void RTI_DisableSleepReq( void )
 {
   npiMsgData_t pMsg;
 
-  // ping NP; ping request will be discarded
+  RTI_PingReq();
+
+  // Then send real message that will be received and confirmed
   pMsg.subSys   = RPC_SYS_RCAF;
-  pMsg.cmdId    = RTIS_CMD_ID_RTI_DISABLE_SLEEP_REQ; //RTIS_CMD_ID_TEST_PING_REQ;
-  pMsg.len      = 2;
-  pMsg.pData[0] = 0xAA;
-  pMsg.pData[1] = 0xCC;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_DISABLE_SLEEP_REQ; //RTIS_CMD_ID_RTI_DISABLE_SLEEP_REQ;
+  pMsg.len      = 0;
 
   // send command to slave
   NPI_SendAsynchData( &pMsg );
@@ -1091,6 +1102,36 @@ RTILIB_API void RTI_SetBindingParamsReq(uint32 bindingParams)
   NPI_SendAsynchData( &pMsg );
 }
 
+/**************************************************************************************************
+ *
+ * @fn          RTI_PingReq
+ *
+ * @brief       This function is used to take a UART based RNP out of sleep
+ *
+ * input parameters
+ * None.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_PingReq( void )
+{
+  npiMsgData_t pMsg;
+
+  // ping NP; request will be discarded
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_TEST_PING_REQ; //RTIS_CMD_ID_TEST_PING_REQ;
+  pMsg.len      = 2;
+  pMsg.pData[0] = 0xAA;	// Generate pulse train
+  pMsg.pData[1] = 0xCC;	// Generate pulse train
+
+  // send command to slave to wake it up
+  NPI_SendAsynchData( &pMsg );
+}
 
 /**************************************************************************************************
  **************************************************************************************************/
