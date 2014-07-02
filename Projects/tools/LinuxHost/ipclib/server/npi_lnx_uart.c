@@ -457,14 +457,14 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 			else
 			{
 				debug_printf("[UART] Did not time out\n");
-				if ( ((pMsg->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT) &&
-					 ((pMsg->subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_SREQ) )
-				{
-					// There is a bug in early versions of the UART serial bootloader where the request type is SREQ,
-					// although it should be SRSP
-					pMsg->subSys = RPC_SYS_BOOT | RPC_CMD_SRSP;
-				}
 			}
+		}
+		if ( ((pMsg->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT) &&
+			 ((pMsg->subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_SREQ) )
+		{
+			// There is a bug in early versions of the UART serial bootloader where the request type is SREQ,
+			// although it should be SRSP
+			pMsg->subSys = RPC_SYS_BOOT | RPC_CMD_SRSP;
 		}
 	}
 	// Clear the pointer.
