@@ -65,7 +65,9 @@ extern "C"
 #define RTI_DEVICE_IR_EXTENDER                        0x0E
 #define RTI_DEVICE_MONITOR                            0x0F
 #define RTI_DEVICE_TARGET_TYPE_END                    0x10
-// 0x10..0xFD: Reserved
+// 0x10..0xCF: Reserved
+#define RTI_DEVICE_VENDOR_SPECIFIC_ID                 0xD0
+// 0xD1..0xFD: Reserved
 #define RTI_DEVICE_GENERIC                            0xFE
 #define RTI_DEVICE_RESERVED_FOR_WILDCARDS             0xFF
 

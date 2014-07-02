@@ -396,6 +396,8 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 	pthread_mutex_lock(&npiSyncRespLock);
 	pNpiSyncData = pMsg;
 	ret = npi_sendframe(pMsg->subSys | RPC_CMD_SREQ, pMsg->cmdId, pMsg->pData, pMsg->len);
+	// Clear buffer
+	pMsg->subSys = RPC_SYS_RES0 | RPC_CMD_RES6;
 
 	if (ret == NPI_LNX_SUCCESS)
 	{
@@ -432,16 +434,37 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 			prevTimeRec = curTime;
 		}
 #endif //__DEBUG_TIME__
-		result = pthread_cond_timedwait(&npiSyncRespCond, &npiSyncRespLock, &expirytime);
-		if (ETIMEDOUT == result)
+		// Response may have already come in. This may be the case for Serial Bootloader which is really fast.
+		if ( ((pMsg->subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP) ||
+			 ((pMsg->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT) )
 		{
-			// TODO: Indicate synchronous transaction error
-			// Uncommenting the following line will cause assert when connection is not there
-			// Uncomment it only during debugging.
-			pMsg->pData[0] = 0xff;
-			debug_printf("[UART] Send synch data timed out\n");
-			npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_SYNCH_TIMEDOUT;
-			ret = NPI_LNX_FAILURE;
+			printf("[UART] Synchronous Response received early, subSys 0x%.2X, cmdId 0x%.2X, pData[0] 0x%.2X\n",
+					pMsg->subSys, pMsg->cmdId, pMsg->pData[0]);
+		}
+		else
+		{
+			result = pthread_cond_timedwait(&npiSyncRespCond, &npiSyncRespLock, &expirytime);
+			if (ETIMEDOUT == result)
+			{
+				// TODO: Indicate synchronous transaction error
+				// Uncommenting the following line will cause assert when connection is not there
+				// Uncomment it only during debugging.
+				pMsg->pData[0] = 0xff;
+				debug_printf("[UART] Send synch data timed out\n");
+				npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_SYNCH_TIMEDOUT;
+				ret = NPI_LNX_FAILURE;
+			}
+			else
+			{
+				debug_printf("[UART] Did not time out\n");
+				if ( ((pMsg->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT) &&
+					 ((pMsg->subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_SREQ) )
+				{
+					// There is a bug in early versions of the UART serial bootloader where the request type is SREQ,
+					// although it should be SRSP
+					pMsg->subSys = RPC_SYS_BOOT | RPC_CMD_SRSP;
+				}
+			}
 		}
 	}
 	// Clear the pointer.

@@ -100,6 +100,9 @@
 #endif
 #endif
 
+#include "hal_dbg_ifc.h"
+#include "hal_dbg_ifc_rpc.h"
+
 #ifdef __BIG_DEBUG__
 #define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #else
@@ -122,21 +125,35 @@
 /**************************************************************************************************
  *                                           Constant
  **************************************************************************************************/
-
-const char* sectionNamesArray[3][2] =
+enum {
+	enumSRDY,
+	enumMRDY,
+	enumRESET,
+	enumDD,
+	enumDC
+};
+const char* sectionNamesArray[5][2] =
 {
-	{
-		"GPIO_SRDY.GPIO",
-		"GPIO_SRDY.LEVEL_SHIFTER"
-	},
-	{
-		"GPIO_MRDY.GPIO",
-		"GPIO_MRDY.LEVEL_SHIFTER"
-	},
-	{
-		"GPIO_RESET.GPIO",
-		"GPIO_RESET.LEVEL_SHIFTER"
-	},
+		{
+				"GPIO_SRDY.GPIO",
+				"GPIO_SRDY.LEVEL_SHIFTER"
+		},
+		{
+				"GPIO_MRDY.GPIO",
+				"GPIO_MRDY.LEVEL_SHIFTER"
+		},
+		{
+				"GPIO_RESET.GPIO",
+				"GPIO_RESET.LEVEL_SHIFTER"
+		},
+		{
+				"GPIO_DD.GPIO",
+				"GPIO_DD.LEVEL_SHIFTER"
+		},
+		{
+				"GPIO_DC.GPIO",
+				"GPIO_DC.LEVEL_SHIFTER"
+		},
 };
 
 //const char *port = "";
@@ -333,9 +350,10 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg);
 int SerialConfigParser(FILE* serialCfgFd, const char* section,
 		const char* key, char* resString);
 
-void NPI_LNX_IPC_Exit(int ret);
+void NPI_LNX_IPC_Exit(int ret, uint8 freeSerial);
 
 static uint8 devIdx = 0;
+static uint8 debugSupported = 0;
 
 int NPI_LNX_IPC_SendData(uint8 len, int connection);
 int NPI_LNX_IPC_ConnectionHandle(int connection);
@@ -503,10 +521,10 @@ int main(int argc, char ** argv)
 	logPath = (char*) malloc(128);
 	memset(devPath, 0, 128);
 	memset(logPath, 0, 128);
-	gpioCfg = (halGpioCfg_t**) malloc(3 * sizeof(halGpioCfg_t*));
+	gpioCfg = (halGpioCfg_t**) malloc(5 * sizeof(halGpioCfg_t*));
 	debug_printf("gpioCfg \t\t\t\t%p\n",
 			(void *)&(gpioCfg));
-	for (gpioIdx = 0; gpioIdx < 3; gpioIdx++)
+	for (gpioIdx = 0; gpioIdx < 5; gpioIdx++)
 	{
 		gpioCfg[gpioIdx] = (halGpioCfg_t*) malloc(sizeof(halGpioCfg_t));
 		memset(gpioCfg[gpioIdx], 0, sizeof(halGpioCfg_t));
@@ -525,8 +543,7 @@ int main(int argc, char ** argv)
 		//                            debug_
 		printf("Could not open file '%s'\n", configFilePath);
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_OPEN_REMOTI_RNP_CFG;
-		print_usage(argv[0]);
-		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 	}
 
 	// Get device type
@@ -534,7 +551,7 @@ int main(int argc, char ** argv)
 	{
 		printf("Could not find 'deviceKey' inside config file '%s'\n", configFilePath);
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_KEY;
-		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, FALSE);
 	}
 
 	// Copy from buffer to variable
@@ -548,7 +565,7 @@ int main(int argc, char ** argv)
 	{
 		printf("Could not find 'devPath' inside config file '%s'\n", configFilePath);
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_PATH;
-		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, FALSE);
 	}
 	// Copy from buffer to variable
 	memcpy(devPath, strBuf, strlen(strBuf));
@@ -567,19 +584,53 @@ int main(int argc, char ** argv)
 	{
 		printf("Could not find 'log' inside config file '%s'\n", configFilePath);
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_LOG_PATH;
-		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, FALSE);
 	}
 	// Copy from buffer to variable
 	memcpy(logPath, strBuf, strlen(strBuf));
 	//            debug_
 	printf("logPath = '%s'\n", logPath);
 
+	// If Debug Interface is supported, configure it.
+	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "DEBUG", "supported", strBuf)))
+	{
+		printf("Could not find [DEBUG]'supported' inside config file '%s'\n", configFilePath);
+		debugSupported = 0;
+	}
+	else
+	{
+		// Copy from buffer to variable
+		debugSupported = strBuf[0] - '0';
+	}
+
+	uint8 gpioStart = 0, gpioEnd = 0;
+	if (debugSupported)
+	{
+		printf("Debug Interface is supported\n");
+		gpioEnd = 5;
+		// If UART then skip MRDY, SRDY
+		if (devIdx == NPI_SERVER_DEVICE_INDEX_UART)
+		{
+			gpioStart = 2;
+		}
+	}
+	else if ((devIdx == NPI_SERVER_DEVICE_INDEX_SPI) ||
+			 (devIdx == NPI_SERVER_DEVICE_INDEX_I2C))
+	{
+		gpioEnd = 3;
+	}
+	else if (devIdx == NPI_SERVER_DEVICE_INDEX_UART)
+	{
+		gpioStart = 2;
+		gpioEnd = 3;
+	}
+
 	// GPIO configuration
 	if ((devIdx == NPI_SERVER_DEVICE_INDEX_UART) ||
 			(devIdx == NPI_SERVER_DEVICE_INDEX_SPI) ||
 			(devIdx == NPI_SERVER_DEVICE_INDEX_I2C))
 	{
-		for (gpioIdx = 0; gpioIdx < 3; gpioIdx++) {
+		for (gpioIdx = gpioStart; gpioIdx < gpioEnd; gpioIdx++)	{
 			// Get SRDY, MRDY or RESET GPIO
 			debug_printf("gpioCfg[gpioIdx]->gpio \t\t\t%p\n",
 					(void *)&(gpioCfg[gpioIdx]->gpio));
@@ -602,7 +653,7 @@ int main(int argc, char ** argv)
 			{
 				printf("[CONFIG] ERROR , key 'value' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][0]);
 				npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO(gpioIdx, 0, devIdx);
-				NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+				NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 			}
 
 			// Get SRDY, MRDY or RESET GPIO direction
@@ -624,7 +675,7 @@ int main(int argc, char ** argv)
 			{
 				printf("[CONFIG] ERROR , key 'direction' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][0]);
 				npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO(gpioIdx, 0, devIdx);
-				NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+				NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 			}
 
 #ifdef SRDY_INTERRUPT
@@ -648,7 +699,7 @@ int main(int argc, char ** argv)
 				{
 					printf("[CONFIG] ERROR , key 'edge' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][0]);
 					npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO(gpioIdx, 0, devIdx);
-					NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+					NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 				}
 			}
 #endif
@@ -876,9 +927,64 @@ int main(int argc, char ** argv)
 		strncpy(port, strBuf, 128);
 	}
 
+		// Now configure Debug Interface if supported
+		if (debugSupported)
+		{
+			if (devIdx == 0)
+			{
+				// Reset has not been configured yet.
+				ret = HalGpioResetInit(gpioCfg[2]);
+			}
+			// Configure DD
+			if ( ret == NPI_LNX_SUCCESS )
+			{
+				ret = HalGpioDDInit(gpioCfg[3]);
+			}
+
+			// Configure DC
+			if ( ret == NPI_LNX_SUCCESS )
+			{
+				ret = HalGpioDCInit(gpioCfg[4]);
+			}
+			else
+				printf("2 here\n");
+
+			// Now enter debug mode.
+			if ( ret == NPI_LNX_SUCCESS )
+			{
+				ret = Hal_debug_init();
+			}
+			else
+				printf("3 here\n");
+
+			if ( ret == NPI_LNX_SUCCESS )
+			{
+				// Now get chip ID.
+				uint8 chipId = 0;
+				ret = Hal_read_chip_id(&chipId);
+				if ( ret != NPI_LNX_SUCCESS )
+				{
+					if (npi_ipc_errno == NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DUP_READY)
+					{
+						// Device did not respond, it may be that it's not in debug mode anymore.
+						printf("Could not get chip ID, device not in debug mode as it failed to respond\n");						// This error should not be considered critical at this stage.
+						npi_ipc_errno = NPI_LNX_SUCCESS;
+						ret = NPI_LNX_SUCCESS;
+					}
+					else
+					{
+						printf("Could not get chip ID, an error occurred\n");
+					}
+				}
+				else
+				{
+					printf("Chip ID: 0x%.2X\n", chipId);
+				}
+			}
+		}
 
 	// The following will exit if ret != SUCCESS
-	NPI_LNX_IPC_Exit(ret);
+	NPI_LNX_IPC_Exit(ret, FALSE);
 
 
 #ifdef __STRESS_TEST__
@@ -941,7 +1047,7 @@ int main(int argc, char ** argv)
 		{
 			fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
 			npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_GET_ADDRESS_INFO;
-			NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+			NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 		}
 	}
 
@@ -1022,7 +1128,7 @@ int main(int argc, char ** argv)
 		writeToNpiLnxLog("Port is probably already in use, please select an available port\n");
 		debug_printf("Port is probably already in use, please select an available port\n");
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_BIND;
-		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 	}
 
 #else
@@ -1036,7 +1142,7 @@ int main(int argc, char ** argv)
 	{
 		perror("setsockopt");
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_SET_REUSE_ADDRESS;
-		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 	}
 
 	// Bind socket
@@ -1044,7 +1150,7 @@ int main(int argc, char ** argv)
 	{
 		perror("bind");
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_BIND;
-		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 	}
 
 #endif
@@ -1054,7 +1160,7 @@ int main(int argc, char ** argv)
 	{
 		perror("listen");
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_LISTEN;
-		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE);
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 	}
 
 	fd_set activeConnectionsFDsSafeCopy;
@@ -1181,6 +1287,24 @@ int main(int argc, char ** argv)
 							ret = NPI_LNX_SUCCESS;
 							npi_ipc_errno = NPI_LNX_SUCCESS;
 							break;
+
+						case NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DUP_READY:
+							// Device did not respond, it may be that it's not in debug mode anymore.
+							printf("Chip failed to respond\n");
+							// This error should not be considered critical at this stage.
+							sprintf(toNpiLnxLog, "Could not get chip ID, device not in debug mode as it failed to respond\n");
+							writeToNpiLnxLog(toNpiLnxLog);
+							npi_ipc_errno = NPI_LNX_SUCCESS;
+							ret = NPI_LNX_SUCCESS;
+							break;
+						case NPI_LNX_ERROR_HAL_DBG_IFC_ASYNCH_INVALID_CMDID:
+							// This is not a critical error, so don't cause server to exit.
+							// It simply tells that an invalid AREQ CMD was requested.
+							sprintf(toNpiLnxLog, "Invalid asynchronous request to debug interface #%c", c);
+							writeToNpiLnxLog(toNpiLnxLog);
+							ret = NPI_LNX_SUCCESS;
+							npi_ipc_errno = NPI_LNX_SUCCESS;
+							break;
 						default:
 							if (npi_ipc_errno == NPI_LNX_SUCCESS)
 							{
@@ -1276,7 +1400,7 @@ int main(int argc, char ** argv)
 	(NPI_CloseDeviceFnArr[devIdx])();
 
 	// Free all remaining memory
-	NPI_LNX_IPC_Exit(NPI_LNX_SUCCESS + 1);
+	NPI_LNX_IPC_Exit(NPI_LNX_SUCCESS + 1, TRUE);
 
 #if (defined __STRESS_TEST__) && (__STRESS_TEST__ == TRUE)
 	//            close(fpStressTestData);
@@ -1542,7 +1666,22 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			}
 			debug_printf("\n");
 
-			if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
+			if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_DEBUG)
+			{
+				if (debugSupported)
+				{
+					// Synchronous Call to Debug Interface
+					ret = Hal_DebugInterface_SynchMsgCback((npiMsgData_t *) npi_ipc_buf[0]);
+				}
+				else
+				{
+					debug_printf("Debug Interface SREQ received, but not supported\n");
+					// Debug not supported, return 0xFF
+					((npiMsgData_t *) npi_ipc_buf[0])->pData[0] = 0xFF;
+					ret = NPI_LNX_SUCCESS;
+				}
+			}
+			else if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
 			{
 
 				//SREQ Command send to this server.
@@ -1583,7 +1722,8 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 
 			if ( (ret == NPI_LNX_SUCCESS) ||
 						(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT) ||
-						(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_POLL_TIMEDOUT) )
+						(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_POLL_TIMEDOUT) || 
+					(npi_ipc_errno == NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DUP_READY) )
 			{
 				n = ((npiMsgData_t *) npi_ipc_buf[0])->len + RPC_FRAME_HDR_SZ;
 
@@ -1626,7 +1766,21 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 			}
 			debug_printf("\n");
 
-			if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
+			if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_DEBUG)
+			{
+				if (debugSupported)
+				{
+					// Asynchronous Call to Debug Interface
+					ret = Hal_DebugInterface_AsynchMsgCback((npiMsgData_t *) npi_ipc_buf[0]);
+				}
+				else
+				{
+					debug_printf("Debug Interface AREQ received, but not supported\n");
+					// Debug not supported, do nothing
+					ret = NPI_LNX_SUCCESS;
+				}
+			}
+			else if (((uint8) (((npiMsgData_t *) npi_ipc_buf[0])->subSys) & (uint8) RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
 			{
 				//AREQ Command send to this server.
 				ret = npi_ServerCmdHandle((npiMsgData_t *)npi_ipc_buf[0]);
@@ -2089,7 +2243,7 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg)
  * @return      None
  **************************************************************************************************
  */
-void NPI_LNX_IPC_Exit(int ret)
+void NPI_LNX_IPC_Exit(int ret, uint8 freeSerial)
 {
 	printf("... freeing memory (ret %d)\n", ret);
 
@@ -2120,22 +2274,25 @@ void NPI_LNX_IPC_Exit(int ret)
 		}
 	}
 
-	uint8 gpioIdx;
-	if (ret != NPI_LNX_SUCCESS)
+	if (freeSerial == TRUE)
 	{
-		// Keep GPIO paths for later use
-		for (gpioIdx = 0; gpioIdx < 3; gpioIdx++)
+		uint8 gpioIdx;
+		if (ret != NPI_LNX_SUCCESS)
 		{
-			if (gpioCfg[gpioIdx] != NULL)
+			// Keep GPIO paths for later use
+			for (gpioIdx = 0; gpioIdx < 3; gpioIdx++)
 			{
-				free(gpioCfg[gpioIdx]);
-				gpioCfg[gpioIdx] = NULL;
+				if (gpioCfg[gpioIdx] != NULL)
+				{
+					free(gpioCfg[gpioIdx]);
+					gpioCfg[gpioIdx] = NULL;
+				}
 			}
-		}
-		if (gpioCfg != NULL)
-		{
-			free(gpioCfg);
-			gpioCfg = NULL;
+			if (gpioCfg != NULL)
+			{
+				free(gpioCfg);
+				gpioCfg = NULL;
+			}
 		}
 	}
 
@@ -2411,6 +2568,14 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 				ret = HalGpioResetSet(FALSE);
 				usleep(1);
 				ret = HalGpioResetSet(TRUE);
+			}
+
+			// If SRDY is shared with debug interface we need to re-init this GPIO.
+			if ( (ret == NPI_LNX_SUCCESS) && debugSupported)
+			{
+				debug_printf("Resetting SRDY pin\n");
+				// We may have left debug mode, so make sure DD data line is reset to input
+				ret = halGpioDDSetDirection(0);
 			}
 		}
 		break;
