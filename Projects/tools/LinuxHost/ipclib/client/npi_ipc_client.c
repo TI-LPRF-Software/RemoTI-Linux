@@ -108,8 +108,12 @@
 #define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #define debug_verbose_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #else
-#define debug_printf(fmt, ...) 			st(if (__DEBUG_CLIENT_ACTIVE == 1) printf( fmt, ##__VA_ARGS__);)
+#define debug_printf(fmt, ...) 			st(if ( (__DEBUG_CLIENT_ACTIVE == 1) || (__DEBUG_CLIENT_ACTIVE == 2) )  printf( fmt, ##__VA_ARGS__);)
 #define debug_verbose_printf(fmt, ...) 	st(if (__DEBUG_CLIENT_ACTIVE == 2) printf( fmt, ##__VA_ARGS__);)
+#endif
+
+#ifdef __DEBUG_TIME__
+#define debug_time_printf(fmt)	st(if ( (__DEBUG_CLIENT_ACTIVE == 1) || (__DEBUG_CLIENT_ACTIVE == 2) ) time_printf( fmt);)
 #endif
 
 uint8 __DEBUG_CLIENT_ACTIVE = FALSE;
@@ -658,12 +662,21 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 		// this is solved by using poll() to see if there are bytes to read.
 
 		if (npi_ipc_areq_rec_buf != NULL)
+		{
+#ifdef __DEBUG_TIME__
+      		debug_time_printf("[CLIENT READ] Read thread 1ms timeout \n");
+#endif //__DEBUG_TIME__
 			// In case there are messages received yet to be processed allow processing by timing out after 1ms.
 			pollRet = poll((struct pollfd*)&ufds, 1, 1);
+		}
 		else
 		{
+#ifdef __DEBUG_TIME__
+			debug_time_printf("[CLIENT READ] Read thread wait forever\n");
+#else
 			// In case there are no messages received to be processed wait forever.
 			debug_verbose_printf("[CLIENT READ] Read thread Wait forever\n");
+#endif //__DEBUG_TIME__
 			pollRet = poll((struct pollfd*)&ufds, 1, -1);
 		}
 
@@ -750,7 +763,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 #ifdef __DEBUG_TIME__
 						char str[128];
 						snprintf(str, sizeof(str), "[CLIENT READ] RPC_CMD_AREQ cmdId: 0x%.2X\n", ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->cmdId);
-						time_printf(str);
+						debug_time_printf(str);
 #else
 						debug_printf("[CLIENT READ] RPC_CMD_AREQ cmdId: 0x%.2X\n", ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->cmdId);
 #endif //__DEBUG_TIME__
@@ -1225,12 +1238,12 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg )
     		charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", pMsg->pData[i]);
     	}
     	charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\n");
-    	time_printf(str);
+    	debug_time_printf(str);
 #endif //__DEBUG_TIME__
       /* execute processing function */
       res = (*func)(pMsg);
 #ifdef __DEBUG_TIME__
-      time_printf("[CLIENT CBACK ENDED] \n");
+      	debug_time_printf("[CLIENT CBACK ENDED] \n");
 #endif //__DEBUG_TIME__
     }
     else

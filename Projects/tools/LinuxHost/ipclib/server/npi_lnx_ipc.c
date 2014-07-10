@@ -2003,6 +2003,36 @@ int NPI_LNX_IPC_SendData(uint8 len, int connection)
 		}
 	}
 
+#ifdef __DEBUG_TIME__
+	if (__DEBUG_TIME_ACTIVE == TRUE)
+	{
+		gettimeofday(&curTime, NULL);
+		long int diffPrev;
+		int t = 0;
+		if (curTime.tv_usec >= prevTimeSend.tv_usec)
+		{
+			diffPrev = curTime.tv_usec - prevTimeSend.tv_usec;
+		}
+		else
+		{
+			diffPrev = (curTime.tv_usec + 1000000) - prevTimeSend.tv_usec;
+			t = 1;
+		}
+
+		int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
+		int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
+
+		time_printf("[--> %.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] Sent\n",
+				hours,											// hours
+				minutes,										// minutes
+				(int)(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
+				(long int) curTime.tv_usec,
+				curTime.tv_sec - prevTimeSend.tv_sec - t,
+				diffPrev);
+
+		prevTimeSend = curTime;
+	}
+#endif //__DEBUG_TIME__
 	return ret;
 }
 

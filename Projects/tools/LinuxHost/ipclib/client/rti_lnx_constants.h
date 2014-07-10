@@ -90,8 +90,10 @@ extern "C"
 #define RTI_PROFILE_ZRC                               0x01
 #define RTI_PROFILE_ZID                               0x02
 #define RTI_PROFILE_Z3S                               0x03
-#define RTI_PROFILE_ID_END                            0x04
+#define RTI_PROFILE_ID_STD_END                        0x04
 #define RTI_PROFILE_MSO                               0xC0
+#define RTI_PROFILE_MSO_VOICE_PROFILE                 0xC1
+#define RTI_PROFILE_MSO_END                           0xC2
 
 // CERC command codes
 #define RTI_CERC_USER_CONTROL_PRESSED                 0x01

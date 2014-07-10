@@ -419,7 +419,7 @@ uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 		timer_clear_event(threadId, event);
 	}
 
-#ifdef __DEBUG_TIME__
+#if (defined __DEBUG_TIME__) && (defined TIMER_DEBUG)
 	char str[128];
 	snprintf(str, sizeof(str), "[TIMER] %dus timer started for event 0x%.8X and thread %d\n",
 			(int)timerThreadTbl[threadId].timeoutValue[i], event, threadId);
@@ -447,7 +447,7 @@ uint8 timer_set_event(uint8 threadId, uint32 event)
 	// Set event in table
 
 	pthread_mutex_lock(&timerEventMutex);
-#ifdef __DEBUG_TIME__
+#if (defined __DEBUG_TIME__) && (defined TIMER_DEBUG)
 	char str[128];
 	snprintf(str, sizeof(str), "[TIMER] Event 0x%.8X set for thread %d\n", event, threadId);
 	time_printf(str);
@@ -455,7 +455,10 @@ uint8 timer_set_event(uint8 threadId, uint32 event)
 	timerThreadTbl[threadId].eventFlag |= event;
 
 	// Release resources waiting for this event
-	sem_post(&event_mutex);
+	if (sem_post(&event_mutex) < 0)
+	{
+		perror("Failed to post event");
+	}
 
 	pthread_mutex_unlock(&timerEventMutex);
 
@@ -469,7 +472,7 @@ uint8 timer_clear_event(uint8 threadId, uint32 event)
 	printf("clearing event 0x%.8X\n", event);
 #endif //TIMER_DEBUG
 	pthread_mutex_lock(&timerEventMutex);
-#ifdef __DEBUG_TIME__
+#if (defined __DEBUG_TIME__) && (defined TIMER_DEBUG)
 	char str[128];
 	snprintf(str, sizeof(str), "[TIMER] Event 0x%.8X cleared for thread %d\n", event, threadId);
 	time_printf(str);
@@ -483,7 +486,7 @@ uint32 timer_get_event(uint8 threadId)
 {
 	pthread_mutex_lock(&timerEventMutex);
 	pthread_mutex_unlock(&timerEventMutex);
-#ifdef __DEBUG_TIME__
+#if (defined __DEBUG_TIME__) && (defined TIMER_DEBUG)
 	char str[128];
 	snprintf(str, sizeof(str), "[TIMER] Event 0x%.8X read for thread %d\n", timerThreadTbl[threadId].eventFlag, threadId);
 	time_printf(str);
