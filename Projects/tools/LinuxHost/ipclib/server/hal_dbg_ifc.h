@@ -52,7 +52,7 @@ extern "C"
 //#include "hal_board.h"
 #include "hal_types.h"
 #include "npi_lnx.h"
-#include  "hal_gpio.h"
+#include "hal_gpio.h"
 
 /*********************************************************************
  * MACROS

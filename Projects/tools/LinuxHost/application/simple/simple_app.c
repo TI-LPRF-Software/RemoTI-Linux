@@ -102,7 +102,7 @@ static void appProcessEvents(uint32 events);
 uint8 SIMPLE_App_threadId;
 
 #define NAME_ELEMENT(element) [element] = #element
-static const char * const profile_list[RTI_PROFILE_ID_END + 1] =
+static const char * const profile_list[RTI_PROFILE_ID_STD_END + 1] =
 		{ [0 ... 2] = NULL, NAME_ELEMENT(RTI_PROFILE_ZRC),
 				NAME_ELEMENT(RTI_PROFILE_ZID), };
 
@@ -283,7 +283,7 @@ static void appConfigParamProcessKey(char* strIn);
 static void appInitSyncRes(void);
 void appDisplayPairingTable(void);
 void appClearPairingTable(void);
-
+void appReadVoltage(uint8 duration, uint8 updateRate, uint16 displayRate);
 
 int SimpleAppInit(int mode, char threadId)
 {
@@ -549,6 +549,10 @@ static void *appThreadFunc(void *ptr)
 				NPI_SendSynchData( &pMsg );
 				printf("Disconnected, status %d\n", pMsg.pData[0]);
 			}
+			else if (ch == '5')
+			{
+				appReadVoltage(30, 2, 100);
+			}
 			else if (ch == '7')
 			{
 				if (appState == AP_STATE_READY)
@@ -794,6 +798,83 @@ static void appProcessEvents(uint32 events)
 	}
 	// Clear event
 	timer_clear_event(SIMPLE_App_threadId, procEvents);
+}
+
+/**************************************************************************************************
+ *
+ * @fn      appReadVoltage
+ *
+ * @brief   Function to read voltage from ADC on platform where NPI Server is running
+ *
+ * @param   duration 	- number of seconds to read voltage
+ * 			updateRate	- number of reads per display
+ * 			displayRate	- period in ms to update display
+ *
+ * @return  void
+ */
+void appReadVoltage(uint8 duration, uint8 updateRate, uint16 displayRate)
+{
+	// Read ADC value
+	int adcPort = 0, voltage, average, tmpAverage, maxIterations, countDown;
+	int i, j;
+	// Prepare request
+	npiMsgData_t pMsg;
+
+	maxIterations = ((int)duration * 1000) / displayRate;
+	if ( (displayRate / updateRate) < 50)
+	{
+		updateRate = displayRate / 50;
+		maxIterations = ((int)duration * 1000) / (updateRate * 50);
+	}
+	countDown = maxIterations;
+	pMsg.subSys = RPC_SYS_SRV_CTRL;
+	pMsg.cmdId  = NPI_LNX_CMD_ID_ADC_CONTROL;
+	average = 0;
+	for (i = 0; i < maxIterations; i++)
+	{
+		tmpAverage = 0;
+		for (j = 0; j < updateRate; j++)
+		{
+			pMsg.len    = 2;
+
+			pMsg.pData[NPI_LNX_ADC_CONTROL_CMD_ID_IDX] = NPI_LNX_ADC_CONTROL_CMD_ID_READ_REQ;
+			pMsg.pData[NPI_LNX_ADC_CONTROL_CMD_READ_REQ_PORT_IDX] = adcPort;
+
+			NPI_SendSynchData( &pMsg );
+
+			voltage = BUILD_UINT32(pMsg.pData[NPI_LNX_ADC_CONTROL_CMD_READ_RSP_DATA_IDX],
+					pMsg.pData[NPI_LNX_ADC_CONTROL_CMD_READ_RSP_DATA_IDX + 1],
+					pMsg.pData[NPI_LNX_ADC_CONTROL_CMD_READ_RSP_DATA_IDX + 2],
+					pMsg.pData[NPI_LNX_ADC_CONTROL_CMD_READ_RSP_DATA_IDX + 3]);
+			tmpAverage += voltage;
+			// Sleep before next update
+			usleep((displayRate/updateRate) * 1000);
+		}
+		if (pMsg.pData[NPI_LNX_ADC_CONTROL_CMD_READ_RSP_PORT_IDX] == adcPort)
+		{
+			printf("[%6d][%4dmV]", countDown--, tmpAverage/updateRate);
+			for (j = 0; j < (tmpAverage/updateRate)/18; j++)
+			{
+				printf("-");
+			}
+			printf("\n");
+		}
+		else
+		{
+			printf("[INFO] Failed to read ADC Voltage\n");
+			return;
+		}
+		average += tmpAverage/updateRate;
+	}
+	if (pMsg.pData[NPI_LNX_ADC_CONTROL_CMD_READ_RSP_PORT_IDX] == adcPort)
+	{
+		printf("[INFO] Average ADC Voltage read: %dmV\n", average/maxIterations);
+	}
+	else
+	{
+		printf("[INFO] Failed to read ADC Voltage\n");
+		return;
+	}
 }
 
 /**************************************************************************************************
@@ -1141,7 +1222,7 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 	if ( appState != AP_STATE_SIMPLE_TEST_MODE)
 	{
 		//check Basic Range to avoid Seg Fault
-		if ((profileId < 0) || (profileId > RTI_PROFILE_ID_END))
+		if ((profileId < 0) || (profileId > RTI_PROFILE_ID_STD_END))
 			error = TRUE;
 
 		//Vendor Id Meaningful only if Vendor Specific Data

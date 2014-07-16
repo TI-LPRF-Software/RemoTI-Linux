@@ -47,6 +47,16 @@
 extern "C" {
 #endif
 
+#ifndef ATTR_PACKED
+# ifdef __GNUC__
+#  define ATTR_PACKED __attribute__ ((__packed__))
+# else
+#  define ATTR_PACKED
+# endif
+#endif
+
+#pragma pack(1)
+
 /* ------------------------------------------------------------------------------------------------
  *                                          Includes
  * ------------------------------------------------------------------------------------------------
@@ -64,13 +74,29 @@ extern "C" {
 #define NPI_LNX_CMD_ID_RESET_DEVICE					0x05
 #define NPI_LNX_CMD_ID_DISCONNECT_DEVICE			0x06
 #define NPI_LNX_CMD_ID_CONNECT_DEVICE				0x07
+#define NPI_LNX_CMD_ID_ADC_CONTROL					0x08
+
+/* ------------------------------------------------------------------------------------------------
+ *                                          Constants - ADC Control
+ *
+ *      Defines a sub-protocol for ADC control
+ * ------------------------------------------------------------------------------------------------
+ */
+#define NPI_LNX_ADC_CONTROL_CMD_ID_IDX				0x00
+#define NPI_LNX_ADC_CONTROL_CMD_ID_READ_REQ			0x01
+#define NPI_LNX_ADC_CONTROL_CMD_READ_REQ_PORT_IDX	0x01
+#define NPI_LNX_ADC_CONTROL_CMD_ID_READ_RSP			0x02
+#define NPI_LNX_ADC_CONTROL_CMD_READ_RSP_PORT_IDX	0x01
+#define NPI_LNX_ADC_CONTROL_CMD_READ_RSP_DATA_IDX	0x02
+
+#define NPI_LNX_ADC_CONTROL_CMD_ID_ADC_CONTROL_NOT_SUPPORTED	0xFF
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Common
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //Version 0.7.0
 #define NPI_LNX_MAJOR_VERSION		0
-#define NPI_LNX_MINOR_VERSION		7
+#define NPI_LNX_MINOR_VERSION		8
 #define NPI_LNX_REVISION			0
 
 #define NPI_LNX_PARAM_NB_CONNECTIONS 		1
@@ -81,6 +107,16 @@ extern "C" {
  *                                           Typedefs
  * ------------------------------------------------------------------------------------------------
  */
+typedef enum
+{
+	ADC_READ_IMMEDIATE
+} adcReadRequest_t;
+
+typedef struct ATTR_PACKED
+{
+	uint8 port;	// ADC port
+	uint8 type; // Type of request
+} npiMsgAdcReadReq_t;
 
 /**************************************************************************************************
 */

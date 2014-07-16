@@ -89,6 +89,10 @@
 #include "npi_lnx_uart.h"
 #endif
 
+#if (defined NPI_ADC_CONTROL) && (NPI_ADC_CONTROL == TRUE)
+#include "hal_adc.h"
+#endif
+
 // The following is only necessary because we always read out GPIO configuration
 #include "hal_gpio.h"
 
@@ -354,6 +358,7 @@ void NPI_LNX_IPC_Exit(int ret, uint8 freeSerial);
 
 static uint8 devIdx = 0;
 static uint8 debugSupported = 0;
+static uint8 adcControlSupported = 0;
 
 int NPI_LNX_IPC_SendData(uint8 len, int connection);
 int NPI_LNX_IPC_ConnectionHandle(int connection);
@@ -594,7 +599,7 @@ int main(int argc, char ** argv)
 	// If Debug Interface is supported, configure it.
 	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "DEBUG", "supported", strBuf)))
 	{
-		printf("Could not find [DEBUG]'supported' inside config file '%s'\n", configFilePath);
+		printf("[INFO] Could not find [DEBUG]'supported' inside config file '%s'. Debug support disabled\n", configFilePath);
 		debugSupported = 0;
 	}
 	else
@@ -602,6 +607,48 @@ int main(int argc, char ** argv)
 		// Copy from buffer to variable
 		debugSupported = strBuf[0] - '0';
 	}
+
+//#if (defined NPI_ADC_CONTROL) && (NPI_ADC_CONTROL == TRUE)
+	// Check if ADC control is supported
+	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "ADC_CONTROL", "supported", strBuf)))
+	{
+		printf("[INFO] Could not find [ADC_CONTROL]'supported' inside config file '%s'. ADC control disabled\n", configFilePath);
+		adcControlSupported = 0;
+	}
+	else
+	{
+		// Copy from buffer to variable
+		adcControlSupported = strBuf[0] - '0';
+		// Initialize ADC ports
+		uint8 numOfAdcPorts = 0, adcPort;
+		if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "ADC_CONTROL", "numOfPorts", strBuf)))
+		{
+			numOfAdcPorts = strBuf[0] - '0';
+			char **adcDevPaths = malloc(sizeof(char *) * numOfAdcPorts);
+			for (adcPort = 0; adcPort < numOfAdcPorts; adcPort++)
+			{
+				adcDevPaths[adcPort] = (char *)malloc(1024);
+				strcpy(strBuf, "portPath");
+				char strPort = ('0' + adcPort);
+				strcat(strBuf, &strPort);
+				if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "ADC_CONTROL", strBuf, adcDevPaths[adcPort])))
+				{
+					debug_printf("[CONFIG][ADC] Added %s to path list\n", adcDevPaths[adcPort]);
+				}
+			}
+			// Initialize ADC
+			HalADCInit(adcDevPaths, numOfAdcPorts);
+			// Now deallocate memory
+			for (adcPort = 0; adcPort < numOfAdcPorts; adcPort++)
+			{
+				debug_printf("[CONFIG][ADC] Freeing %p\n", adcDevPaths[adcPort]);
+				free(adcDevPaths[adcPort]);
+			}
+			debug_printf("[CONFIG][ADC] Freeing %p\n", adcDevPaths);
+			free(adcDevPaths);
+		}
+	}
+//#endif //(defined NPI_ADC_CONTROL) && (NPI_ADC_CONTROL == TRUE)
 
 	uint8 gpioStart = 0, gpioEnd = 0;
 	if (debugSupported)
@@ -1398,6 +1445,8 @@ int main(int argc, char ** argv)
 	freeaddrinfo(servinfo); // free the linked-list
 #endif //NPI_UNIX
 	(NPI_CloseDeviceFnArr[devIdx])();
+	// Close ADC
+	HalADCClose();
 
 	// Free all remaining memory
 	NPI_LNX_IPC_Exit(NPI_LNX_SUCCESS + 1, TRUE);
@@ -2813,6 +2862,24 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 			pNpi_ipc_buf->pData[0] = ret;
 		}
 		break;
+//#if (defined NPI_ADC_CONTROL) && (NPI_ADC_CONTROL == TRUE)
+		case NPI_LNX_CMD_ID_ADC_CONTROL:
+		{
+			if (adcControlSupported)
+			{
+				NPI_ADC_SynchRequest(pNpi_ipc_buf);
+			}
+			else
+			{
+				pNpi_ipc_buf->len = 1;
+				// Command ID is always the same for the response, regardless of result
+				pNpi_ipc_buf->pData[NPI_LNX_ADC_CONTROL_CMD_ID_IDX] = NPI_LNX_ADC_CONTROL_CMD_ID_ADC_CONTROL_NOT_SUPPORTED;
+			}
+			// Do not consider errors in ADC module errors in NPI Server. Simply report error to caller
+			ret = NPI_LNX_SUCCESS;
+		}
+		break;
+//#endif
 		default:
 		{
 			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INVALID_SREQ;

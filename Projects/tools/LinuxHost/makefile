@@ -32,7 +32,7 @@ CC_x86 = gcc
 #predefine
 #DEFINES = -DRNP_HOST -D__BIG_DEBUG__
 #DEFINES = -DRNP_HOST -DSRDY_INTERRUPT -DNPI_UNIX
-DEFINES = -DMRDY_EARLY_FIX -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=TRUE -DNPI_UART_USB=TRUE -D__DEBUG_TIME__ -D__DEBUG_TIME__I2C -DSRDY_INTERRUPT
+DEFINES = -DMRDY_EARLY_FIX -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=TRUE -DNPI_UART_USB=TRUE -D__DEBUG_TIME__ -D__DEBUG_TIME__I2C -DSRDY_INTERRUPT -DNPI_ADC_CONTROL=TRUE
 # -D__DEBUG_TIME__HID -D__DEBUG_MUTEX__ -DNPI_HID=TRUE 
 
 #compilation Option
@@ -49,7 +49,8 @@ SERVER_OBJS= \
 	$(OBJS)/hal_gpio.o \
 	$(OBJS)/hal_i2c.o \
 	$(OBJS)/hal_spi.o \
-	$(OBJS)/hal_dbg_ifc.o
+	$(OBJS)/hal_dbg_ifc.o \
+	$(OBJS)/hal_adc.o
 
 
 #by default, do not use the library.
@@ -158,6 +159,10 @@ $(OBJS)/hal_i2c.o: ipclib/server/hal_i2c.c
 #	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
 $(OBJS)/hal_gpio.o: ipclib/server/hal_gpio.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+
+$(OBJS)/hal_adc.o: ipclib/server/hal_adc.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 

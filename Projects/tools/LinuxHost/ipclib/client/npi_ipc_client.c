@@ -1115,7 +1115,7 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 	// Conditional wait for the response handled in the receiving thread,
 	// wait maximum 4 seconds
 	gettimeofday(&curtime, NULL);
-	expirytime.tv_sec = curtime.tv_sec + 4;
+	expirytime.tv_sec = curtime.tv_sec + NPI_IPC_CLIENT_SYNCH_TIMEOUT;
 	expirytime.tv_nsec = curtime.tv_usec * 1000;
 	debug_verbose_printf("[CLIENT SEND SYNCH][MUTEX] Wait for SRSP Cond signal...\n");
 	result = pthread_cond_timedwait(&npiLnxClientSREQcond, &npiLnxClientSREQmutex, &expirytime);

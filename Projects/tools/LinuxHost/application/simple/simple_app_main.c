@@ -528,6 +528,7 @@ void DispMenuReady(void)
 	printf("0- Config \n");
 	printf("1- Pairing\n");
 	printf("2- Unpairing\n");
+	printf("5- Read Voltage\n");
 	printf("6- Physically Reset RNP (does not work for USB)\n");
 	printf("7- Send Data\n");
 	printf("8- Clear Pairing Table\n");
