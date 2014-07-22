@@ -102,7 +102,7 @@ static void appProcessEvents(uint32 events);
 uint8 SIMPLE_App_threadId;
 
 #define NAME_ELEMENT(element) [element] = #element
-static const char * const profile_list[RTI_PROFILE_ID_END + 1] =
+static const char * const profile_list[RTI_PROFILE_ID_STD_END + 1] =
 		{ [0 ... 2] = NULL, NAME_ELEMENT(RTI_PROFILE_ZRC),
 				NAME_ELEMENT(RTI_PROFILE_ZID), };
 
@@ -1141,7 +1141,7 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 	if ( appState != AP_STATE_SIMPLE_TEST_MODE)
 	{
 		//check Basic Range to avoid Seg Fault
-		if ((profileId < 0) || (profileId > RTI_PROFILE_ID_END))
+		if ((profileId < 0) || (profileId > RTI_PROFILE_ID_STD_END))
 			error = TRUE;
 
 		//Vendor Id Meaningful only if Vendor Specific Data
