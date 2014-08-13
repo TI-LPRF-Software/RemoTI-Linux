@@ -1061,21 +1061,24 @@ int main(int argc, char ** argv)
 
 		for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next)
 		{
-			if (ifa ->ifa_addr->sa_family==AF_INET)
-			{ // check it is IP4
-				// is a valid IP4 Address
-				tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
-				char addressBuffer[INET_ADDRSTRLEN];
-				inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
-				printf(" IPv4: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
-			}
-			else if (ifa->ifa_addr->sa_family==AF_INET6)
-			{ // check it is IP6
-				// is a valid IP6 Address
-				tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
-				char addressBuffer[INET6_ADDRSTRLEN];
-				inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
-				printf(" IPv6: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
+			if (ifa ->ifa_addr != NULL)
+			{
+				if (ifa ->ifa_addr->sa_family==AF_INET)
+				{ // check it is IP4
+					// is a valid IP4 Address
+					tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+					char addressBuffer[INET_ADDRSTRLEN];
+					inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+					printf(" IPv4: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
+				}
+				else if (ifa->ifa_addr->sa_family==AF_INET6)
+				{ // check it is IP6
+					// is a valid IP6 Address
+					tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+					char addressBuffer[INET6_ADDRSTRLEN];
+					inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
+					printf(" IPv6: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
+				}
 			}
 		}
 		if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
