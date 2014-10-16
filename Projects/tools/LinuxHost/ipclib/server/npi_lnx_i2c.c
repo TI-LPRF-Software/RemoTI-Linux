@@ -574,8 +574,6 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 	}
 
 	//Release the polling lock
-	//This is the SRSP, clear out the PC type in header
-	((uint8 *)pMsg)[RPC_POS_CMD0] &=  RPC_SUBSYSTEM_MASK;
 
 	if (ret == NPI_LNX_SUCCESS)
 		ret = HAL_RNP_MRDY_SET();
@@ -852,7 +850,6 @@ static void *npi_poll_entry(void *ptr)
 				//Check if polling was successful, if so send message to host.
 				if((readbuf[RPC_POS_CMD0] & RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ)
 				{
-					((uint8 *)readbuf)[RPC_POS_CMD0] &=  RPC_SUBSYSTEM_MASK;
 					ret = NPI_AsynchMsgCback((npiMsgData_t *)(readbuf));
 					writeOnce = 0;
 					if ( ret != NPI_LNX_SUCCESS)
