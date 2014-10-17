@@ -37,6 +37,7 @@
 **************************************************************************************************/
 
 #include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
@@ -276,6 +277,7 @@ appSendData_t appSendData_s;
 uint8 appSendDataState;
 void appSendDataProcessKey (char* strIn);
 
+static void getAndPrintExtendedSoftwareVersion(uint8 timePrint);
 static void appSetCFGParamOnRNP(void);
 static void appGetCFGParamFromRNP(void);
 static void appInitConfigParam( char tgtSelection );
@@ -343,6 +345,11 @@ int SimpleAppInit(int mode, char threadId)
 	{
 		printf("- Software Version = 0x%x\n", value[0]);
 		printf("-------------------- END SOFTWARE VERSION READING-------------------\n");
+
+		if (value[0] >= 0x2D)
+		{
+			getAndPrintExtendedSoftwareVersion(FALSE);
+		}
 	}
 
 
@@ -506,6 +513,42 @@ static void *appThreadFunc(void *ptr)
 				{
 					// Simply remain in whatever state we're in
 					printf("Cannot call RTI_UnpairReq, because we're in state: 0x%.2X\n", appState);
+				}
+			}
+			else if ((ch == 'h') ||
+					(ch == 'j') ||
+					(ch == 'k') ||
+					(ch == 'l'))
+			{
+				// Set channel
+				uint8 channel, faEnable = FALSE, status = RTI_SUCCESS;
+				if (ch == 'l')
+				{
+					faEnable = TRUE;
+					status = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
+					printf("Frequency Agility re-enabled (%s)\n", rtiStatus_list[status]);
+				}
+				else
+				{
+					if (ch == 'h')
+					{
+						channel = 15;
+					}
+					else if (ch == 'j')
+					{
+						channel = 20;
+					}
+					else if (ch == 'k')
+					{
+						channel = 25;
+					}
+					status = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
+					printf("Frequency Agility disabled (%s)\n", rtiStatus_list[status]);
+					if (status == RTI_SUCCESS)
+					{
+						RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_CURRENT_CHANNEL, 1, (uint8 *)&channel);
+						printf("Channel set to %d\n", channel);
+					}
 				}
 			}
 			else if (ch == '6')
@@ -2360,4 +2403,75 @@ void appSendDataProcessKey (char* strIn)
 		// Return to Send Data Init state
 		appSendDataState = APP_SEND_DATA_STATE_INIT;
 	}
+}
+
+static void getAndPrintExtendedSoftwareVersion(uint8 timePrint)
+{
+	char tmpStrForTimePrint[1024];
+	swVerExtended_t swVerExtended = {0};
+	if (RTI_SUCCESS == RTI_ReadItem(RTI_CONST_ITEM_EXTENDED_SW_VERSION, 8, (uint8*)&swVerExtended))
+	{
+		sprintf(tmpStrForTimePrint, "[Initialization][INFO]- Extended Software Version:\n");
+		sprintf(tmpStrForTimePrint, "%s\tMajor:\t%d\n", tmpStrForTimePrint, swVerExtended.major);
+		sprintf(tmpStrForTimePrint, "%s\tMinor:\t%d\n", tmpStrForTimePrint, swVerExtended.minor);
+		sprintf(tmpStrForTimePrint, "%s\tPatch:\t%d\n", tmpStrForTimePrint, swVerExtended.patch);
+		sprintf(tmpStrForTimePrint, "%s\tOptional:\t%d\n", tmpStrForTimePrint, swVerExtended.svnRev);
+		if (swVerExtended.stack.applies)
+		{
+			sprintf(tmpStrForTimePrint, "%s\tStack:\n", tmpStrForTimePrint);
+			sprintf(tmpStrForTimePrint, "%s\t\tInterface:\t%d\n", tmpStrForTimePrint, swVerExtended.stack.interface);
+			sprintf(tmpStrForTimePrint, "%s\t\tNode:\t\t%d\n", tmpStrForTimePrint, swVerExtended.stack.node);
+		}
+		else
+		{
+			sprintf(tmpStrForTimePrint, "%s\tStack field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, stack)]);
+		}
+		if (swVerExtended.profiles.applies)
+		{
+			sprintf(tmpStrForTimePrint, "%s\tProfiles:\n", tmpStrForTimePrint);
+			if (swVerExtended.profiles.zrc11)
+			{
+				sprintf(tmpStrForTimePrint, "%s\t\t%s\n", tmpStrForTimePrint, "ZRC 1.1");
+			}
+			if (swVerExtended.profiles.mso)
+			{
+				sprintf(tmpStrForTimePrint, "%s\t\t%s\n", tmpStrForTimePrint, "MSO");
+			}
+			if (swVerExtended.profiles.zrc20)
+			{
+				sprintf(tmpStrForTimePrint, "%s\t\t%s\n", tmpStrForTimePrint, "ZRC 2.0");
+			}
+		}
+		else
+		{
+			sprintf(tmpStrForTimePrint, "%s\tProfiles field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, profiles)]);
+		}
+		if (swVerExtended.serial.applies)
+		{
+			sprintf(tmpStrForTimePrint, "%s\tSerial:\n", tmpStrForTimePrint);
+			sprintf(tmpStrForTimePrint, "%s\t\tInterface:\t%d\n", tmpStrForTimePrint, swVerExtended.serial.interface);
+			sprintf(tmpStrForTimePrint, "%s\t\tPort:\t\t%d\n", tmpStrForTimePrint, swVerExtended.serial.port);
+			sprintf(tmpStrForTimePrint, "%s\t\tAlternative:\t%d\n", tmpStrForTimePrint, swVerExtended.serial.alternative);
+		}
+		else
+		{
+			sprintf(tmpStrForTimePrint, "%s\tSerial Interface field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, serial)]);
+		}
+		if (timePrint)
+		{
+//			time_printf(tmpStrForTimePrint);
+			printf("%s", tmpStrForTimePrint);
+		}
+		else
+		{
+			printf("%s", tmpStrForTimePrint);
+		}
+	}
+
+	uint16 shortAddr = 0;
+	RTI_ReadItemEx (RTI_PROFILE_RTI, RTI_SA_ITEM_SHORT_ADDRESS, 2, (uint8*)&shortAddr);
+	printf("Short Address:\t 0x%4X\n", shortAddr);
+	uint16 panId = 0;
+	RTI_ReadItemEx (RTI_PROFILE_RTI, RTI_SA_ITEM_PAN_ID, 2, (uint8*)&panId);
+	printf("PAN ID:\t\t 0x%4X\n", panId);
 }

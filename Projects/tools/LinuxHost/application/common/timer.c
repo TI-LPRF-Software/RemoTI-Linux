@@ -49,8 +49,6 @@
 #include "timer.h"
 #include "hal_defs.h"
 
-//#define TIMER_DEBUG
-
 #ifdef __DEBUG_TIME__
 #include "time_printf.h"
 #endif //__DEBUG_TIME__
@@ -278,22 +276,20 @@ static void *timerThreadFunc(void *ptr)
 								j,
 								(int)timerThreadTbl[i].timeoutValue[j]);
 
-					// Decrement active timer
-					timerThreadTbl[i].timeoutValue[j] -= decrementValue;
+					if (timerThreadTbl[i].justKicked & BV(j))
+					{
+						timerThreadTbl[i].justKicked &= ~(BV(j));
+					}
+					else
+					{
+						// Decrement active timer
+						timerThreadTbl[i].timeoutValue[j] -= decrementValue;
+					}
 					// !!! Possible race condition !!!
 					if (timerThreadTbl[i].timeoutValue[j] <= 0)
 					{
-						if ( i == 1 )
-							// This only works if app happens to have thread ID 1
-						{
-							debug_printf("[TIMER] Timer Expired. \t Thread ID: %.2d \t Event Mask: [0x%.8X]\n",
-									i,  BV(j));
-						}
-						else
-						{
-							debug_printf("[TIMER] Timer Expired. \t Thread ID: %.2d \t Event Mask: 0x%.8X\n",
-									i, BV(j));
-						}
+						debug_printf("[TIMER] Timer Expired. \t Thread ID: %.2d \t Event Mask: 0x%.8X\n",
+								i, BV(j));
 						// timerEnabled can only be set to 0 here
 						timerThreadTbl[i].timerEnabled &= ~(BV(j));
 						timer_set_event(i, BV(j));
@@ -356,7 +352,8 @@ static void *timerThreadFunc(void *ptr)
 					{
 						debug_printf("[TIMER][MUTEX] Wait until %lds:%ldns\n",
 							waitToTime.tv_sec, waitToTime.tv_nsec);
-						exit(-1);
+						// Terminate thread
+						timerThreadTerminate = 1;
 					}
 				}
 			}
@@ -377,6 +374,29 @@ static void *timerThreadFunc(void *ptr)
 	pthread_mutex_unlock(&timerThreadMutex);
 
 	return 0;
+}
+
+/**************************************************************************************************
+ *
+ * @fn      timer_isActive
+ *
+ * @brief   Check to see if timer is running
+ *
+ * @param   threadId - Id of the thread to call at the event.
+ * @param	event - event bitmask
+ *
+ * @return  TRUE is timer is running
+ */
+uint8 timer_isActive(uint8 threadId, uint32 event)
+{
+	uint8 isActive = FALSE;
+
+	if (timerThreadTbl[threadId].timerEnabled & event)
+	{
+		isActive = TRUE;
+	}
+
+	return isActive;
 }
 
 /**************************************************************************************************
@@ -410,7 +430,16 @@ uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 	// Use a 0 value of timeout to disable timer
 	if (timeout)
 	{
-		timerThreadTbl[threadId].timerEnabled |= event;
+		// Check if timer is already enabled for this event
+		if (timerThreadTbl[threadId].timerEnabled & event)
+		{
+			// It is, so we need to make sure the timer update does not decrement now.
+			timerThreadTbl[threadId].justKicked |= event;
+		}
+		else
+		{
+			timerThreadTbl[threadId].timerEnabled |= event;
+		}
 	}
 	else
 	{
@@ -457,7 +486,7 @@ uint8 timer_set_event(uint8 threadId, uint32 event)
 	// Release resources waiting for this event
 	if (sem_post(&event_mutex) < 0)
 	{
-		perror("Failed to post event");
+//		perror("Failed to post event");
 	}
 
 	pthread_mutex_unlock(&timerEventMutex);

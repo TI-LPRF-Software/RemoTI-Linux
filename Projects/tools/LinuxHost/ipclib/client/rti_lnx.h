@@ -75,6 +75,8 @@ extern "C"
 #endif
 
 // Network layer implicit constants as in standard used by attribute structure
+#define RCN_CAP_PAIR_TABLE_SIZE					  10
+
 #define RCN_MAX_NUM_DEV_TYPES                     3 // number of device types supported per device
 #define RCN_SEC_KEY_LENGTH                        16 // length in bytes of network layer security key
 
@@ -388,7 +390,8 @@ extern "C"
 #define RTI_CONST_ITEM_MAX_PAIRING_TABLE_ENTRIES         0xC1
 #define RTI_CONST_ITEM_NWK_PROTOCOL_IDENTIFIER           0xC2
 #define RTI_CONST_ITEM_NWK_PROTOCOL_VERSION              0xC3
-#define RTI_CONST_ITEM_END                               0xC4
+#define RTI_CONST_ITEM_EXTENDED_SW_VERSION				 0xC4
+#define RTI_CONST_ITEM_END                               0xC5
 
 #if defined FEATURE_OAD
 #define RTI_CONST_ITEM_OAD_IMAGE_ID                      0xD0
@@ -439,6 +442,35 @@ extern "C"
 
 typedef uint8 rStatus_t;
 
+typedef struct
+{
+	uint8 major;
+	uint8 minor;
+	uint8 patch;
+	uint16 svnRev;
+	struct
+	{
+		uint8 node:3;
+		uint8 interface:4;
+		uint8 applies:1;
+	} stack;
+	struct
+	{
+		uint8 zrc11:1;
+		uint8 mso:1;
+		uint8 zrc20:1;
+		uint8 reserved:4;
+		uint8 applies:1;
+	} profiles;
+	struct
+	{
+		uint8 alternative:2;
+		uint8 port:2;
+		uint8 interface:3;
+		uint8 applies:1;
+	} serial;
+} swVerExtended_t;
+
 // Configuration Parameters Table types
 
 // Startup Control
@@ -449,11 +481,11 @@ enum
   CLEAR_CONFIG_CLEAR_STATE
 };
 
-// Pairing type
+// Binding type
 enum
 {
-  PAIR_TYPE_ZRC,
-  PAIR_TYPE_MSO
+  BINDING_TYPE_NORMAL,
+  BINDING_TYPE_PROXY
 };
 
 // Pairing table entry
@@ -549,7 +581,7 @@ PACK_1 typedef struct ATTR_PACKED
 } stateAttribs_s;
 
 // End the packing rule
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || defined(unix) || (defined(__ICC430__) && (__ICC430__==1))
 #pragma pack()
 #endif
 

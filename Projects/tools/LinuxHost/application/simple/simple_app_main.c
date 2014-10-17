@@ -532,6 +532,7 @@ void DispMenuReady(void)
 	printf("7- Send Data\n");
 	printf("8- Clear Pairing Table\n");
 	printf("9- Display Pairing Table\n");
+	printf("Set Channel 15 ('h'), 20 ('j') or 25 '(k'). To re-enable FA ('l')\n");
 	printf("t- Toggle __DEBUG_TIME_ACTIVE on Server\n");
 	printf("y- Toggle __BIG_DEBUG on Server\n");
 	printf("c- Toggle simple data display\n");

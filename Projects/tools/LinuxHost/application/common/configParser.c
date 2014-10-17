@@ -257,6 +257,8 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 		ret = -1;
 	}
 
+	debug_printf("[CFG_PRS] baseSettings completed\n");
+
 	free(strBuf);
 
 	return ret;

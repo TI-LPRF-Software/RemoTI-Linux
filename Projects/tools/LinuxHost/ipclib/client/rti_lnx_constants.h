@@ -89,7 +89,7 @@ extern "C"
 #define RTI_PROFILE_GDP                               0x00
 #define RTI_PROFILE_ZRC                               0x01
 #define RTI_PROFILE_ZID                               0x02
-#define RTI_PROFILE_Z3S                               0x03
+#define RTI_PROFILE_ZRC20                             0x03
 #define RTI_PROFILE_ID_STD_END                        0x04
 #define RTI_PROFILE_MSO                               0xC0
 #define RTI_PROFILE_MSO_VOICE_PROFILE                 0xC1
@@ -239,6 +239,24 @@ extern "C"
 #define RTI_CMD_TEST_DATA                             0x01
 #define RTI_CMD_TEST_REPORT                           0x02
 #define RTI_CMD_TEST_DATA_SEQUENCED                   0x03
+#define RTI_CMD_TEST_PRODUCTION             		  0x04
+#define RTI_CMD_TEST_PRODUCTION_REQUEST				  0x05
+#define RTI_CMD_TEST_PRODUCTION_RESPONSE			  0x06
+#define RTI_CMD_TEST_PRODUCTION_REPORT_REQ		  	  0x07
+#define RTI_CMD_TEST_PRODUCTION_REPORT_RSP		  	  0x08
+
+// Both unidirectional test and bidirection (using _REQUEST) uses the same protocol format
+#define RTI_TEST_PDATA_IDX_PROTOCOL_ID					0
+#define RTI_TEST_PDATA_IDX_PROTOCOL_CMD					1
+#define RTI_TEST_PDATA_IDX_SEQNUM						2
+#define RTI_TEST_PDATA_IDX_FREQEST						3
+#define RTI_TEST_PDATA_IDX_SW_VER_MAJOR					4
+#define RTI_TEST_PDATA_IDX_SW_VER_MINOR					5
+#define RTI_TEST_PDATA_IDX_SW_VER_REVISION				6
+#define RTI_TEST_PDATA_IDX_SW_VER_PATCH					7
+#define RTI_TEST_PDATA_IDX_IEEE							8
+// Bidirectional response differs in fifth byte
+#define RTI_TEST_PDATA_IDX_LQI							4
 
   // TI extended TV remote control command identifiers (use with RTI_PROTOCOL_EXT_TV_RC)
 #define RTI_CMD_EXT_TV_ZOOM_IN                        0x00
@@ -256,6 +274,7 @@ extern "C"
   // TI vendor specific commands will hence be profile neutral.
 #define RTI_PROFILE_TI                                0xC0
 #define RTI_PROFILE_TOAD                              0xD1
+#define RTI_PROFILE_TI_NON_MSO_BACKUP				  0xD2
 
 #ifdef __cplusplus
 }
