@@ -48,6 +48,7 @@
 
 #include "timer.h"
 #include "hal_defs.h"
+#include "npi_lnx_error.h"
 
 #ifdef __DEBUG_TIME__
 #include "time_printf.h"
@@ -58,7 +59,8 @@
 #define TIMER_TICKS				100
 #define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #else
-#define debug_printf(fmt, ...)
+extern int __DEBUG_APP_ACTIVE;
+#define debug_printf(fmt, ...) st(if (__DEBUG_APP_ACTIVE > 0) printf(fmt, ##__VA_ARGS__);)
 #endif
 
 #define TIMER_MAX			(0xFFFF * 1000 + 1)
@@ -416,14 +418,22 @@ uint8 timer_isActive(uint8 threadId, uint32 event)
 uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 {
 	uint8 i;
+	if (event == 0)
+	{
+		// No event requested, just return
+		return -1;
+	}
 	for (i = 0; i < 32; i++)
 	{
 		if (event & BV(i))
 			break;
 	}
 
+	debug_printf("[TIMER] timer_start_timerEx(%d, 0x%.8X, %d)... ", threadId, event, timeout);
+	fflush(stdout);
 	// To avoid race conditions we cannot update timerThreadTbl without mutex lock
 	pthread_mutex_lock(&timerMutex);
+	debug_printf("lock\n");
 
 	// Value is stored in us for better precision
 	timerThreadTbl[threadId].timeoutValue[i] = timeout * 1000;

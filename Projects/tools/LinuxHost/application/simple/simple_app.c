@@ -64,11 +64,14 @@
 // macros
 #define PAUSE() { fflush(stdout); while (getchar()!='\n'); }
 
+int __DEBUG_APP_ACTIVE = 0;
+
 #ifdef __BIG_DEBUG__
 #define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #else
 #define debug_printf(fmt, ...)
 #endif
+
 
 // Application state variable
 uint8 appState;

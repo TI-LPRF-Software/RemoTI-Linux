@@ -160,6 +160,18 @@ extern "C"
 # endif
 #endif
 
+
+/**************************************************************************************************
+ * INCLUDES
+ **************************************************************************************************/
+
+// GDP API
+#include "gdp_api.h"
+
+#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
+#include "zrc.h"
+#endif
+
 /**************************************************************************************************
  * CONSTANTS
  **************************************************************************************************/
@@ -358,6 +370,7 @@ extern "C"
 #define RTI_SA_ITEM_SHORT_ADDRESS                        0x86	// RCN_NIB_SHORT_ADDRESS
 #define RTI_SA_ITEM_AGILITY_ENABLE                       0x87	// RCN_NIB_AGILITY_ENABLE
 #define RTI_SA_ITEM_TRANSMIT_POWER                       0x88	// RCN_NIB_TRANSMIT_POWER
+#define RTI_SA_ITEM_MAX_DUTY_CYCLE						 0x89	// RCN_NIB_NWK_MAX_DUTY_CYCLE
 
 // Configuration Parameters (CP) Table Item Identifiers
 #define RTI_CP_ITEM_START                                0xA0
@@ -629,8 +642,37 @@ extern RTILIB_API void RTI_RxEnableReq( uint16 duration );
 extern RTILIB_API void RTI_EnableSleepReq( void );
 extern RTILIB_API void RTI_DisableSleepReq( void );
 extern RTILIB_API void RTI_EnterBootModeReq( void );
+#ifdef MSO_PROFILE
 extern RTILIB_API void RTI_GetValidationStatusRsp( uint8 dstIndex, uint8 status );
 extern RTILIB_API void RTI_SetBindingParamsReq(uint32 bindingParams);
+#endif //MSO_PROFILE
+
+#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
+// ZRC20 APIs
+/*0x30 */ extern RTILIB_API void RTI_BindReq( uint8 bindingType );
+/*0x31 */ extern RTILIB_API void RTI_AllowBindReq( void );
+/*0x32 */ extern RTILIB_API void RTI_GetValidationStatusRsp( uint8 status );
+/*0x33 */ extern RTILIB_API void RTI_PollConfigReq( uint8 dstIndex, uint8 len, uint8 *pPollConstraints );
+/*0x34 */ extern RTILIB_API void RTI_IdentificationConfigReq( uint8 dstIndex );
+/*0x35 */ extern RTILIB_API void RTI_PollReq( uint8 dstIndex, uint8 trigger, uint8 timeout );
+/*0x36 */ extern RTILIB_API void RTI_KeyExchangeReq( uint8 dstIndex, uint16 keyExchangeFlags );
+/*0x37 */ extern RTILIB_API void RTI_GetAttributeCnf( rStatus_t status,
+                                            uint8 len,
+                                            uint8 *pData );
+/*0x38 */ extern RTILIB_API void RTI_SetAttributeCnf( rStatus_t status );
+/*0x39 */ extern RTILIB_API void RTI_SendIrdbVendorSupportReq( uint8 dstIndex, uint8 len, uint8 *pIrdbVendorSupport );
+/*0x3A */ extern RTILIB_API void RTI_SendMappableActionsReq( uint8 dstIndex,
+                                                   uint8 numMappableActions,
+                                                   uint8 *pMappableActionsIndices,
+                                                   zrcActionMap_t *pMappableActions );
+/*0x3B */ extern RTILIB_API void RTI_GetActionMappingsReq( uint8 dstIndex, uint8 actionMappingIndex );
+/*0x3C */ extern RTILIB_API void RTI_HaSupportedAnnounceReq( uint8 dstIndex, uint8 numInstances );
+/*0x3D */ extern RTILIB_API void RTI_PullHaAttributesReq( uint8 dstIndex, uint8 haInstanceId, uint8 len, uint8 *pDirtyFlags );
+/*0x3E */ extern RTILIB_API void RTI_PollRsp( uint8 profileId, uint8 len, uint8 *pMsg );
+/*0x3F */ extern RTILIB_API void RTI_UnbindReq( uint8 dstIndex );
+/*0x40 */ extern RTILIB_API void RTI_BindAbortReq( void );
+/*0x41 */ extern RTILIB_API void RTI_AllowBindAbortReq( void );
+#endif //FEATURE_ZRC20
 
 // RTI Callbacks
 extern void RTI_InitCnf( rStatus_t status );
@@ -647,6 +689,32 @@ extern void RTI_EnableSleepCnf( rStatus_t status );
 extern void RTI_DisableSleepCnf( rStatus_t status );
 extern void RTI_ResetInd( void );
 extern void RTI_IrInd( uint8 irData );
+
+#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
+// ZRC Callbacks
+/*0x30 */ extern void RTI_BindCnf( rStatus_t status, uint8 dstIndex );
+/*0x31 */ extern void RTI_SendProfileCommandCnf( rStatus_t status );
+/*0x32 */ extern void RTI_BindInd( rStatus_t status, uint8 dstIndex );
+/*0x33 */ extern void RTI_StartValidationInd( uint8 srcIndex );
+/*0x34 */ extern void RTI_GetValidationStatusInd( void );
+/*0x35 */ extern void RTI_PollConfigCnf( rStatus_t status, uint8 *pPollConfig );
+/*0x36 */ extern void RTI_IdentificationConfigCnf( rStatus_t status );
+/*0x37 */ extern void RTI_PollCnf( rStatus_t status );
+/*0x38 */ extern void RTI_KeyExchangeCnf( rStatus_t status );
+/*0x39 */ extern void RTI_GetAttributeReq( uint8 pairIndex, uint8 attrId, uint16 entryId );
+/*0x3A */ extern void RTI_SetAttributeReq( uint8 pairIndex, gdpAttrHeader_t *pAttrHdr, uint8 *pAttrData );
+/*0x3B */ extern void RTI_SendIrdbVendorSupportCnf( rStatus_t status );
+/*0x3C */ extern void RTI_SendMappableActionsCnf( rStatus_t status );
+/*0x3D */ extern void RTI_GetActionMappingsCnf( rStatus_t status, uint8 len, uint8 *pAttrData );
+/*0x3E */ extern void RTI_HaSupportedAnnounceCnf( rStatus_t status );
+/*0x3F */ extern void RTI_PullHaAttributesCnf( rStatus_t status );
+/*0x40 */ extern void RTI_PollInd( uint8 pairIndex, uint8 trigger );
+/*0x41 */ extern void RTI_UnbindCnf( rStatus_t status, uint8 dstIndex );
+/*0x42 */ extern void RTI_UnbindInd( uint8 dstIndex );
+/*0x43 */ extern void RTI_BindAbortCnf( rStatus_t status );
+#endif //FEATURE_ZRC20
+
+#ifdef MSO_PROFILE
 extern void RTI_PairInd( rStatus_t status, uint8 dstIndex, uint8 devType );
 extern void RTI_StartValidationInd( uint8 srcIndex );
 extern void RTI_GetValidationStatusInd( uint8 srcIndex, uint8 control );
@@ -657,6 +725,7 @@ extern bool RTI_CancelPairInd( void );
 extern void RTI_SetupDiscoveryParams( void );
 extern void RTI_BindingParamsInd( uint8 *ieeeAddr, uint8* msoUserString );
 extern void RTI_UpdateBackupPairingEntry(void);
+#endif //MSO_PROFILE
 
 // The following function is used by a module within radio processor.
 // The functionsi not intended for use by application in host processor.

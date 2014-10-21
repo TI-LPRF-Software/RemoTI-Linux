@@ -50,6 +50,7 @@
 #include <unistd.h>
 
 #include "npi_ipc_client.h"
+#include "hal_defs.h"
 #include "rti_lnx.h"
 
 #ifdef MSO_PROFILE
@@ -128,7 +129,6 @@ static void rtiAttribEConv( uint8 attrib, uint8 len, uint8 *pValue );
  */
 int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 {
-
 	if (pMsg->subSys == RPC_SYS_RCAF)
 	{
 		switch( pMsg->cmdId )
@@ -233,6 +233,69 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 			RTI_UpdateBackupPairingEntry();
 			break;
 #endif //MSO_PROFILE
+
+#ifdef ZRC20_PROFILE
+		case RTIS_CMD_ID_RTI_BIND_CNF://                     0x30
+			RTI_BindCnf( pMsg->pData[0], pMsg->pData[1] ); //
+			break;
+		case RTIS_CMD_ID_RTI_SEND_PROFILE_CMD_CNF://         0x31
+			RTI_SendProfileCommandCnf( pMsg->pData[0] ); //
+			break;
+		case RTIS_CMD_ID_RTI_BIND_IND://                     0x32
+			RTI_BindInd( pMsg->pData[0], pMsg->pData[1] ); //
+			break;
+		case RTIS_CMD_ID_RTI_START_VALIDATION_IND://         0x33
+			RTI_StartValidationInd( pMsg->pData[0] ); //
+			break;
+		case RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_IND://    0x34
+			RTI_GetValidationStatusInd( ); //
+			break;
+		case RTIS_CMD_ID_RTI_POLL_CONFIG_CNF://              0x35
+			RTI_PollConfigCnf( pMsg->pData[0], &pMsg->pData[1] ); //
+			break;
+		case RTIS_CMD_ID_RTI_IDENTIFICATION_CONFIG_CNF://    0x36
+			RTI_IdentificationConfigCnf( pMsg->pData[0] ); //
+			break;
+		case RTIS_CMD_ID_RTI_POLL_CNF://                     0x37
+			RTI_PollCnf( pMsg->pData[0] ); //
+			break;
+		case RTIS_CMD_ID_RTI_KEY_EXCHANGE_CNF://             0x38
+			RTI_KeyExchangeCnf( pMsg->pData[0] ); //
+			break;
+		case RTIS_CMD_ID_RTI_GET_ATTRIBUTE_REQ://            0x39
+			RTI_GetAttributeReq( pMsg->pData[0], pMsg->pData[1], BUILD_UINT16(pMsg->pData[2], pMsg->pData[3]) ); //
+			break;
+		case RTIS_CMD_ID_RTI_SET_ATTRIBUTE_REQ://            0x3a
+			RTI_SetAttributeReq( pMsg->pData[0], (gdpAttrHeader_t *)&pMsg->pData[1], &pMsg->pData[1 + sizeof( gdpAttrHeader_t )] ); //
+			break;
+		case RTIS_CMD_ID_RTI_SEND_IRDB_VENDOR_SUPPORT_CNF:// 0x3b
+			RTI_SendIrdbVendorSupportCnf( pMsg->pData[0] ); //
+			break;
+		case RTIS_CMD_ID_RTI_SEND_MAPPABLE_ACTIONS_CNF://    0x3c
+			RTI_SendMappableActionsCnf( pMsg->pData[0] ); //
+			break;
+		case RTIS_CMD_ID_RTI_GET_ACTION_MAPPINGS_CNF://      0x3d
+			RTI_GetActionMappingsCnf( pMsg->pData[0], pMsg->pData[1], &pMsg->pData[2] ); //
+			break;
+		case RTIS_CMD_ID_RTI_HA_SUPPORTED_ANNOUNCE_CNF://    0x3e
+			RTI_HaSupportedAnnounceCnf( pMsg->pData[0] ); //
+			break;
+		case RTIS_CMD_ID_RTI_PULL_HA_ATTRIBUTES_CNF://       0x3f
+			RTI_PullHaAttributesCnf( pMsg->pData[0] ); //
+			break;
+		case RTIS_CMD_ID_RTI_POLL_IND://                     0x40
+			RTI_PollInd( pMsg->pData[0], pMsg->pData[1] ); //
+			break;
+		case RTIS_CMD_ID_RTI_UNBIND_CNF://                   0x41
+			RTI_UnbindCnf( pMsg->pData[0], pMsg->pData[1] ); //
+			break;
+		case RTIS_CMD_ID_RTI_UNBIND_IND://                   0x42
+			RTI_UnbindInd( pMsg->pData[0] ); //
+			break;
+		case RTIS_CMD_ID_RTI_BIND_ABORT_CNF://               0x43
+			RTI_BindAbortCnf( pMsg->pData[0] ); //
+			break;
+#endif //ZRC20_PROFILE
 		default:
 			// nothing can be done here!
 			break;
@@ -856,8 +919,8 @@ RTILIB_API void RTI_RxEnableReq( uint16 duration )
   // prep Rx Enable request
   pMsg.subSys = RPC_SYS_RCAF;
   pMsg.cmdId  = RTIS_CMD_ID_RTI_RX_ENABLE_REQ;
-  pMsg.len    = 4;
-  RTI_SET_ITEM_WORD( &pMsg.pData[0], (duration & 0x00FFFFFF) ); // max duration is 0x00FF_FFFF
+  pMsg.len    = 2;
+  RTI_SET_ITEM_HALFWORD( &pMsg.pData[0], duration);
 
   // send Rx Enable request to NP RTIS asynchronously as a confirm is due back
   NPI_SendAsynchData( &pMsg );
@@ -1035,6 +1098,593 @@ RTILIB_API uint16 RTI_TestRxCounterGetReq(uint8 resetFlag)
   return (pMsg.pData[0] + ((uint16)pMsg.pData[1] << 8));
 }
 
+#ifdef ZRC20_PROFILE
+/**************************************************************************************************
+ *
+ * @fn          RTI_PairReq
+ *
+ * @brief       This API is used to initiate a pairing process. Note that this
+ *              call actually consists of a discovery followed by pairing. That
+ *              is a NLME-DISCOVERY.request followed by NLME-PAIR.request.
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_BindReq( uint8 bindingType )
+{
+  npiMsgData_t pMsg;
+
+  // prep Pair request
+  pMsg.subSys = RPC_SYS_RCAF;
+  pMsg.cmdId  = RTIS_CMD_ID_RTI_BIND_REQ;
+  pMsg.len    = 1;
+
+  pMsg.pData[0] = bindingType;
+
+  // send Pair request to NP RTIS asynchronously as a confirm is due back
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_AllowBindReq
+ *
+ * @brief       This function is used by the Target application to ready the
+ *              node for a pairing request, and thereby allow this node to
+ *              respond.
+ *
+ *              The client's confirm callback will provide a status, which can
+ *              be one of the following:
+ *
+ *              RTI_SUCCESS
+ *              RTI_ERROR_OSAL_NO_TIMER_AVAIL
+ *              RTI_ERROR_ALLOW_PAIRING_TIMEOUT
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_AllowBindReq( void )
+{
+  npiMsgData_t pMsg;
+
+  // prep Pair request
+  pMsg.subSys = RPC_SYS_RCAF;
+  pMsg.cmdId  = RTIS_CMD_ID_RTI_ALLOW_BIND_REQ;
+  pMsg.len    = 0;
+
+  // send Pair request to NP RTIS asynchronously as a confirm is due back
+  NPI_SendAsynchData( &pMsg );
+}
+/**************************************************************************************************
+ *
+ * @fn          RTI_GetValidationStatusRsp
+ *
+ * @brief       This function is used to provide the result of a validation request.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device that requested validation
+ * @param       status   - result of validation
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_GetValidationStatusRsp( uint8 status )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_RSP;
+  pMsg.len      = 1;
+  pMsg.pData[0] = status;
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_PollConfigReq
+ *
+ * @brief       This function is used to initiate the poll negotiation procedure.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device to configure polling with
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_PollConfigReq( uint8 dstIndex, uint8 len, uint8 *pPollConstraints )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_POLL_CONFIG_REQ;
+  pMsg.len      = 2 + len;
+  pMsg.pData[0] = dstIndex;
+  pMsg.pData[1] = len;
+  msg_memcpy( &pMsg.pData[2], pPollConstraints, len );
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_IdentificationConfigReq
+ *
+ * @brief       This function is used to initiate the identification capabilities announcement procedure.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device to configure
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_IdentificationConfigReq( uint8 dstIndex )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_IDENTIFICATION_CONFIG_REQ;
+  pMsg.len      = 1;
+  pMsg.pData[0] = dstIndex;
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_PollReq
+ *
+ * @brief       This function is used to initiate the poll procedure.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device to poll
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_PollReq( uint8 dstIndex, uint8 trigger, uint8 timeout )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_POLL_REQ;
+  pMsg.len      = 3;
+  pMsg.pData[0] = dstIndex;
+  pMsg.pData[1] = trigger;
+  pMsg.pData[2] = timeout;
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_PollRsp
+ *
+ * @brief       This function is used to answer a poll indication.
+ *
+ * input parameters
+ *
+ * @param       len - length of message to transmit
+ * @param       pBuf - pointer to message to transmit
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_PollRsp( uint8 profileId, uint8 len, uint8 *pBuf )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_POLL_RSP;
+  pMsg.len      = 2 + len;
+  pMsg.pData[0] = profileId;
+  pMsg.pData[1] = len;
+
+  // copy the client's data to be sent
+  if (len > 0)
+  {
+    msg_memcpy( &pMsg.pData[2], pBuf, len );
+  }
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_KeyExchangeReq
+ *
+ * @brief       This function is used to initiate the poll procedure.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device to poll
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_KeyExchangeReq( uint8 dstIndex, uint16 keyExchangeFlags )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_KEY_EXCHANGE_REQ;
+  pMsg.len      = 3;
+  pMsg.pData[0] = dstIndex;
+  pMsg.pData[1] = LO_UINT16( keyExchangeFlags );
+  pMsg.pData[2] = HI_UINT16( keyExchangeFlags );
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_GetAttributeCnf
+ *
+ * @brief       This function is used to provide the result of a validation request.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device that requested validation
+ * @param       status   - result of validation
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_GetAttributeCnf( rStatus_t status, uint8 len, uint8 *pData )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_GET_ATTRIBUTE_CNF;
+  pMsg.len      = 2 + len;
+  pMsg.pData[0] = status;
+  pMsg.pData[1] = len;
+
+  // copy the client's data to be sent
+  msg_memcpy( &pMsg.pData[2], pData, len );
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_SetAttributeCnf
+ *
+ * @brief       This function is used to provide the result of a validation request.
+ *
+ * input parameters
+ *
+ * @param       status   - result of validation
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_SetAttributeCnf( rStatus_t status )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_SET_ATTRIBUTE_CNF;
+  pMsg.len      = 1;
+  pMsg.pData[0] = status;
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_SendIrdbVendorSupportReq
+ *
+ * @brief       This function is used to initiate the IRDB Vendor Support Announcement procedure.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device to send IRDB Vendor Support attribute to
+ * @param       len - length of attribute
+ * @param       pIrdbVendorSupport - pointer to buffer containing attribute
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_SendIrdbVendorSupportReq( uint8 dstIndex, uint8 len, uint8 *pIrdbVendorSupport )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_SEND_IRDB_VENDOR_SUPPORT_REQ;
+  pMsg.len      = 2 + len;
+  pMsg.pData[0] = dstIndex;
+  pMsg.pData[1] = len;
+
+  // copy the client's data to be sent
+  msg_memcpy( &pMsg.pData[2], pIrdbVendorSupport, len );
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_SendMappableActionsReq
+ *
+ * @brief       This function is used to initiate the poll procedure.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device to poll
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_SendMappableActionsReq( uint8 dstIndex,
+	                                        uint8 numMappableActions,
+											uint8 *pMappableActionsIndices,
+											zrcActionMap_t *pMappableActions )
+{
+  npiMsgData_t pMsg;
+  uint8 mappableActionsLen = numMappableActions * sizeof( zrcActionMap_t );
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_SEND_MAPPABLE_ACTIONS_REQ;
+  pMsg.len      = 2 + numMappableActions + mappableActionsLen;
+  pMsg.pData[0] = dstIndex;
+  pMsg.pData[1] = numMappableActions;
+
+  // copy the client's data to be sent
+  msg_memcpy( &pMsg.pData[2], pMappableActionsIndices, numMappableActions );
+  msg_memcpy( &pMsg.pData[2 + numMappableActions], pMappableActions, mappableActionsLen );
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_GetActionMappingsReq
+ *
+ * @brief       This function is used to initiate the poll procedure.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device to poll
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_GetActionMappingsReq( uint8 dstIndex, uint8 actionMappingIndex )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_GET_ACTION_MAPPINGS_REQ;
+  pMsg.len      = 2;
+  pMsg.pData[0] = dstIndex;
+  pMsg.pData[1] = actionMappingIndex;
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_HaSupportedAnnounceReq
+ *
+ * @brief       This function is used to initiate the poll procedure.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device to poll
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_HaSupportedAnnounceReq( uint8 dstIndex, uint8 numInstances )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_HA_SUPPORTED_ANNOUNCE_REQ;
+  pMsg.len      = 2;
+  pMsg.pData[0] = dstIndex;
+  pMsg.pData[1] = numInstances;
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_PullHaAttributesReq
+ *
+ * @brief       This function is used to initiate the poll negotiation procedure.
+ *
+ * input parameters
+ *
+ * @param       dstIndex - pairing index of device to configure polling with
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_PullHaAttributesReq( uint8 dstIndex, uint8 haInstanceId, uint8 len, uint8 *pDirtyFlags )
+{
+  npiMsgData_t pMsg;
+
+  // serialize the request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_PULL_HA_ATTRIBUTES_REQ;
+  pMsg.len      = 3 + len;
+  pMsg.pData[0] = dstIndex;
+  pMsg.pData[1] = haInstanceId;
+  pMsg.pData[2] = len;
+  msg_memcpy( &pMsg.pData[3], pDirtyFlags, len );
+
+  // send serialized request to NP RTIS synchronously
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_BindAbortReq
+ *
+ * @brief       This API is used to abort an on-going pairing process.
+ *
+ *              The client's confirm callback will provide a status, which can
+ *              be one of the following:
+ *
+ *              RTI_SUCCESS
+ *              RTI_ERROR_PAIR_COMPLETE
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_BindAbortReq( void )
+{
+  npiMsgData_t pMsg;
+
+  // prep Pair request
+  pMsg.subSys = RPC_SYS_RCAF;
+  pMsg.cmdId  = RTIS_CMD_ID_RTI_BIND_ABORT_REQ;
+  pMsg.len    = 0;
+
+  // send Pair request to NP RTIS asynchronously as a confirm is due back
+  NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_AllowBindAbortReq
+ *
+ * @brief       This API is used to attempt to abort an on-going allow-pairing process.
+ *
+ *              It is possible that allow pair is at a state of no return (no aborting).
+ *              There is no callback associated to this function call.
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+RTILIB_API void RTI_AllowBindAbortReq( void )
+{
+  npiMsgData_t pMsg;
+
+  // prep Pair request
+  pMsg.subSys = RPC_SYS_RCAF;
+  pMsg.cmdId  = RTIS_CMD_ID_RTI_ALLOW_BIND_ABORT_REQ;
+  pMsg.len    = 0;
+
+  // send Pair request to NP RTIS asynchronously as a confirm is due back
+  NPI_SendAsynchData( &pMsg );
+}
+#endif //ZRC20_PROFILE
+
+#ifdef MSO_PROFILE
 /**************************************************************************************************
  *
  * @fn          RTI_GetValidationStatusRsp
@@ -1101,6 +1751,7 @@ RTILIB_API void RTI_SetBindingParamsReq(uint32 bindingParams)
   // send serialized request to NP RTIS synchronously
   NPI_SendAsynchData( &pMsg );
 }
+#endif //MSO_PROFILE
 
 /**************************************************************************************************
  *
@@ -1125,9 +1776,7 @@ RTILIB_API void RTI_PingReq( void )
   // ping NP; request will be discarded
   pMsg.subSys   = RPC_SYS_RCAF;
   pMsg.cmdId    = RTIS_CMD_ID_TEST_PING_REQ; //RTIS_CMD_ID_TEST_PING_REQ;
-  pMsg.len      = 2;
-  pMsg.pData[0] = 0xAA;	// Generate pulse train
-  pMsg.pData[1] = 0xCC;	// Generate pulse train
+  pMsg.len      = 0;
 
   // send command to slave to wake it up
   NPI_SendAsynchData( &pMsg );

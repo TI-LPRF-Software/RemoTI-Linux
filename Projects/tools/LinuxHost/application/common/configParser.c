@@ -37,19 +37,34 @@
 **************************************************************************************************/
 
 #include "configParser.h"
+#include "pthread.h"
+
+#ifdef __DEBUG_TIME__
+#include "time_printf.h"
+#endif //__DEBUG_TIME__
 
 #ifdef __BIG_DEBUG__
 #define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #define debug_verbose_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #else
 extern int __DEBUG_APP_ACTIVE;
-#define debug_printf(fmt, ...) 			st(if ( (__DEBUG_APP_ACTIVE == 1) || (__DEBUG_APP_ACTIVE == 2) ) printf( fmt, ##__VA_ARGS__);)
-#define debug_verbose_printf(fmt, ...) 	st(if (__DEBUG_APP_ACTIVE == 2) printf( fmt, ##__VA_ARGS__);)
+#define debug_printf(fmt, ...) 			st(if ( (__DEBUG_APP_ACTIVE > 1) ) printf( fmt, ##__VA_ARGS__);)
+#define debug_verbose_printf(fmt, ...) 	st(if (__DEBUG_APP_ACTIVE >= 3) printf( fmt, ##__VA_ARGS__);)
 #endif
+
+#ifdef __DEBUG_TIME__
+#define debug_time_printf(str) 	st(if (__DEBUG_APP_ACTIVE > 1) time_printf(str);)
+#else
+#define time_printf(str) printf( "%s", str)
+#define debug_time_printf(str) debug_printf( "%s", str)
+#endif //__DEBUG_TIME__
 
 static FILE *configFileFd;
 static FILE *shadowFileFd;
 
+static char tmpStrForTimePrint[1024];
+
+static pthread_mutex_t cfgFileAccessMutex;
 
 /**************************************************************************************************
  *
@@ -79,13 +94,13 @@ int ConfigParserInit(const char *configFilePath, const char *shadowPath)
 	debug_verbose_printf("[CFG_PRS] Init\n");
 
 	configFileFd = fopen(configFilePath, "r");
-	if (shadowPath)
-	{
-		shadowFileFd = fopen(shadowPath, "w");
-	}
-
 	if (configFileFd)
 	{
+		if (shadowPath)
+		{
+			shadowFileFd = fopen(shadowPath, "w");
+		}
+
 		if ( (!shadowPath) || (shadowFileFd && shadowPath) )
 		{
 			return 0;
@@ -99,6 +114,13 @@ int ConfigParserInit(const char *configFilePath, const char *shadowPath)
 	else
 	{
 		perror("[CFG_PRS] Failed to open configuration file");
+		return -1;
+	}
+
+	if (pthread_mutex_init(&cfgFileAccessMutex, NULL))
+	{
+		sprintf(tmpStrForTimePrint, "[CFG_PRS][ERROR] Failed To Initialize Mutex cfgFileAccessMutex\n");
+		time_printf(tmpStrForTimePrint);
 		return -1;
 	}
 }
@@ -170,8 +192,8 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 			if (0 == ConfigParser("DEBUG_MODE", "APP", strBuf))
 			{
 				baseSettings->debug.app = strtol(strBuf, NULL, 10);
-				debug_printf("[CFG_PRS] baseSettings->debug.app = 0x%.2X\n", baseSettings->debug.app);
 				__DEBUG_APP_ACTIVE = baseSettings->debug.app;
+				debug_printf("[CFG_PRS] baseSettings->debug.app = 0x%.2X\n", baseSettings->debug.app);
 			}
 			else
 			{
@@ -256,8 +278,6 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 		// ConfigParser has not been initialized.
 		ret = -1;
 	}
-
-	debug_printf("[CFG_PRS] baseSettings completed\n");
 
 	free(strBuf);
 
@@ -455,6 +475,9 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 	char* psStr; // Processing string pointer
 	int res = -1;
 
+	// Get file access lock first
+	pthread_mutex_lock(&cfgFileAccessMutex);
+
 	resString = malloc (2048);
 	lineToShadow = malloc (2048);
 	lineToShadowCreated = malloc (1024);
@@ -473,6 +496,8 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 	// Do nothing if the file doesn't exist
 	if (cfgFd != NULL)
 	{
+		sprintf(tmpStrForTimePrint, "[CFG_PRS][INFO] Resetting files - \tSection \t%s:\t%s:\n", section, key);
+		debug_time_printf(tmpStrForTimePrint);
 		if (shadowFileFd != NULL)
 		{
 			// Make sure we restart the shadow file
@@ -480,6 +505,9 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 		}
 		// Make sure we start search from the beginning of the file
 		fseek(cfgFd, 0, SEEK_SET);
+
+		sprintf(tmpStrForTimePrint, "[CFG_PRS][INFO] Files reset, now searching\n");
+		debug_time_printf(tmpStrForTimePrint);
 
 		// Search through the configuration file for the wanted
 		while ((resString = fgets(resString, 2048, cfgFd)) != NULL)
@@ -539,7 +567,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 									}
 									else
 									{
-										debug_printf("[CFG_PRS] Section found, but not value in it. We add it here: ");
+										debug_printf("[CFG_PRS][NEW] Section found, but not value in it. We add it here: ");
 										// Create new line based on known key and value
 										lineToShadowCreated[0] = '\0';
 										strcat(lineToShadowCreated, key);
@@ -621,7 +649,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 					// Write line to shadow file
 					if (shadowFileFd && lineToShadow && newValue)
 					{
-						debug_verbose_printf("[CFG_PRS] Writing line '%s' to shadow file\n", lineToShadow);
+						debug_verbose_printf("[CFG_PRS][OLD] Writing existing line '%s' to shadow file\n", lineToShadow);
 						fputs(lineToShadow, shadowFileFd);
 					}
 				}
@@ -632,6 +660,9 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 				}
 			}
 		}
+
+		sprintf(tmpStrForTimePrint, "[CFG_PRS][INFO] Search complete\n");
+		debug_time_printf(tmpStrForTimePrint);
 	}
 	else
 	{
@@ -660,16 +691,16 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 				strcat(lineToShadowCreated, "]");
 				strcat(lineToShadowCreated, "\n");
 				// Write it to file
-				debug_printf("[CFG_PRS] Writing line '%s' to shadow file\n", lineToShadowCreated);
+				debug_printf("[CFG_PRS][NEW] Writing line '%s' to shadow file\n", lineToShadowCreated);
+				fputs(lineToShadowCreated, shadowFileFd);
 			}
-			fputs(lineToShadowCreated, shadowFileFd);
 			// Create new line based on known key and value
 			lineToShadowCreated[0] = '\0';
 			strcat(lineToShadowCreated, key);
 			strcat(lineToShadowCreated, "=");
 			strcat(lineToShadowCreated, newValue);
 			strcat(lineToShadowCreated, "\n");
-			debug_printf("[CFG_PRS] Writing line '%s' to shadow file\n", lineToShadowCreated);
+			debug_printf("[CFG_PRS][NEW] Writing line '%s' to shadow file\n", lineToShadowCreated);
 			// Write it to file
 			fputs(lineToShadowCreated, shadowFileFd);
 		}
@@ -678,5 +709,8 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 	free(resStringToFree);
 	free(lineToShadowToFree);
 	free(lineToShadowCreatedToFree);
+
+	// Release file access lock first
+	pthread_mutex_unlock(&cfgFileAccessMutex);
 	return res;
 }

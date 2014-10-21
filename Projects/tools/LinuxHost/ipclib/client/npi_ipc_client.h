@@ -52,6 +52,7 @@ extern "C"
 
 /* NPI includes */
 #include "npi_lnx.h"
+#include "rtis_lnx.h"
 
 /* RTI_LNX includes */
  /* Initialize RTI Surrogate
@@ -209,12 +210,35 @@ extern "C"
   //
   #define RTIS_CMD_ID_RTI_READ_ITEM_EX           0x21
   #define RTIS_CMD_ID_RTI_WRITE_ITEM_EX          0x22
-  
+
+#ifdef ZRC20_PROFILE
+  #define RTIS_CMD_ID_RTI_BIND_REQ                     0x30
+  #define RTIS_CMD_ID_RTI_ALLOW_BIND_REQ               0x31
+  #define RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_RSP    0x32
+  #define RTIS_CMD_ID_RTI_POLL_CONFIG_REQ              0x33
+  #define RTIS_CMD_ID_RTI_IDENTIFICATION_CONFIG_REQ    0x34
+  #define RTIS_CMD_ID_RTI_POLL_REQ                     0x35
+  #define RTIS_CMD_ID_RTI_KEY_EXCHANGE_REQ             0x36
+  #define RTIS_CMD_ID_RTI_GET_ATTRIBUTE_CNF            0x37
+  #define RTIS_CMD_ID_RTI_SET_ATTRIBUTE_CNF            0x38
+  #define RTIS_CMD_ID_RTI_SEND_IRDB_VENDOR_SUPPORT_REQ 0x39
+  #define RTIS_CMD_ID_RTI_SEND_MAPPABLE_ACTIONS_REQ    0x3a
+  #define RTIS_CMD_ID_RTI_GET_ACTION_MAPPINGS_REQ      0x3b
+  #define RTIS_CMD_ID_RTI_HA_SUPPORTED_ANNOUNCE_REQ    0x3c
+  #define RTIS_CMD_ID_RTI_PULL_HA_ATTRIBUTES_REQ       0x3d
+  #define RTIS_CMD_ID_RTI_POLL_RSP                     0x3e
+  #define RTIS_CMD_ID_RTI_UNBIND_REQ                   0x3f
+  #define RTIS_CMD_ID_RTI_BIND_ABORT_REQ               0x40
+  #define RTIS_CMD_ID_RTI_ALLOW_BIND_ABORT_REQ         0x41
+#endif //ZRC20_PROFILE
+
+#ifdef MSO_PROFILE
   #define RTIS_CMD_ID_RTI_BIND_PARAMS_REQ        0x0E
   #define RTIS_CMD_ID_RTI_SET_BIND_INDICATOR_REQ 0x0F
   #define RTIS_CMD_ID_RTI_SEND_MSO_COMMAND_REQ   0x30
   #define RTIS_CMD_ID_RTI_BUILD_MSO_CMD_SET_REQ  0x31
   #define RTIS_CMD_ID_RTI_BUILD_MSO_CMD_GET_REQ  0x32
+#endif //MSO_PROFILE
 
   // RTIS Confirm Ids
   #define RTIS_CMD_ID_RTI_INIT_CNF               0x01
@@ -232,9 +256,33 @@ extern "C"
   #define RTIS_CMD_ID_RTI_RESET_IND              0x0D
   #define RTIS_CMD_ID_RTI_IR_IND				 0xA0
 
+#ifdef ZRC20_PROFILE
+  #define RTIS_CMD_ID_RTI_BIND_CNF                     0x30
+  #define RTIS_CMD_ID_RTI_SEND_PROFILE_CMD_CNF         0x31
+  #define RTIS_CMD_ID_RTI_BIND_IND                     0x32
+  #define RTIS_CMD_ID_RTI_START_VALIDATION_IND         0x33
+  #define RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_IND    0x34
+  #define RTIS_CMD_ID_RTI_POLL_CONFIG_CNF              0x35
+  #define RTIS_CMD_ID_RTI_IDENTIFICATION_CONFIG_CNF    0x36
+  #define RTIS_CMD_ID_RTI_POLL_CNF                     0x37
+  #define RTIS_CMD_ID_RTI_KEY_EXCHANGE_CNF             0x38
+  #define RTIS_CMD_ID_RTI_GET_ATTRIBUTE_REQ            0x39
+  #define RTIS_CMD_ID_RTI_SET_ATTRIBUTE_REQ            0x3a
+  #define RTIS_CMD_ID_RTI_SEND_IRDB_VENDOR_SUPPORT_CNF 0x3b
+  #define RTIS_CMD_ID_RTI_SEND_MAPPABLE_ACTIONS_CNF    0x3c
+  #define RTIS_CMD_ID_RTI_GET_ACTION_MAPPINGS_CNF      0x3d
+  #define RTIS_CMD_ID_RTI_HA_SUPPORTED_ANNOUNCE_CNF    0x3e
+  #define RTIS_CMD_ID_RTI_PULL_HA_ATTRIBUTES_CNF       0x3f
+  #define RTIS_CMD_ID_RTI_POLL_IND                     0x40
+  #define RTIS_CMD_ID_RTI_UNBIND_CNF                   0x41
+  #define RTIS_CMD_ID_RTI_UNBIND_IND                   0x42
+  #define RTIS_CMD_ID_RTI_BIND_ABORT_CNF               0x43
+#endif //ZRC20_PROFILE
+
+#ifdef MSO_PROFILE
   //MSO Profile Command
   #define RTIS_CMD_ID_RTI_SEND_MSO_COMMAND_CNF      0x0F
-  
+
   #define RTIS_CMD_ID_RTI_PAIR_IND                  0x30
   #define RTIS_CMD_ID_RTI_START_VALIDATION_IND      0x31
   #define RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_IND 0x32
@@ -242,6 +290,7 @@ extern "C"
   #define RTIS_CMD_ID_RTI_BIND_PARAMS_IND           0x34
   #define RTIS_CMD_ID_RTI_BIND_PARAMS_RSP           0x35
   #define RTIS_CMD_ID_RTI_UPDATE_BACKUP_P_ENTRY     0x36
+#endif //MSO_PROFILE
 
   // RTI States
   enum
