@@ -165,10 +165,10 @@ extern "C"
  * INCLUDES
  **************************************************************************************************/
 
-// GDP API
-#include "gdp_api.h"
 
 #if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
+// GDP API
+#include "gdp_api.h"
 #include "zrc.h"
 #endif
 
