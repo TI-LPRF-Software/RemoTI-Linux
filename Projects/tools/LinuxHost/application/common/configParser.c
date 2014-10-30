@@ -48,7 +48,7 @@
 #define debug_verbose_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
 #else
 extern int __DEBUG_APP_ACTIVE;
-#define debug_printf(fmt, ...) 			st(if ( (__DEBUG_APP_ACTIVE > 1) ) printf( fmt, ##__VA_ARGS__);)
+#define debug_printf(fmt, ...) 			st(if (__DEBUG_APP_ACTIVE > 1) printf( fmt, ##__VA_ARGS__);)
 #define debug_verbose_printf(fmt, ...) 	st(if (__DEBUG_APP_ACTIVE >= 3) printf( fmt, ##__VA_ARGS__);)
 #endif
 
@@ -320,6 +320,9 @@ int ConfigParserSet(const char *configFilePath, const char *shadowPath, const ch
 {
 	int returnVal = 0;
 
+	int debugSettingBefore = __DEBUG_APP_ACTIVE;
+	__DEBUG_APP_ACTIVE = FALSE;
+
 	// First initialize the ConfigParser
 	ConfigParserInit(configFilePath, shadowPath);
 
@@ -338,6 +341,8 @@ int ConfigParserSet(const char *configFilePath, const char *shadowPath, const ch
 
 	// The following function assumes that the system will overwrite the existing file.
 	rename(shadowPath, configFilePath);
+
+	__DEBUG_APP_ACTIVE = debugSettingBefore;
 
 	return returnVal;
 }
@@ -635,6 +640,8 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 										debug_printf("[CFG_PRS] Updated line to '%s'\n", lineToShadow);
 										newValueWritten = TRUE;
 									}
+									// Move back pointer
+									resString = resStringToFree;
 								}
 								else
 								{
@@ -649,8 +656,10 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 					// Write line to shadow file
 					if (shadowFileFd && lineToShadow && newValue)
 					{
-						debug_verbose_printf("[CFG_PRS][OLD] Writing existing line '%s' to shadow file\n", lineToShadow);
+						debug_verbose_printf("[CFG_PRS][OLD] Writing existing line '%s' to shadow file...", lineToShadow);
+						fflush(stdout);
 						fputs(lineToShadow, shadowFileFd);
+						debug_verbose_printf(" done\n");
 					}
 				}
 				else
@@ -694,6 +703,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 				debug_printf("[CFG_PRS][NEW] Writing line '%s' to shadow file\n", lineToShadowCreated);
 				fputs(lineToShadowCreated, shadowFileFd);
 			}
+			debug_printf("[CFG_PRS][NEW] Preparing line to shadow file\n");
 			// Create new line based on known key and value
 			lineToShadowCreated[0] = '\0';
 			strcat(lineToShadowCreated, key);
@@ -712,5 +722,8 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 
 	// Release file access lock first
 	pthread_mutex_unlock(&cfgFileAccessMutex);
+
+	__DEBUG_APP_ACTIVE = debugSettingBefore;
+
 	return res;
 }

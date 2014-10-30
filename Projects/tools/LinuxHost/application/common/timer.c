@@ -347,7 +347,7 @@ static void *timerThreadFunc(void *ptr)
 				debug_printf("[TIMER][MUTEX] Wait %dus (%ds:%dns) for TIMER Set Cond (Handle) signal... effectively releasing lock\n",
 						(int)minimumTimeout, (int)(minimumTimeout / 1000000), (int)((minimumTimeout % 1000000) * 1000));
 				res = pthread_cond_timedwait(&timerSetCond, &timerMutex, &waitToTime);
-				if (res != 0)
+				if ( (res != ETIMEDOUT) && (res != 0) )
 				{
 					debug_printf("[TIMER][MUTEX] TIMER conditional wait returned with %d\n", res);
 					if (res == EINVAL)
@@ -440,16 +440,10 @@ uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 	// Use a 0 value of timeout to disable timer
 	if (timeout)
 	{
-		// Check if timer is already enabled for this event
-		if (timerThreadTbl[threadId].timerEnabled & event)
-		{
-			// It is, so we need to make sure the timer update does not decrement now.
-			timerThreadTbl[threadId].justKicked |= event;
-		}
-		else
-		{
-			timerThreadTbl[threadId].timerEnabled |= event;
-		}
+		// Enable event
+		timerThreadTbl[threadId].timerEnabled |= event;
+		// We also need to make sure the timer update does not decrement now.
+		timerThreadTbl[threadId].justKicked |= event;
 	}
 	else
 	{
@@ -496,7 +490,7 @@ uint8 timer_set_event(uint8 threadId, uint32 event)
 	// Release resources waiting for this event
 	if (sem_post(&event_mutex) < 0)
 	{
-//		perror("Failed to post event");
+		perror("Failed to post event");
 	}
 
 	pthread_mutex_unlock(&timerEventMutex);
