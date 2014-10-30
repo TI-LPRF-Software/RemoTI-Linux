@@ -723,7 +723,5 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 	// Release file access lock first
 	pthread_mutex_unlock(&cfgFileAccessMutex);
 
-	__DEBUG_APP_ACTIVE = debugSettingBefore;
-
 	return res;
 }
