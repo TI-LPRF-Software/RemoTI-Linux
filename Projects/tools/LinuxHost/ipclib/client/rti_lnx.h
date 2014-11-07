@@ -165,8 +165,7 @@ extern "C"
  * INCLUDES
  **************************************************************************************************/
 
-
-#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
+#ifdef ZRC20_PROFILE
 // GDP API
 #include "gdp_api.h"
 #include "zrc.h"

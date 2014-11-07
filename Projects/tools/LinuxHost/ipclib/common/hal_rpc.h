@@ -86,6 +86,9 @@ extern "C" {
 #define RPC_SYS_RCN_CLIENT  12   // Remote Control Network Layer Client
 #define RPC_SYS_BOOT        13   // Serial Bootloader
 // Reserved, maybe RPC_SYS_ZIPTEST
+#ifdef NPI_XR_TESTIF
+#define RPC_SYS_XR_TESTIF	14	 // XR Test Interface
+#endif //NPI_XR_TESTIF
 #define RPC_SYS_DEBUG	    15   // Debug Interface for Flash Programming
 #define RPC_SYS_PERIPHERALS 16   // Peripheral control and callback, e.g. CapSense callback
 #define RPC_SYS_NFC    		17   // NFC
