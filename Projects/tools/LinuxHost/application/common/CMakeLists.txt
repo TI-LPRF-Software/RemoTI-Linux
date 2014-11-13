@@ -1,10 +1,15 @@
 cmake_minimum_required(VERSION 2.8.4)
-project(RemoTI_Linux_common)
+project(RemoTI_Linux_application_common)
 
 string(TOUPPER ${PROJECT_NAME} PROJECT_UPPER_NAME)
 set(${PROJECT_UPPER_NAME}_INCLUDES ${PROJECT_SOURCE_DIR} CACHE STRING "${PROJECT_SOURCE_DIR} includes directory")
 message(STATUS "Setting ${PROJECT_NAME} include path")
 
-add_custom_target(${PROJECT_NAME})
+include_directories(${REMOTI_LINUX_COMMON_INCLUDES})
 
-install(FILES npi_lnx_error.h hal_types.h npi_lnx.h hal_rpc.h DESTINATION includes)
+set(${PROJECT_NAME}_sources configParser.c
+  time_printf.c
+  timer.c
+)
+
+add_library(${PROJECT_NAME} SHARED ${${PROJECT_NAME}_sources})
