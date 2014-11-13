@@ -3,3 +3,4 @@ project(RemoTI_Linux_ipclib)
 
 add_subdirectory(common)
 add_subdirectory(client)
+add_subdirectory(server)
