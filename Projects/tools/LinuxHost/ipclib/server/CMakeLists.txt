@@ -21,7 +21,7 @@ set(${PROJECT_NAME}_sources npi_lnx_ipc.c
 
 
 add_executable(${PROJECT_NAME} ${${PROJECT_NAME}_sources})
-target_link_libraries(${PROJECT_NAME} pthread)
+target_link_libraries(${PROJECT_NAME} pthread RemoTI_Linux_application_common)
 
 execute_process(COMMAND uname -m OUTPUT_VARIABLE architecture OUTPUT_STRIP_TRAILING_WHITESPACE)
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME NPI_lnx_${architecture}_server)

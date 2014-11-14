@@ -7,9 +7,6 @@ message(STATUS "Setting ${PROJECT_NAME} include path")
 
 include_directories(${REMOTI_LINUX_COMMON_INCLUDES})
 
-set(${PROJECT_NAME}_sources configParser.c
-  time_printf.c
-  timer.c
-)
+set(${PROJECT_NAME}_sources time_printf.c)
 
 add_library(${PROJECT_NAME} SHARED ${${PROJECT_NAME}_sources})
