@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 2.8.4)
-project(RemoTI_Linux_application_common)
+project(RemoTI_application_common)
 
 string(TOUPPER ${PROJECT_NAME} PROJECT_UPPER_NAME)
 set(${PROJECT_UPPER_NAME}_INCLUDES ${PROJECT_SOURCE_DIR} CACHE STRING "${PROJECT_SOURCE_DIR} includes directory")
 message(STATUS "Setting ${PROJECT_NAME} include path")
 
-include_directories(${REMOTI_LINUX_COMMON_INCLUDES})
+include_directories(${REMOTI_COMMON_INCLUDES})
 
 set(${PROJECT_NAME}_sources time_printf.c)
 
