@@ -7,4 +7,4 @@ message(STATUS "Setting ${PROJECT_NAME} include path")
 
 add_custom_target(${PROJECT_NAME})
 
-install(FILES saddr.h DESTINATION include/RemoTI)
+install(FILES saddr.h DESTINATION include/RemoTI COMPONENT devel)

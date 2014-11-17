@@ -7,4 +7,4 @@ message(STATUS "Setting ${PROJECT_NAME} include path")
 
 add_custom_target(${PROJECT_NAME})
 
-install(FILES npi_lnx_error.h hal_types.h npi_lnx.h hal_rpc.h DESTINATION include/RemoTI)
+install(FILES npi_lnx_error.h hal_types.h npi_lnx.h hal_rpc.h DESTINATION include/RemoTI COMPONENT devel)

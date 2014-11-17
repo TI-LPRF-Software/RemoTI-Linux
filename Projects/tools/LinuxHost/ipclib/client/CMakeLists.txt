@@ -15,5 +15,5 @@ add_dependencies(${PROJECT_NAME} RemoTI_common RemoTI_services RemoTI_applicatio
 
 set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-install(TARGETS ${PROJECT_NAME} DESTINATION lib)
-install(FILES npi_ipc_client.h rti_lnx.h rti_lnx_constants.h DESTINATION include/RemoTI)
+install(TARGETS ${PROJECT_NAME} DESTINATION lib COMPONENT libs)
+install(FILES npi_ipc_client.h rti_lnx.h rti_lnx_constants.h DESTINATION include/RemoTI COMPONENT devel)

@@ -9,4 +9,4 @@ include_directories(${REMOTI_COMMON_INCLUDES})
 
 set(${PROJECT_NAME}_sources time_printf.c)
 
-add_library(${PROJECT_NAME} SHARED ${${PROJECT_NAME}_sources})
+add_library(${PROJECT_NAME} ${${PROJECT_NAME}_sources})

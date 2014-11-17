@@ -25,6 +25,5 @@ target_link_libraries(${PROJECT_NAME} pthread RemoTI_application_common)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-execute_process(COMMAND uname -m OUTPUT_VARIABLE architecture OUTPUT_STRIP_TRAILING_WHITESPACE)
-set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME NPI_lnx_${architecture}_server)
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME NPI_lnx_${CMAKE_SYSTEM_PROCESSOR}_server)
+install(TARGETS ${PROJECT_NAME} DESTINATION bin COMPONENT server)
