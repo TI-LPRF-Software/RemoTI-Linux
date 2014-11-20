@@ -10,9 +10,6 @@ add_subdirectory(services)
 add_subdirectory(ipclib)
 add_subdirectory(application)
 
-# Install
-install(FILES RemoTI_RNP.cfg DESTINATION /etc/RemoTI COMPONENT server)
-
 # Package
 set(CPACK_RPM_COMPONENT_INSTALL ON)
 set(CPACK_GENERATOR RPM TGZ STGZ)
