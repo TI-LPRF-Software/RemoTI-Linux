@@ -1,0 +1,79 @@
+import org.ysb33r.gradle.gnumake.GnuMakeBuild
+
+
+project.ext.cmake_dest_dir = "${project.buildDir}/out.cmake"
+project.ext.cmake_install_prefix = '/usr/'
+project.ext.cmake_install_path = "${project.ext.cmake_dest_dir}${project.ext.cmake_install_prefix}"
+project.ext.cmake_artifact_path = "${project.buildDir}/artifacts"
+project.ext.cmake_artifact_dir = new File(cmake_artifact_path)
+project.ext.cmake_artifact_dir.mkdirs()
+project.ext.group = group
+
+project.ext.architecture = standardArchitecture()
+
+buildscript {
+  repositories {
+    jcenter()
+  }
+  dependencies {
+    classpath 'org.ysb33r.gradle:gnumake:0.1'
+  }
+}
+
+def standardArchitecture() {
+    def arch = System.getProperty('os.arch');
+    if (arch == 'amd64')
+        return "x86_64";
+    return arch;
+}
+
+task configure(type: Exec) {
+    workingDir(buildDir)
+    executable 'cmake'
+    args '..', "-DCMAKE_INSTALL_PREFIX=${cmake_install_prefix}", "-DVERSION=${version}"
+}
+
+task build(type: GnuMakeBuild) {
+    dependsOn 'configure'
+    workingDir = "$buildDir"
+    targets = []
+}
+
+task install(type: GnuMakeBuild) {
+    dependsOn 'build'
+    targets = ['install']
+    flags = [ DESTDIR : cmake_dest_dir]
+    workingDir = "$buildDir"
+}
+
+task packages(type: GnuMakeBuild) {
+    dependsOn 'install'
+    targets = ['package']
+    flags = [ DESTDIR : cmake_dest_dir]
+    workingDir = "$buildDir"
+}
+
+task artifactsTar(type: Tar) {
+    dependsOn packages
+    baseName "${project.name}-${project.version}-${project.architecture}"
+    compression Compression.GZIP
+    from "${cmake_install_path}", {
+        include 'lib/**'
+        include 'include/**'
+    }
+}
+
+task artifacts(dependsOn: artifactsTar) {
+    println "${name}"
+    println "${group}"
+    println "${version}"
+}
+
+publishing {
+    publications {
+        project(MavenPublication) {
+            groupId "${groupId}"
+            artifact artifactsTar
+        }
+    }
+}
