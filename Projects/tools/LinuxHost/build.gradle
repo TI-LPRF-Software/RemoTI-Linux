@@ -8,7 +8,7 @@ project.ext.cmake_artifact_path = "${project.buildDir}/artifacts"
 project.ext.cmake_artifact_dir = new File(cmake_artifact_path)
 project.ext.cmake_artifact_dir.mkdirs()
 project.ext.group = group
-
+project.ext.version = version
 project.ext.architecture = standardArchitecture()
 
 buildscript {
@@ -69,11 +69,11 @@ task artifacts(dependsOn: artifactsTar) {
     println "${version}"
 }
 
-publishing {
-    publications {
-        project(MavenPublication) {
-            groupId "${groupId}"
-            artifact artifactsTar
-        }
-    }
-}
+// publishing {
+//     publications {
+//         project(MavenPublication) {
+//             groupId "${groupId}"
+//             artifact artifactsTar
+//         }
+//     }
+// }
