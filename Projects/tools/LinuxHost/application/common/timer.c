@@ -488,9 +488,11 @@ uint8 timer_set_event(uint8 threadId, uint32 event)
 	timerThreadTbl[threadId].eventFlag |= event;
 
 	// Release resources waiting for this event
-	if (sem_post(&event_mutex) < 0)
+	if (sem_post(&eventSem) < 0)
 	{
-		perror("Failed to post event");
+		char strArr[128];
+		sprintf(strArr, "Failed to post event 0x%.8X", event);
+		perror(strArr);
 	}
 
 	pthread_mutex_unlock(&timerEventMutex);

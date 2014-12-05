@@ -1414,47 +1414,6 @@ void NPI_DisconnectReq( uint8 *pStatus )
   msg_memcpy( pStatus, &pMsg.pData[0], pMsg.len );
 }
 
-/**************************************************************************************************
- *
- * @fn          NPI_SetWorkaroundReq
- *
- * @brief       This API is used to ask NPI server to set workaround.
- *
- * input parameters
- *
- * None.
- *
- * output parameters
- *
- * @param       item		- Workaround ID
- * @param       *pStatus 	- Pointer to buffer where status is read.
- *
- * None.
- *
- * @return      None.
- *
- **************************************************************************************************/
-void NPI_SetWorkaroundReq( uint8 workaroundID, uint8 *pStatus )
-{
-  npiMsgData_t pMsg;
-
-  // Prepare workaround request
-  pMsg.subSys = RPC_SYS_SRV_CTRL;
-//  pMsg.cmdId  = NPI_LNX_CMD_ID_WORKAROUND;
-  pMsg.cmdId  = 2;
-  pMsg.len    = 2;
-
-  pMsg.pData[0] = workaroundID;
-  pMsg.pData[1] = *pStatus;
-
-  NPI_SendSynchData( &pMsg );
-
-  // copy the reply data to the client's buffer
-  // Note: the first byte of the payload is reserved for the status
-  msg_memcpy( pStatus, &pMsg.pData[0], pMsg.len );
-}
-
-
 // -- utility porting --
 
 // These utility functions are called from RTI surrogate module

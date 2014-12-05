@@ -1350,7 +1350,15 @@ void RTI_DisableSleepCnf(rStatus_t status)
  */
 void RTI_UnpairInd(uint8 dstIndex)
 {
-	printf("RTI_UnpairInd, dstIndex : %d \n", dstIndex);
+	if (appState == AP_STATE_PAIR)
+	{
+		appState = AP_STATE_READY;
+		printf("Controller %d did not accept pairing request. Check configuration, note that security is required for ZRC and ZID profiles. \n", dstIndex);
+	}
+	else
+	{
+		printf("RTI_UnpairInd, dstIndex : %d \n", dstIndex);
+	}
 }
 
 /**************************************************************************************************

@@ -41,6 +41,8 @@
 #    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  
 APP_DIR="Projects/tools/LinuxHost/application"
+NON_BSD_APP_DIR="/home/uva0132614local/Gerrit/RemoTI-Linux_RFMGR/Projects/tools/LinuxHost/application"
+#NON_BSD_APP_DIR="~/Gerrit/RemoTI-Linux_RFMGR/Projects/tools/LinuxHost/application"
 
 ##########################################################
 # Check if there are any arguments, if so check if the application is valid
@@ -105,6 +107,37 @@ for i in "$@"; do
 # Go back to root folder
 	cd $DIR
 	tar -cf $i"_"$NEWTAG.tar $DIFFLIST $APP_DIR"/"$i
+	if [ "$i" = "msoComcast" ]; then
+		echo "Creating "$i"_nonBSD_"$NEWTAG".tar"
+		# Create non-BSD release as well
+		cp $i"_"$NEWTAG.tar $i"_nonBSD_"$NEWTAG.tar
+		# Replace the makefile to enable Voice and DIU
+		cp $APP_DIR"/"$i/makefile $APP_DIR"/"$i/makefile_cp
+		tar --delete --file=$i"_nonBSD_"$NEWTAG.tar $APP_DIR"/"$i/makefile
+		cp $APP_DIR"/"makefile_nonBSD_msoComcast $APP_DIR"/"$i/makefile
+		tar --append --file=$i"_nonBSD_"$NEWTAG.tar $APP_DIR"/"$i/makefile
+		mv $APP_DIR"/"$i/makefile_cp $APP_DIR"/"$i/makefile
+		# Then add the Voice and DIU files
+		cp $NON_BSD_APP_DIR"/"$i/mso_deviceImageUpdate.* $APP_DIR"/"$i/
+		cp $NON_BSD_APP_DIR"/"$i/mso_device_image_update_profile.h $APP_DIR"/"$i/
+		cp $NON_BSD_APP_DIR"/"$i/mso_voice.* $APP_DIR"/"$i/
+		cp $NON_BSD_APP_DIR"/"$i/mso_voice_profile.h $APP_DIR"/"$i/
+		cp -r $NON_BSD_APP_DIR"/"$i/lib $APP_DIR"/"$i/
+
+		tar --append --file=$i"_nonBSD_"$NEWTAG.tar $APP_DIR"/"$i/mso_deviceImageUpdate.c
+		tar --append --file=$i"_nonBSD_"$NEWTAG.tar $APP_DIR"/"$i/mso_deviceImageUpdate.h
+		tar --append --file=$i"_nonBSD_"$NEWTAG.tar $APP_DIR"/"$i/mso_device_image_update_profile.h
+		tar --append --file=$i"_nonBSD_"$NEWTAG.tar $APP_DIR"/"$i/mso_voice.c
+		tar --append --file=$i"_nonBSD_"$NEWTAG.tar $APP_DIR"/"$i/mso_voice.h
+		tar --append --file=$i"_nonBSD_"$NEWTAG.tar $APP_DIR"/"$i/mso_voice_profile.h
+		tar --append --file=$i"_nonBSD_"$NEWTAG.tar $APP_DIR"/"$i/lib
+
+		rm $APP_DIR"/"$i/mso_deviceImageUpdate.*
+		rm $APP_DIR"/"$i/mso_device_image_update_profile.h
+		rm $APP_DIR"/"$i/mso_voice.*
+		rm $APP_DIR"/"$i/mso_voice_profile.h
+		rm -rf $APP_DIR"/"$i/lib
+	fi
 done
 
 
@@ -128,6 +161,24 @@ for i in "$@"; do
 	echo "tar -xf ../"$i"_"$NEWTAG".tar" >> "install_"$i"_"$NEWTAG".sh"
 	echo "cd .." >> "install_"$i"_"$NEWTAG".sh"
 	echo "echo Installation Complete!" >> "install_"$i"_"$NEWTAG".sh"
+	if [ "$i" = "msoComcast" ]; then
+		echo "Creating "$i"_nonBSD_"$NEWTAG".sh installer"
+		echo "#!/bin/sh" > "install_"$i"_nonBSD_"$NEWTAG".sh"
+# Installer must be executable
+		chmod 755 "install_"$i"_nonBSD_"$NEWTAG".sh"
+		echo "# Run this to install "$i "application" >> "install_"$i"_nonBSD_"$NEWTAG".sh"
+		echo "# "$i".tar must exist in this folder" >> "install_"$i"_nonBSD_"$NEWTAG".sh"
+		echo "# RemoTI-Linux/ must NOT exist in this folder" >> "install_"$i"_nonBSD_"$NEWTAG".sh"
+# Clone into RemoTI-Linux
+		echo "git clone http://github.com/TI-LPRF-Software/RemoTI-Linux.git"  >> "install_"$i"_nonBSD_"$NEWTAG".sh"
+		echo "cd RemoTI-Linux" >> "install_"$i"_nonBSD_"$NEWTAG".sh"
+		echo "git checkout tags/"$NEWTAG >> "install_"$i"_nonBSD_"$NEWTAG".sh"
+# Then untar the patch into RemoTI-Linux
+		echo "echo Applying patch to checked out RemoTI-Linux tag" >> "install_"$i"_nonBSD_"$NEWTAG".sh"
+		echo "tar -xf ../"$i"_nonBSD_"$NEWTAG".tar" >> "install_"$i"_nonBSD_"$NEWTAG".sh"
+		echo "cd .." >> "install_"$i"_nonBSD_"$NEWTAG".sh"
+		echo "echo Installation Complete!" >> "install_"$i"_nonBSD_"$NEWTAG".sh"
+	fi
 done
 
 

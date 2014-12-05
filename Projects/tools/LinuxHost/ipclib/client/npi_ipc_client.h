@@ -71,8 +71,6 @@ extern "C"
   void NPI_ConnectReq( uint8 *pStatus, uint8 length, uint8 *devPath );
   void NPI_DisconnectReq( uint8 *pStatus );
 
-  void NPI_SetWorkaroundReq( uint8 workaroundID, uint8 *pStatus );
-
   extern uint8 __DEBUG_CLIENT_ACTIVE;
 
   /**************************************************************************************************
@@ -303,7 +301,7 @@ extern "C"
   /**************************************************************************************************
    * DEFINES
    **************************************************************************************************/
-#define NPI_IPC_CLIENT_SYNCH_TIMEOUT					1	// 1 second timeout on synchronous request
+#define NPI_IPC_CLIENT_SYNCH_TIMEOUT					2	// 1 second timeout on synchronous request
 
 #ifdef __cplusplus
 }

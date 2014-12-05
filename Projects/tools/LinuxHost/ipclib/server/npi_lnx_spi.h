@@ -69,7 +69,7 @@ extern "C" {
 	  uint8 srdyMrdyHandshakeSupport;
   } npiSpiCfg_t;
 
-#define NPI_LNX_SPI_NUM_OF_MS_TO_DETECT_RESET_AFTER_SLOW_SRDY_ASSERT			200
+#define NPI_LNX_SPI_NUM_OF_MS_TO_DETECT_RESET_AFTER_SLOW_SRDY_ASSERT			150
 
   /////////////////////////////////////////////////////////////////////////////
   // Interface function prototypes

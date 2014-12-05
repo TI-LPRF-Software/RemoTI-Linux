@@ -813,6 +813,7 @@ int main(int argc, char ** argv)
 			halSpiCfg_t halSpiCfg;
 			npiSpiCfg_t npiSpiCfg;
 			strBuf = pStrBufRoot;
+			// SPI Specific configuration
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
 			{
 				halSpiCfg.speed = strtol(strBuf, NULL, 10);
@@ -835,33 +836,7 @@ int main(int argc, char ** argv)
 			}
 			else
 			{
-				halSpiCfg.bitsPerWord = 0;
-			}
-			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "useFullDuplexAPI", strBuf)))
-			{
-				halSpiCfg.useFullDuplexAPI = strtol(strBuf, NULL, 10);
-			}
-			else
-			{
-				halSpiCfg.useFullDuplexAPI = TRUE;
-			}
-			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "earlyMrdyDeAssert", strBuf)))
-			{
-				npiSpiCfg.earlyMrdyDeAssert = strtol(strBuf, NULL, 10);
-			}
-			else
-			{
-				// If it is not defined then set value for RNP
-				npiSpiCfg.earlyMrdyDeAssert = TRUE;
-			}
-			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "detectResetFromSlowSrdyAssert", strBuf)))
-			{
-				npiSpiCfg.detectResetFromSlowSrdyAssert = strtol(strBuf, NULL, 10);
-			}
-			else
-			{
-				// If it is not defined then set value for RNP
-				npiSpiCfg.detectResetFromSlowSrdyAssert = TRUE;
+				halSpiCfg.bitsPerWord = 8;
 			}
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "forceRunOnReset", strBuf)))
 			{
@@ -872,7 +847,35 @@ int main(int argc, char ** argv)
 				// If it is not defined then set value for RNP
 				npiSpiCfg.forceRunOnReset = NPI_LNX_UINT8_ERROR;
 			}
-			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "srdyMrdyHandshakeSupport", strBuf)))
+
+			// Configuration that is common between all devices that employ MRDY SRDY signaling
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "MRDY_SRDY", "useFullDuplexAPI", strBuf)))
+			{
+				halSpiCfg.useFullDuplexAPI = strtol(strBuf, NULL, 10);
+			}
+			else
+			{
+				halSpiCfg.useFullDuplexAPI = TRUE;
+			}
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "MRDY_SRDY", "earlyMrdyDeAssert", strBuf)))
+			{
+				npiSpiCfg.earlyMrdyDeAssert = strtol(strBuf, NULL, 10);
+			}
+			else
+			{
+				// If it is not defined then set value for RNP
+				npiSpiCfg.earlyMrdyDeAssert = TRUE;
+			}
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "MRDY_SRDY", "detectResetFromSlowSrdyAssert", strBuf)))
+			{
+				npiSpiCfg.detectResetFromSlowSrdyAssert = strtol(strBuf, NULL, 10);
+			}
+			else
+			{
+				// If it is not defined then set value for RNP
+				npiSpiCfg.detectResetFromSlowSrdyAssert = TRUE;
+			}
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "MRDY_SRDY", "srdyMrdyHandshakeSupport", strBuf)))
 			{
 				npiSpiCfg.srdyMrdyHandshakeSupport = strtol(strBuf, NULL, 10);
 			}
@@ -2675,6 +2678,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 				strBuf = (char*) malloc(128);
 				if (serialCfgFd != NULL)
 				{
+					// SPI Specific configuration
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
 					{
 						halSpiCfg.speed = atoi(strBuf);
@@ -2703,35 +2707,6 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					{
 						halSpiCfg.bitsPerWord = 0;
 					}
-					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "useFullDuplexAPI", strBuf)))
-					{
-						halSpiCfg.useFullDuplexAPI = strtol(strBuf, NULL, 10);
-						debug_printf("[CONNECT DEVICE - SPI] Use Full Duplex API - %s\n", (halSpiCfg.useFullDuplexAPI) ? "Yes" : "No");
-					}
-					else
-					{
-						halSpiCfg.useFullDuplexAPI = TRUE;
-					}
-					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "earlyMrdyDeAssert", strBuf)))
-					{
-						npiSpiCfg.earlyMrdyDeAssert = strtol(strBuf, NULL, 10);
-						debug_printf("[CONNECT DEVICE - SPI] Early MRDY DeAssert - %s\n", (npiSpiCfg.earlyMrdyDeAssert) ? "Yes" : "No");
-					}
-					else
-					{
-						// If it is not defined then set value for RNP
-						npiSpiCfg.earlyMrdyDeAssert = TRUE;
-					}
-					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "detectResetFromSlowSrdyAssert", strBuf)))
-					{
-						npiSpiCfg.detectResetFromSlowSrdyAssert = strtol(strBuf, NULL, 10);
-						debug_printf("[CONNECT DEVICE - SPI] Detect Reset From Slow SRDY Assert - %s\n", (npiSpiCfg.detectResetFromSlowSrdyAssert) ? "Yes" : "No");
-					}
-					else
-					{
-						// If it is not defined then set value for RNP
-						npiSpiCfg.detectResetFromSlowSrdyAssert = TRUE;
-					}
 					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "forceRunOnReset", strBuf)))
 					{
 						npiSpiCfg.forceRunOnReset = strtol(strBuf, NULL, 16);
@@ -2742,7 +2717,38 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 						// If it is not defined then set value for RNP
 						npiSpiCfg.forceRunOnReset = NPI_LNX_UINT8_ERROR;
 					}
-					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "srdyMrdyHandshakeSupport", strBuf)))
+
+					// Configuration that is common between all devices that employ MRDY SRDY signaling
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "MRDY_SRDY", "useFullDuplexAPI", strBuf)))
+					{
+						halSpiCfg.useFullDuplexAPI = strtol(strBuf, NULL, 10);
+						debug_printf("[CONNECT DEVICE - SPI] Use Full Duplex API - %s\n", (halSpiCfg.useFullDuplexAPI) ? "Yes" : "No");
+					}
+					else
+					{
+						halSpiCfg.useFullDuplexAPI = TRUE;
+					}
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "MRDY_SRDY", "earlyMrdyDeAssert", strBuf)))
+					{
+						npiSpiCfg.earlyMrdyDeAssert = strtol(strBuf, NULL, 10);
+						debug_printf("[CONNECT DEVICE - SPI] Early MRDY DeAssert - %s\n", (npiSpiCfg.earlyMrdyDeAssert) ? "Yes" : "No");
+					}
+					else
+					{
+						// If it is not defined then set value for RNP
+						npiSpiCfg.earlyMrdyDeAssert = TRUE;
+					}
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "MRDY_SRDY", "detectResetFromSlowSrdyAssert", strBuf)))
+					{
+						npiSpiCfg.detectResetFromSlowSrdyAssert = strtol(strBuf, NULL, 10);
+						debug_printf("[CONNECT DEVICE - SPI] Detect Reset From Slow SRDY Assert - %s\n", (npiSpiCfg.detectResetFromSlowSrdyAssert) ? "Yes" : "No");
+					}
+					else
+					{
+						// If it is not defined then set value for RNP
+						npiSpiCfg.detectResetFromSlowSrdyAssert = TRUE;
+					}
+					if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "MRDY_SRDY", "srdyMrdyHandshakeSupport", strBuf)))
 					{
 						npiSpiCfg.srdyMrdyHandshakeSupport = strtol(strBuf, NULL, 10);
 						debug_printf("[CONNECT DEVICE - SPI] SRDY/MRDY Hand Shake Supported - %s\n", (npiSpiCfg.srdyMrdyHandshakeSupport) ? "Yes" : "No");
