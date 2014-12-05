@@ -9,8 +9,8 @@ project.ext.cmake_install_path = "${project.ext.cmake_dest_dir}${project.ext.cma
 project.ext.cmake_artifact_path = "${project.buildDir}/artifacts"
 project.ext.cmake_artifact_dir = new File(cmake_artifact_path)
 project.ext.cmake_artifact_dir.mkdirs()
-project.ext.group = group
-project.ext.version = version
+project.ext.group = proj_group
+project.ext.version = proj_version
 project.ext.architecture = standardArchitecture()
 
 // Build Scripts Plugin Repositories&Dependencies
@@ -48,7 +48,7 @@ def standardArchitecture() {
 task configure(type: Exec) {
     workingDir(buildDir)
     executable 'cmake'
-    args '..', "-DCMAKE_INSTALL_PREFIX=${cmake_install_prefix}", "-DVERSION=${version}"
+    args '..', "-DCMAKE_INSTALL_PREFIX=${cmake_install_prefix}", "-DVERSION=${project.ext.version}"
 }
 
 task build(type: GnuMakeBuild) {
@@ -73,7 +73,8 @@ task packages(type: GnuMakeBuild) {
 
 task artifactsTar(type: Tar) {
     dependsOn packages
-    baseName "${project.name}-${project.version}-${project.architecture}"
+    baseName "${project.name}-${project.ext.version}-${project.ext.architecture}"
+    destinationDir = cmake_artifact_dir
     compression Compression.GZIP
     from "${cmake_install_path}", {
         include 'lib/**'
@@ -82,9 +83,9 @@ task artifactsTar(type: Tar) {
 }
 
 task artifacts(dependsOn: artifactsTar) {
-    println "${name}"
-    println "${group}"
-    println "${version}"
+    println "${project.name}"
+    println "${project.ext.group}"
+    println "${project.ext.version}"
 }
 
 // publishing {
