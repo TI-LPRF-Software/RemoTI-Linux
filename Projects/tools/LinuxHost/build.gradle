@@ -1,6 +1,8 @@
-import org.ysb33r.gradle.gnumake.GnuMakeBuild
+// Don't forget that in order to access WitBe Artifactory you need to setup
+// your default user/password in your ~/.gradle/gradle.properties file
+// you can also have a copy of the gradle.properties file in the current directory.
 
-
+// Project Settings / Configuration.
 project.ext.cmake_dest_dir = "${project.buildDir}/out.cmake"
 project.ext.cmake_install_prefix = '/usr/'
 project.ext.cmake_install_path = "${project.ext.cmake_dest_dir}${project.ext.cmake_install_prefix}"
@@ -11,14 +13,30 @@ project.ext.group = group
 project.ext.version = version
 project.ext.architecture = standardArchitecture()
 
+// Build Scripts Plugin Repositories&Dependencies
 buildscript {
   repositories {
-    jcenter()
+    maven {
+      url 'http://192.168.250.126:8081/artifactory/plugins-release'
+      credentials {
+        username = "${artifactory_user}"
+        password = "${artifactory_password}"
+      }
+    }
   }
+
   dependencies {
-    classpath 'org.ysb33r.gradle:gnumake:0.1'
+    classpath group: 'org.jfrog.buildinfo', name: 'build-info-extractor-gradle', version: '3.0.1'
+    classpath group: 'org.ysb33r.gradle', name: 'gnumake', version: '0.1'
   }
 }
+
+// Import Plugin Class Dependency
+import org.ysb33r.gradle.gnumake.GnuMakeBuild
+
+// Load/Apply Plugins
+apply plugin: 'com.jfrog.artifactory'
+
 
 def standardArchitecture() {
     def arch = System.getProperty('os.arch');
@@ -77,3 +95,26 @@ task artifacts(dependsOn: artifactsTar) {
 //         }
 //     }
 // }
+
+// Artifactory Plugin Configuration (custom artifactory DSL)
+artifactory {
+  contextUrl = "http://192.168.250.126:8081/artifactory"
+
+  publish {
+    repository {
+            repoKey = 'libs-release-local'
+            username = "${artifactory_user}"
+            password = "${artifactory_password}"
+            maven = true
+    }
+  }
+
+  resolve {
+    repository {
+            repoKey = 'libs-release'
+            username = "${artifactory_user}"
+            password = "${artifactory_password}"
+            maven = true
+    }
+  }
+}
