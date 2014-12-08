@@ -44,6 +44,10 @@ def standardArchitecture() {
     return arch;
 }
 
+configurations {
+  published
+}
+
 task configure(type: Exec) {
     workingDir(buildDir)
     executable 'cmake'
@@ -81,42 +85,46 @@ task artifactsTar(type: Tar) {
     }
 }
 
-task genArtifacts(dependsOn: artifactsTar) {
-    println "${project.name}"
-    println "${project.ext.group}"
-    println "${project.ext.version}"
+artifactoryPublish {
+  dependsOn artifactsTar
 }
 
-publishing {
-    publications {
-        cmakeProject(MavenPublication) {
-            groupId "${groupId}"
-            artifact artifactsTar
-        }
-    }
+artifacts {
+  published artifactsTar
 }
+
+
+//task genArtifacts(dependsOn: artifactsTar) {
+//    println "${project.name}"
+//    println "${project.ext.group}"
+//    println "${project.ext.version}"
+//}
 
 // Artifactory Plugin Configuration (custom artifactory DSL)
 artifactory {
-    contextUrl = "http://192.168.250.126:8081/artifactory"
-    publish {
+  contextUrl = "http://192.168.250.126:8081/artifactory"
+  publish {
     repository {
-            publishArtifacts = true
-            // publications = ('cmakeProject')
-            // properties = ['fake_property': '42']
-            repoKey = 'libs-release-local'
-            username = "${artifactory_user}"
-            password = "${artifactory_password}"
-            maven = true
-        }
+      repoKey = 'libs-release-local'
+      username = "${artifactory_user}"
+      password = "${artifactory_password}"
+      maven = true
     }
+  }
 
-    resolve {
-        repository {
-            repoKey = 'libs-release'
-            username = "${artifactory_user}"
-            password = "${artifactory_password}"
-            maven = true
-        }
+  //  defaults {
+  //  publishConfigs('published')
+  //  properties = ['build.status': "$it.project.status".toString()]
+  //  publishPom = false //Publish generated POM files to Artifactory (true by default)
+  //  publishIvy = true //Publish generated Ivy descriptor files to Artifactory (true by default)
+  //}
+
+  resolve {
+    repository {
+      repoKey = 'libs-release'
+      username = "${artifactory_user}"
+      password = "${artifactory_password}"
+      maven = true
     }
+  }
 }
