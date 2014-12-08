@@ -9,8 +9,6 @@ project.ext.cmake_install_path = "${project.ext.cmake_dest_dir}${project.ext.cma
 project.ext.cmake_artifact_path = "${project.buildDir}/artifacts"
 project.ext.cmake_artifact_dir = new File(cmake_artifact_path)
 project.ext.cmake_artifact_dir.mkdirs()
-project.ext.group = proj_group
-project.ext.version = proj_version
 project.ext.architecture = standardArchitecture()
 
 // Build Scripts Plugin Repositories&Dependencies
@@ -36,6 +34,7 @@ import org.ysb33r.gradle.gnumake.GnuMakeBuild
 
 // Load/Apply Plugins
 apply plugin: 'com.jfrog.artifactory'
+apply plugin: 'maven-publish'
 
 def standardArchitecture() {
     def arch = System.getProperty('os.arch');
@@ -44,14 +43,15 @@ def standardArchitecture() {
     return arch;
 }
 
-configurations {
-  published
+allprojects {
+    group = "net.witbe.qoe.rf4ce"
+    version = currentVersion
 }
 
 task configure(type: Exec) {
     workingDir(buildDir)
     executable 'cmake'
-    args '..', "-DCMAKE_INSTALL_PREFIX=${cmake_install_prefix}", "-DVERSION=${project.ext.version}"
+    args '..', "-DCMAKE_INSTALL_PREFIX=${cmake_install_prefix}", "-DVERSION=$version"
 }
 
 task build(type: GnuMakeBuild) {
@@ -76,7 +76,7 @@ task genPackages(type: GnuMakeBuild) {
 
 task artifactsTar(type: Tar) {
     dependsOn genPackages
-    baseName "${project.name}-${project.ext.version}-${project.ext.architecture}"
+    baseName "${project.name}-${project.version}-${project.ext.architecture}"
     destinationDir = cmake_artifact_dir
     compression Compression.GZIP
     from "${cmake_install_path}", {
@@ -85,39 +85,36 @@ task artifactsTar(type: Tar) {
     }
 }
 
-artifactoryPublish {
-  dependsOn artifactsTar
+task genArtifacts(dependsOn: artifactsTar) {
+   println "${project.name}"
+   println "${project.group}"
+   println "${project.version}"
 }
 
-artifacts {
-  published artifactsTar
+publishing {
+    publications {
+        cmakeProject(MavenPublication) {
+            artifact artifactsTar
+        }
+    }
 }
-
-
-//task genArtifacts(dependsOn: artifactsTar) {
-//    println "${project.name}"
-//    println "${project.ext.group}"
-//    println "${project.ext.version}"
-//}
 
 // Artifactory Plugin Configuration (custom artifactory DSL)
 artifactory {
-  contextUrl = "http://192.168.250.126:8081/artifactory"
-  publish {
-    repository {
-      repoKey = 'libs-release-local'
-      username = "${artifactory_user}"
-      password = "${artifactory_password}"
-      maven = true
+    contextUrl = "http://192.168.250.126:8081/artifactory"
+    publish {
+        repository {
+            repoKey = 'libs-release-local'
+            username = "${artifactory_user}"
+            password = "${artifactory_password}"
+            maven = true
+        }
+        defaults {
+            publications ('cmakeProject')
+            publishBuildInfo = true
+            publishPom = false
+        }
     }
-  }
-
-  //  defaults {
-  //  publishConfigs('published')
-  //  properties = ['build.status': "$it.project.status".toString()]
-  //  publishPom = false //Publish generated POM files to Artifactory (true by default)
-  //  publishIvy = true //Publish generated Ivy descriptor files to Artifactory (true by default)
-  //}
 
   resolve {
     repository {
