@@ -37,7 +37,6 @@ import org.ysb33r.gradle.gnumake.GnuMakeBuild
 // Load/Apply Plugins
 apply plugin: 'com.jfrog.artifactory'
 
-
 def standardArchitecture() {
     def arch = System.getProperty('os.arch');
     if (arch == 'amd64')
@@ -64,7 +63,7 @@ task install(type: GnuMakeBuild) {
     workingDir = "$buildDir"
 }
 
-task packages(type: GnuMakeBuild) {
+task genPackages(type: GnuMakeBuild) {
     dependsOn 'install'
     targets = ['package']
     flags = [ DESTDIR : cmake_dest_dir]
@@ -72,7 +71,7 @@ task packages(type: GnuMakeBuild) {
 }
 
 task artifactsTar(type: Tar) {
-    dependsOn packages
+    dependsOn genPackages
     baseName "${project.name}-${project.ext.version}-${project.ext.architecture}"
     destinationDir = cmake_artifact_dir
     compression Compression.GZIP
@@ -82,40 +81,42 @@ task artifactsTar(type: Tar) {
     }
 }
 
-task artifacts(dependsOn: artifactsTar) {
+task genArtifacts(dependsOn: artifactsTar) {
     println "${project.name}"
     println "${project.ext.group}"
     println "${project.ext.version}"
 }
 
-// publishing {
-//     publications {
-//         project(MavenPublication) {
-//             groupId "${groupId}"
-//             artifact artifactsTar
-//         }
-//     }
-// }
+publishing {
+    publications {
+        cmakeProject(MavenPublication) {
+            groupId "${groupId}"
+            artifact artifactsTar
+        }
+    }
+}
 
 // Artifactory Plugin Configuration (custom artifactory DSL)
 artifactory {
-  contextUrl = "http://192.168.250.126:8081/artifactory"
-
-  publish {
+    contextUrl = "http://192.168.250.126:8081/artifactory"
+    publish {
     repository {
+            publishArtifacts = true
+            // publications = ('cmakeProject')
+            // properties = ['fake_property': '42']
             repoKey = 'libs-release-local'
             username = "${artifactory_user}"
             password = "${artifactory_password}"
             maven = true
+        }
     }
-  }
 
-  resolve {
-    repository {
+    resolve {
+        repository {
             repoKey = 'libs-release'
             username = "${artifactory_user}"
             password = "${artifactory_password}"
             maven = true
+        }
     }
-  }
 }
