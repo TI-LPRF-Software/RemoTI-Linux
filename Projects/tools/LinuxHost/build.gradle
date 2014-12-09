@@ -41,12 +41,12 @@ def standardArchitecture() {
 allprojects {
     group = "net.witbe.qoe.rf4ce"
     version = currentVersion
-    ext.dest_dir = "${buildDir}/out"
-    ext.install_prefix = '/usr/'
-    ext.install_path = "${dest_dir}${install_prefix}"
-    ext.artifact_path = "${buildDir}/artifacts"
-    ext.artifact_dir = new File(artifact_path)
-    ext.artifact_dir.mkdirs()
+    ext.destDir = "${buildDir}/out"
+    ext.installPrefix = '/usr/'
+    ext.installPath = "${destDir}${installPrefix}"
+    ext.artifactPath = "${buildDir}/artifacts"
+    ext.artifactDir = new File(artifactPath)
+    ext.artifactDir.mkdirs()
     ext.architecture = standardArchitecture()
     ext.nbCore = Runtime.runtime.availableProcessors() / 2
 }
@@ -55,7 +55,7 @@ allprojects {
 task configure(type: Exec) {
     workingDir(buildDir)
     executable 'cmake'
-    args '..', "-DCMAKE_INSTALL_PREFIX=${install_prefix}", "-DVERSION=$version"
+    args '..', "-DCMAKE_INSTALL_PREFIX=${installPrefix}", "-DVERSION=$version"
 }
 
 task build(type: GnuMakeBuild) {
@@ -67,14 +67,14 @@ task build(type: GnuMakeBuild) {
 task install(type: GnuMakeBuild) {
     dependsOn 'build'
     targets = ['install']
-    flags = [ DESTDIR : dest_dir]
+    flags = [ DESTDIR : destDir]
     workingDir = "$buildDir"
 }
 
 task genPackages(type: GnuMakeBuild) {
     dependsOn 'install'
     targets = ['package']
-    flags = [ DESTDIR : dest_dir]
+    flags = [ DESTDIR : destDir]
     workingDir = "$buildDir"
 }
 
@@ -83,7 +83,7 @@ task artifactsTar(type: Tar) {
     baseName "${project.name}-${project.version}-${project.ext.architecture}"
     destinationDir = artifact_dir
     compression Compression.GZIP
-    from "${install_path}", {
+    from "${installPath}", {
         include 'lib/**'
         include 'include/**'
     }
