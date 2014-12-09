@@ -81,7 +81,7 @@ task genPackages(type: GnuMakeBuild) {
 task artifactsTar(type: Tar) {
     dependsOn genPackages
     baseName "${project.name}-${project.version}-${project.ext.architecture}"
-    destinationDir = artifact_dir
+    destinationDir = artifactDir
     compression Compression.GZIP
     from "${installPath}", {
         include 'lib/**'
