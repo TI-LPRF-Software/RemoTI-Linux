@@ -2,40 +2,34 @@
 // your default user/password in your ~/.gradle/gradle.properties file
 // you can also have a copy of the gradle.properties file in the current directory.
 
-// Project Settings / Configuration.
-project.ext.cmake_dest_dir = "${project.buildDir}/out.cmake"
-project.ext.cmake_install_prefix = '/usr/'
-project.ext.cmake_install_path = "${project.ext.cmake_dest_dir}${project.ext.cmake_install_prefix}"
-project.ext.cmake_artifact_path = "${project.buildDir}/artifacts"
-project.ext.cmake_artifact_dir = new File(cmake_artifact_path)
-project.ext.cmake_artifact_dir.mkdirs()
-project.ext.architecture = standardArchitecture()
-
 // Build Scripts Plugin Repositories&Dependencies
 buildscript {
-  repositories {
-    maven {
-      url 'http://192.168.250.126:8081/artifactory/plugins-release'
-      credentials {
-        username = "${artifactory_user}"
-        password = "${artifactory_password}"
-      }
+    repositories {
+        maven {
+            url 'http://192.168.250.126:8081/artifactory/plugins-release'
+            credentials {
+                username = "${artifactory_user}"
+                password = "${artifactory_password}"
+            }
+        }
     }
-  }
-
-  dependencies {
-    classpath group: 'org.jfrog.buildinfo', name: 'build-info-extractor-gradle', version: '3.0.1'
-    classpath group: 'org.ysb33r.gradle', name: 'gnumake', version: '0.1'
-  }
+    dependencies {
+        classpath group: 'org.ysb33r.gradle', name: 'gnumake', version: '0.1'
+    }
 }
 
-// Import Plugin Class Dependency
-import org.ysb33r.gradle.gnumake.GnuMakeBuild
+plugins {
+    id "com.jfrog.artifactory" version "3.0.1"
+}
 
 // Load/Apply Plugins
 apply plugin: 'com.jfrog.artifactory'
 apply plugin: 'maven-publish'
 
+// Import Plugin Class Dependency
+import org.ysb33r.gradle.gnumake.GnuMakeBuild
+
+// Utility Methods
 def standardArchitecture() {
     def arch = System.getProperty('os.arch');
     if (arch == 'amd64')
@@ -43,15 +37,25 @@ def standardArchitecture() {
     return arch;
 }
 
+// Project Settings / Configuration.
 allprojects {
     group = "net.witbe.qoe.rf4ce"
     version = currentVersion
+    ext.dest_dir = "${buildDir}/out"
+    ext.install_prefix = '/usr/'
+    ext.install_path = "${dest_dir}${install_prefix}"
+    ext.artifact_path = "${buildDir}/artifacts"
+    ext.artifact_dir = new File(artifact_path)
+    ext.artifact_dir.mkdirs()
+    ext.architecture = standardArchitecture()
+    ext.nbCore = Runtime.runtime.availableProcessors() / 2
 }
 
+// Tasks
 task configure(type: Exec) {
     workingDir(buildDir)
     executable 'cmake'
-    args '..', "-DCMAKE_INSTALL_PREFIX=${cmake_install_prefix}", "-DVERSION=$version"
+    args '..', "-DCMAKE_INSTALL_PREFIX=${install_prefix}", "-DVERSION=$version"
 }
 
 task build(type: GnuMakeBuild) {
@@ -63,34 +67,32 @@ task build(type: GnuMakeBuild) {
 task install(type: GnuMakeBuild) {
     dependsOn 'build'
     targets = ['install']
-    flags = [ DESTDIR : cmake_dest_dir]
+    flags = [ DESTDIR : dest_dir]
     workingDir = "$buildDir"
 }
 
 task genPackages(type: GnuMakeBuild) {
     dependsOn 'install'
     targets = ['package']
-    flags = [ DESTDIR : cmake_dest_dir]
+    flags = [ DESTDIR : dest_dir]
     workingDir = "$buildDir"
 }
 
 task artifactsTar(type: Tar) {
     dependsOn genPackages
     baseName "${project.name}-${project.version}-${project.ext.architecture}"
-    destinationDir = cmake_artifact_dir
+    destinationDir = artifact_dir
     compression Compression.GZIP
-    from "${cmake_install_path}", {
+    from "${install_path}", {
         include 'lib/**'
         include 'include/**'
     }
 }
 
 task genArtifacts(dependsOn: artifactsTar) {
-   println "${project.name}"
-   println "${project.group}"
-   println "${project.version}"
 }
 
+// Publications
 publishing {
     publications {
         cmakeProject(MavenPublication) {
@@ -115,13 +117,12 @@ artifactory {
             publishPom = false
         }
     }
-
   resolve {
-    repository {
-      repoKey = 'libs-release'
-      username = "${artifactory_user}"
-      password = "${artifactory_password}"
-      maven = true
+        repository {
+            repoKey = 'libs-release'
+            username = "${artifactory_user}"
+            password = "${artifactory_password}"
+            maven = true
+        }
     }
-  }
 }
