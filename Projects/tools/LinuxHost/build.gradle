@@ -29,14 +29,6 @@ apply plugin: 'maven-publish'
 // Import Plugin Class Dependency
 import org.ysb33r.gradle.gnumake.GnuMakeBuild
 
-// Utility Methods
-def standardArchitecture() {
-    def arch = System.getProperty('os.arch');
-    if (arch == 'amd64')
-        return "x86_64";
-    return arch;
-}
-
 // Project Settings / Configuration.
 allprojects {
     group = "net.witbe.qoe.rf4ce"
@@ -89,40 +81,91 @@ task artifactsTar(type: Tar) {
     }
 }
 
-task genArtifacts(dependsOn: artifactsTar) {
-}
-
 // Publications
 publishing {
-    publications {
-        cmakeProject(MavenPublication) {
-            artifact artifactsTar
-        }
+  repositories {
+    maven {
+      name 'libs-release'
+      url 'http://192.168.250.126:8081/artifactory/libs-release-local'
+      credentials {
+        username = "${artifactory_user}"
+        password = "${artifactory_password}"
+      }
     }
+    maven {
+      name 'yum-release'
+      url 'http://192.168.250.126:8081/artifactory/yum-release-local'
+      credentials {
+        username = "${artifactory_user}"
+        password = "${artifactory_password}"
+      }
+    }
+  }
+
+  publications {
+    buildDependency(MavenPublication) {
+      artifactId "remoti"
+      groupId = "net.witbe.qoe.rf4ce"
+
+      artifact artifactsTar
+      ext.repoName = 'libs-release'
+    }
+
+    remotiServer(MavenPublication) {
+      artifactId "remoti-server"
+      groupId "7.os.x86_64"
+
+      artifact "${buildDir}/remoti-dev-x86_64-server.rpm"
+      ext.repoName = 'yum-release'
+    }
+  }
+}
+
+//
+// Utility Parts of the Scripts, with tools, Extra functions or hack.
+
+// Help maven-publish to publish different publication on different repos
+afterEvaluate {
+  tasks.withType(PublishToMavenRepository).all { Ptask ->
+    Ptask.onlyIf { task ->
+      if (task.publication.hasProperty('repoName') && task.publication.repoName != task.repository.name) {
+        task.enabled = false
+        task.group = null
+        return false
+      }
+      return true
+    }
+  }
+}
+
+// Utility Methods
+def standardArchitecture() {
+    def arch = System.getProperty('os.arch');
+    return (arch == 'amd64') ? "x86_64" : arch;
 }
 
 // Artifactory Plugin Configuration (custom artifactory DSL)
-artifactory {
-    contextUrl = "http://192.168.250.126:8081/artifactory"
-    publish {
-        repository {
-            repoKey = 'libs-release-local'
-            username = "${artifactory_user}"
-            password = "${artifactory_password}"
-            maven = true
-        }
-        defaults {
-            publications ('cmakeProject')
-            publishBuildInfo = true
-            publishPom = false
-        }
-    }
-  resolve {
-        repository {
-            repoKey = 'libs-release'
-            username = "${artifactory_user}"
-            password = "${artifactory_password}"
-            maven = true
-        }
-    }
-}
+// artifactory {
+//     contextUrl = "http://192.168.250.126:8081/artifactory"
+//     publish {
+//         repository {
+//             repoKey = 'libs-release-local'
+//             username = "${artifactory_user}"
+//             password = "${artifactory_password}"
+//             maven = true
+//         }
+//         defaults {
+//             publications ('cmakeProject')
+//             publishBuildInfo = true
+//             publishPom = false
+//         }
+//     }
+//   resolve {
+//         repository {
+//             repoKey = 'libs-release'
+//             username = "${artifactory_user}"
+//             password = "${artifactory_password}"
+//             maven = true
+//         }
+//     }
+// }
