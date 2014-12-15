@@ -44,6 +44,7 @@
 
 #include "simple_app_main.h"
 #include "simple_app.h"
+#include "common_app.h"
 #include "timer.h"
 
 #include "rti_lnx.h"
@@ -192,7 +193,6 @@ enum
 	RTI_main_linux_threadId, SIMPLE_App_threadId, RTI_main_threadId_tblSize
 };
 
-sem_t event_mutex;
 
 static void print_usage(const char *prog) {
 	printf("Usage: %s [-DlHOLC3]\n", prog);
@@ -253,7 +253,7 @@ int main(int argc, char **argv)
 	parse_opts(argc, argv);
 
 	// Initialize shared semaphore. Must happen before program begins execution
-	sem_init(&event_mutex,0,1);
+	sem_init(&eventSem,0,1);
 
 //	FILE *tmpFile;
 
@@ -333,7 +333,7 @@ int main(int argc, char **argv)
 				// Indicate to application thread that the input is ready
 				consoleInput.handle = RTI_MAIN_INPUT_READY;
 				// Release resources waiting for this event
-				sem_post(&event_mutex);
+				sem_post(&eventSem);
 			}
 //			printf("Character read: \t%c, int: %d\n", consoleInput.latestCh,
 //					consoleInput.latestCh);
@@ -344,7 +344,7 @@ int main(int argc, char **argv)
 	}
 
 	// Destroy semaphores
-	sem_destroy(&event_mutex);
+	sem_destroy(&eventSem);
 
 	NPI_ClientClose();
 

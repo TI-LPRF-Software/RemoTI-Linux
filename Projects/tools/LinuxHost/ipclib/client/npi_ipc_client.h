@@ -230,13 +230,13 @@ extern "C"
   #define RTIS_CMD_ID_RTI_ALLOW_BIND_ABORT_REQ         0x41
 #endif //ZRC20_PROFILE
 
-#ifdef MSO_PROFILE
+#if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
   #define RTIS_CMD_ID_RTI_BIND_PARAMS_REQ        0x0E
   #define RTIS_CMD_ID_RTI_SET_BIND_INDICATOR_REQ 0x0F
   #define RTIS_CMD_ID_RTI_SEND_MSO_COMMAND_REQ   0x30
   #define RTIS_CMD_ID_RTI_BUILD_MSO_CMD_SET_REQ  0x31
   #define RTIS_CMD_ID_RTI_BUILD_MSO_CMD_GET_REQ  0x32
-#endif //MSO_PROFILE
+#endif //(defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 
   // RTIS Confirm Ids
   #define RTIS_CMD_ID_RTI_INIT_CNF               0x01
@@ -277,7 +277,7 @@ extern "C"
   #define RTIS_CMD_ID_RTI_BIND_ABORT_CNF               0x43
 #endif //ZRC20_PROFILE
 
-#ifdef MSO_PROFILE
+#if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
   //MSO Profile Command
   #define RTIS_CMD_ID_RTI_SEND_MSO_COMMAND_CNF      0x0F
 
@@ -288,7 +288,7 @@ extern "C"
   #define RTIS_CMD_ID_RTI_BIND_PARAMS_IND           0x34
   #define RTIS_CMD_ID_RTI_BIND_PARAMS_RSP           0x35
   #define RTIS_CMD_ID_RTI_UPDATE_BACKUP_P_ENTRY     0x36
-#endif //MSO_PROFILE
+#endif //(defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 
   // RTI States
   enum

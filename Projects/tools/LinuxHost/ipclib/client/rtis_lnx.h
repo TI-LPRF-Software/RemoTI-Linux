@@ -100,6 +100,27 @@ extern "C"
   #define RTIS_CMD_ID_RTI_READ_ITEM_EX           0x21
   #define RTIS_CMD_ID_RTI_WRITE_ITEM_EX          0x22
 
+#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
+#define RTIS_CMD_ID_RTI_BIND_REQ                     0x30
+#define RTIS_CMD_ID_RTI_ALLOW_BIND_REQ               0x31
+#define RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_RSP    0x32
+#define RTIS_CMD_ID_RTI_POLL_CONFIG_REQ              0x33
+#define RTIS_CMD_ID_RTI_IDENTIFICATION_CONFIG_REQ    0x34
+#define RTIS_CMD_ID_RTI_POLL_REQ                     0x35
+#define RTIS_CMD_ID_RTI_KEY_EXCHANGE_REQ             0x36
+#define RTIS_CMD_ID_RTI_GET_ATTRIBUTE_CNF            0x37
+#define RTIS_CMD_ID_RTI_SET_ATTRIBUTE_CNF            0x38
+#define RTIS_CMD_ID_RTI_SEND_IRDB_VENDOR_SUPPORT_REQ 0x39
+#define RTIS_CMD_ID_RTI_SEND_MAPPABLE_ACTIONS_REQ    0x3a
+#define RTIS_CMD_ID_RTI_GET_ACTION_MAPPINGS_REQ      0x3b
+#define RTIS_CMD_ID_RTI_HA_SUPPORTED_ANNOUNCE_REQ    0x3c
+#define RTIS_CMD_ID_RTI_PULL_HA_ATTRIBUTES_REQ       0x3d
+#define RTIS_CMD_ID_RTI_POLL_RSP                     0x3e
+#define RTIS_CMD_ID_RTI_UNBIND_REQ                   0x3f
+#define RTIS_CMD_ID_RTI_BIND_ABORT_REQ               0x40
+#define RTIS_CMD_ID_RTI_ALLOW_BIND_ABORT_REQ         0x41
+#endif //(defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
+
   // RTIS Confirm Ids
   #define RTIS_CMD_ID_RTI_INIT_CNF               0x01
   #define RTIS_CMD_ID_RTI_PAIR_CNF               0x02
@@ -115,6 +136,29 @@ extern "C"
   #define RTIS_CMD_ID_RTI_PAIR_ABORT_CNF         0x0C
   #define RTIS_CMD_ID_RTI_RESET_IND              0x0D
   #define RTIS_CMD_ID_RTI_IR_IND              	 0xA0
+
+#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
+#define RTIS_CMD_ID_RTI_BIND_CNF                     0x30
+#define RTIS_CMD_ID_RTI_SEND_PROFILE_CMD_CNF         0x31
+#define RTIS_CMD_ID_RTI_BIND_IND                     0x32
+#define RTIS_CMD_ID_RTI_START_VALIDATION_IND         0x33
+#define RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_IND    0x34
+#define RTIS_CMD_ID_RTI_POLL_CONFIG_CNF              0x35
+#define RTIS_CMD_ID_RTI_IDENTIFICATION_CONFIG_CNF    0x36
+#define RTIS_CMD_ID_RTI_POLL_CNF                     0x37
+#define RTIS_CMD_ID_RTI_KEY_EXCHANGE_CNF             0x38
+#define RTIS_CMD_ID_RTI_GET_ATTRIBUTE_REQ            0x39
+#define RTIS_CMD_ID_RTI_SET_ATTRIBUTE_REQ            0x3a
+#define RTIS_CMD_ID_RTI_SEND_IRDB_VENDOR_SUPPORT_CNF 0x3b
+#define RTIS_CMD_ID_RTI_SEND_MAPPABLE_ACTIONS_CNF    0x3c
+#define RTIS_CMD_ID_RTI_GET_ACTION_MAPPINGS_CNF      0x3d
+#define RTIS_CMD_ID_RTI_HA_SUPPORTED_ANNOUNCE_CNF    0x3e
+#define RTIS_CMD_ID_RTI_PULL_HA_ATTRIBUTES_CNF       0x3f
+#define RTIS_CMD_ID_RTI_POLL_IND                     0x40
+#define RTIS_CMD_ID_RTI_UNBIND_CNF                   0x41
+#define RTIS_CMD_ID_RTI_UNBIND_IND                   0x42
+#define RTIS_CMD_ID_RTI_BIND_ABORT_CNF               0x43
+#endif //(defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
 
   // RTI States
   enum

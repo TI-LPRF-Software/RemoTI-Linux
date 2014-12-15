@@ -165,10 +165,11 @@ extern "C"
  * INCLUDES
  **************************************************************************************************/
 
-#ifdef ZRC20_PROFILE
+#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
 // GDP API
 #include "gdp_api.h"
 #include "zrc.h"
+#include "zrc_profile.h"
 #endif
 
 /**************************************************************************************************
@@ -641,10 +642,10 @@ extern RTILIB_API void RTI_RxEnableReq( uint16 duration );
 extern RTILIB_API void RTI_EnableSleepReq( void );
 extern RTILIB_API void RTI_DisableSleepReq( void );
 extern RTILIB_API void RTI_EnterBootModeReq( void );
-#ifdef MSO_PROFILE
+#if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 extern RTILIB_API void RTI_GetValidationStatusRsp( uint8 dstIndex, uint8 status );
 extern RTILIB_API void RTI_SetBindingParamsReq(uint32 bindingParams);
-#endif //MSO_PROFILE
+#endif //FEATURE_MSO
 
 #if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
 // ZRC20 APIs
@@ -713,7 +714,7 @@ extern void RTI_IrInd( uint8 irData );
 /*0x43 */ extern void RTI_BindAbortCnf( rStatus_t status );
 #endif //FEATURE_ZRC20
 
-#ifdef MSO_PROFILE
+#if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 extern void RTI_PairInd( rStatus_t status, uint8 dstIndex, uint8 devType );
 extern void RTI_StartValidationInd( uint8 srcIndex );
 extern void RTI_GetValidationStatusInd( uint8 srcIndex, uint8 control );
@@ -724,7 +725,7 @@ extern bool RTI_CancelPairInd( void );
 extern void RTI_SetupDiscoveryParams( void );
 extern void RTI_BindingParamsInd( uint8 *ieeeAddr, uint8* msoUserString );
 extern void RTI_UpdateBackupPairingEntry(void);
-#endif //MSO_PROFILE
+#endif //FEATURE_MSO
 
 // The following function is used by a module within radio processor.
 // The functionsi not intended for use by application in host processor.

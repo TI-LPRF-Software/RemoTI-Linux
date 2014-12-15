@@ -422,7 +422,7 @@ static void *appThreadFunc(void *ptr)
 	while (!appThreadTerminate) 
 	{
 		// Wait for event
-		sem_wait(&event_mutex);
+		sem_wait(&eventSem);
 
 		events = timer_get_event(SIMPLE_App_threadId);
 		// Process events

@@ -223,7 +223,7 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 				// Earlier versions of this API does not have any arguments
 				RTI_BindingParamsInd(NULL, NULL);
 			}
-			else if (pMsg->len == (SADDR_EXT_LEN + MSO_USER_STRING_SIZE))
+			else if (pMsg->len >= (SADDR_EXT_LEN + MSO_USER_STRING_SIZE))
 			{
 				RTI_BindingParamsInd((uint8 *)&pMsg->pData[0], (uint8 *)&pMsg->pData[SADDR_EXT_LEN]);
 			}
@@ -234,7 +234,7 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 			break;
 #endif //MSO_PROFILE
 
-#ifdef ZRC20_PROFILE
+#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
 		case RTIS_CMD_ID_RTI_BIND_CNF://                     0x30
 			RTI_BindCnf( pMsg->pData[0], pMsg->pData[1] ); //
 			break;
@@ -1098,7 +1098,7 @@ RTILIB_API uint16 RTI_TestRxCounterGetReq(uint8 resetFlag)
   return (pMsg.pData[0] + ((uint16)pMsg.pData[1] << 8));
 }
 
-#ifdef ZRC20_PROFILE
+#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
 /**************************************************************************************************
  *
  * @fn          RTI_PairReq
@@ -1684,7 +1684,7 @@ RTILIB_API void RTI_AllowBindAbortReq( void )
 }
 #endif //ZRC20_PROFILE
 
-#ifdef MSO_PROFILE
+#if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 /**************************************************************************************************
  *
  * @fn          RTI_GetValidationStatusRsp
@@ -1751,7 +1751,7 @@ RTILIB_API void RTI_SetBindingParamsReq(uint32 bindingParams)
   // send serialized request to NP RTIS synchronously
   NPI_SendAsynchData( &pMsg );
 }
-#endif //MSO_PROFILE
+#endif //(defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 
 /**************************************************************************************************
  *

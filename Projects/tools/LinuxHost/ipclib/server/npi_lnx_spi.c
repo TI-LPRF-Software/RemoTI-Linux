@@ -734,10 +734,6 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 		ret = HalSpiRead( 0, pMsg->pData, ((uint8*)pMsg)[0]);
 	}
 
-	debug_printf("[SYNCH] Read %d more bytes ...", ((uint8*)pMsg)[0]);
-	for (i = RPC_FRAME_HDR_SZ ; i < (pMsg->len); i++ ) debug_printf(" 0x%.2x", ((uint8*)pMsg)[i]);
-	debug_printf("\n");
-
 	if (earlyMrdyDeAssert == FALSE)
 	{
 		//End of transaction
@@ -750,6 +746,10 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 			(void)HAL_RNP_MRDY_SET();
 		}
 	}
+
+	debug_printf("[SYNCH] Read %d more bytes ...", ((uint8*)pMsg)[0]);
+	for (i = RPC_FRAME_HDR_SZ ; i < (pMsg->len); i++ ) debug_printf(" 0x%.2x", ((uint8*)pMsg)[i]);
+	debug_printf("\n");
 
 #ifdef __BIG_DEBUG__
 	if (TRUE == HAL_RNP_SRDY_CLR())
