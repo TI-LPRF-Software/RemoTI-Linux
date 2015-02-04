@@ -63,7 +63,7 @@ enumerated as. Typically this will be ttyACM0. You can have RNP on CC2531 by fla
 and http://www.ti.com/tool/packet-sniffer. To modify the device change the path inside the .cfg file. 
 Then to execute the driver;
 
-<code>$ ./out/NPI_Server RemoTI_ACM0.cfg</code>
+<code>$ sudo ./out/NPI_lnx_x86_server configuration/x86/RemoTI_RNP_ACM0.cfg</code>
 
 If you have an NPI_Server running locally you can run the <code>simple</code> application like this;
 
