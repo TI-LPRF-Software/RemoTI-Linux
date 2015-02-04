@@ -480,6 +480,11 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 	char* psStr; // Processing string pointer
 	int res = -1;
 
+	int debugSettingBefore = __DEBUG_APP_ACTIVE;
+//	if (strcmp(key, "ValidationConfig") != 0)
+//	{
+//		__DEBUG_APP_ACTIVE = FALSE;
+//	}
 	// Get file access lock first
 	pthread_mutex_lock(&cfgFileAccessMutex);
 
@@ -722,6 +727,8 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 
 	// Release file access lock first
 	pthread_mutex_unlock(&cfgFileAccessMutex);
+
+	__DEBUG_APP_ACTIVE = debugSettingBefore;
 
 	return res;
 }

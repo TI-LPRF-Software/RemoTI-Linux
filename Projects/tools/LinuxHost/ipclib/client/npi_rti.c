@@ -53,7 +53,7 @@
 #include "hal_defs.h"
 #include "rti_lnx.h"
 
-#ifdef MSO_PROFILE
+#if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 #include "mso_common.h"
 #endif
 
@@ -204,7 +204,7 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 			RTI_IrInd( pMsg->pData[0] ); // irData
 			break;
 
-#ifdef MSO_PROFILE
+#if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 		case RTIS_CMD_ID_RTI_PAIR_IND:
 			RTI_PairInd(pMsg->pData[0], pMsg->pData[2], pMsg->pData[3]);
 			break;
@@ -232,7 +232,7 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 		case RTIS_CMD_ID_RTI_UPDATE_BACKUP_P_ENTRY:
 			RTI_UpdateBackupPairingEntry();
 			break;
-#endif //MSO_PROFILE
+#endif //FEATURE_MSO
 
 #if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
 		case RTIS_CMD_ID_RTI_BIND_CNF://                     0x30

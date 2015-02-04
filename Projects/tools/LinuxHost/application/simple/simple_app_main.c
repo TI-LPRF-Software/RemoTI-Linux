@@ -369,7 +369,7 @@ void DispMenuInit(void)
 	printf("\nt- Start As Target (default settings)\n");
 }
 
-void DispCFGCurrentCfg(appDevInfo_t appCfg, uint16 nwkAddr, uint16 panId)
+void DispCFGCurrentCfg(appDevInfo_t appCfg, uint16 nwkAddr, uint16 panId, uint8 *ieeAddr)
 {
 	int16 i;
 	char* tmpStr[4];
@@ -448,6 +448,12 @@ void DispCFGCurrentCfg(appDevInfo_t appCfg, uint16 nwkAddr, uint16 panId)
 	}
 	printf("- \tNWK Address: \t \t \t 0x%.4X\n", nwkAddr);
 	printf("- \tPAN ID: \t \t \t 0x%.4X\n", panId);
+	printf("- \tIEEE Address: \t \t \t %.2X", ieeAddr[7]);
+	for (i = 6; i >= 0; i--)
+	{
+		printf(":%.2X", ieeAddr[i]);
+	}
+	printf("\n");
 	printf("------------------------------------------------------\n");
 }
 

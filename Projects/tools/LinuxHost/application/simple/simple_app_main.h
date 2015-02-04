@@ -57,7 +57,7 @@ extern "C" {
 
 extern void DispMenuInit( void );
 extern void DispCFGProfileIDmenu(void);
-extern void DispCFGCurrentCfg(appDevInfo_t appCfg, uint16 nwkAddr, uint16 panId);
+extern void DispCFGCurrentCfg(appDevInfo_t appCfg, uint16 nwkAddr, uint16 panId, uint8 *ieeAddr);
 extern void DispCFGNodeCapMenu(void);
 extern void DispCFGProfileIDMenu(void);
 extern void DispCFGdevTypesMenu(void);

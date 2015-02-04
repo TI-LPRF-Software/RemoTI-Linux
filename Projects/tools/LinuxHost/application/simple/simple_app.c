@@ -258,6 +258,7 @@ enum {
 appDevInfo_t appCFGParam;
 uint16 ownNwkAddr;
 uint16 ownPANID;
+uint8 ownIEEE[8];
 uint8 appCFGstate;
 
 // Toggle Timer Print on Server state variable
@@ -414,7 +415,7 @@ static void *appThreadFunc(void *ptr)
 
 
 	// Display current configuration
-	DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
+	DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID, ownIEEE);
 	//Display menu...
 	DispMenuInit();
 
@@ -974,7 +975,7 @@ void RTI_InitCnf(rStatus_t status)
 		// Get configuration parameters from RNP, to make sure we display the correct settings
 		appGetCFGParamFromRNP();
 		// Display what we have configured
-		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
+		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID, ownIEEE);
 
 		printf("Entered %s [0x%.2X]\n", AppState_list[appState], appState);
 		//Display menu...
@@ -1584,7 +1585,7 @@ static void appConfigParamProcessKey(char* strIn)
 			// Get configuration parameters from RNP, to make sure we display the correct settings
 			appGetCFGParamFromRNP();
 			// Display what we have configured
-			DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
+			DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID, ownIEEE);
 			break;
 		case 'r':
 			appState = AP_STATE_READY;
@@ -1640,7 +1641,7 @@ static void appConfigParamProcessKey(char* strIn)
 			break;
 		case 'l':
 			// List current chosen configuration (not the one programmed to RNP)
-			DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
+			DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID, ownIEEE);
 			break;
 		default:
 			appCFGstate = APP_CFG_STATE_INIT;
@@ -1670,7 +1671,7 @@ static void appConfigParamProcessKey(char* strIn)
 			pStr = strtok (NULL, " ,:;-|");
 		}
 		// Display current configuration to give feedback to user about the changes
-		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
+		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID, ownIEEE);
 		// Return to CFG state
 		appCFGstate = APP_CFG_STATE_INIT;
 		DispMenuInit();
@@ -1695,7 +1696,7 @@ static void appConfigParamProcessKey(char* strIn)
 		// Update the number of supported Profile IDs (max 7)
 		RCN_APP_CAPA_SET_NUM_PROFILES(appCFGParam.appCapabilities, i);
 		// Display current configuration to give feedback to user about the changes
-		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
+		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID, ownIEEE);
 		// Return to CFG state
 		appCFGstate = APP_CFG_STATE_INIT;
 		DispMenuInit();
@@ -1726,7 +1727,7 @@ static void appConfigParamProcessKey(char* strIn)
 			}
 		}
 		// Display current configuration to give feedback to user about the changes
-		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
+		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID, ownIEEE);
 		// Return to CFG state
 		appCFGstate = APP_CFG_STATE_INIT;
 		DispMenuInit();
@@ -1757,7 +1758,7 @@ static void appConfigParamProcessKey(char* strIn)
 			}
 		}
 		// Display current configuration to give feedback to user about the changes
-		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID);
+		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID, ownIEEE);
 		// Return to CFG state
 		appCFGstate = APP_CFG_STATE_INIT;
 		DispMenuInit();
@@ -1982,6 +1983,11 @@ void appGetCFGParamFromRNP( void )
 			sizeof(uint16), (uint8 *)&ownPANID) != RTI_SUCCESS) {
 		//  AP_FATAL_ERROR();
 		printf("ERR: Failed to read PAN ID\n");
+	}
+
+	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_IEEE_ADDRESS, sizeof(ownIEEE), ownIEEE)) {
+		//  AP_FATAL_ERROR();
+		printf("ERR: Failed to read IEEE address\n");
 	}
 
 }
