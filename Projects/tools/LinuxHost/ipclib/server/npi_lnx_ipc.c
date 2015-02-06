@@ -467,6 +467,12 @@ int main(int argc, char ** argv)
 {
 	int ret = NPI_LNX_SUCCESS;
 
+#ifdef NPI_UNIX
+   printf("NPI_UNIX\n");
+#else
+   printf("NOT NPI_UNIX\n");
+#endif
+
 	/**********************************************************************
 	 * First step is to Configure the serial interface
 	 **********************************************************************/
@@ -475,17 +481,14 @@ int main(int argc, char ** argv)
 	// exit function.
 	char* strBuf;
 	uint8 gpioIdx = 0;
-	char* configFilePath;
+	char * configFilePath = "RemoTI_RNP.cfg";
 
-	if (argc==1)
-	{
-		configFilePath = "./RemoTI_RNP.cfg";
-	}
-	else if (argc==2)
-	{
-		configFilePath = argv[1];
-	}
-	else if (argc==3)
+   if (argc > 3)
+   {
+		printf("Too many arguments\n");
+		print_usage(argv[0]);
+   }
+   else if (argc > 2)
 	{
 		configFilePath = argv[1];
 		if (strcmp(argv[2], "debugAll") == 0)
@@ -506,12 +509,42 @@ int main(int argc, char ** argv)
 			print_usage(argv[0]);
 		}
 	}
-	else
+	else if (argc > 1)
 	{
-		printf("Too many arguments\n");
-		print_usage(argv[0]);
+		configFilePath = argv[1];
 	}
+   else
+   {
+      // No config file path specified.  Try defaulting it...
 
+      FILE *fpTemp = fopen(configFilePath, "r");
+      if (fpTemp)
+      {
+         // Config file exists in working directory.  Use it.
+         fclose(fpTemp);
+      }
+      else
+      {
+         // Config file does not exist in working directory.
+         // Presume it's located in the same directory as
+         // the binary, so point there.
+         char *lastSlash = strrchr(argv[0], '/');
+         if (lastSlash)
+         {
+            char     *pathToUse;
+            size_t   pathLen;
+
+            ++lastSlash;
+            pathLen = (size_t)(lastSlash-argv[0]) + strlen(configFilePath) + 1; /* +1 is for null term */
+
+            pathToUse = malloc(pathLen);
+            snprintf(pathToUse, pathLen, "%.*s%s", (int)(lastSlash-argv[0]), argv[0], configFilePath);
+            configFilePath = pathToUse;
+         }
+      }
+   }
+
+   printf("configFilePath is \"%s\"\n", configFilePath);
 
 	// Allocate memory for string buffer and configuration buffer
 	strBuf = (char*) malloc(128);
