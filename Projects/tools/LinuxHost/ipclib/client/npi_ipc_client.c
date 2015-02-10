@@ -51,10 +51,19 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
+
+#ifdef __WIN32__
+# include <winsock2.h>
+#else
+# include <sys/socket.h>
+# include <sys/un.h>
+# include <poll.h>
+#endif
+
+
 #include <pthread.h>
-#include <poll.h>
+
+
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -659,8 +668,11 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 #endif //__BIG_DEBUG__
 
 	/* thread loop */
-
-	struct pollfd ufds[1];
+#ifdef __WIN32__
+    WSAPOLLFD ufds[1];
+#else
+     struct pollfd ufds[1];
+#endif
 	int pollRet;
 	ufds[0].fd = sNPIconnected;
 	ufds[0].events = POLLIN | POLLPRI;
@@ -676,7 +688,11 @@ static void *npi_ipc_readThreadFunc (void *ptr)
       		debug_time_printf("[NPI Client READ] Read thread 1ms timeout \n");
 #endif //__DEBUG_TIME__
 			// In case there are messages received yet to be processed allow processing by timing out after 1ms.
+#ifdef __WIN32__
+			pollRet = poll((WSAPOLLFD*)&ufds, 1, 1);
+#else
 			pollRet = poll((struct pollfd*)&ufds, 1, 1);
+#endif
 		}
 		else
 		{
@@ -686,7 +702,11 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 			// In case there are no messages received to be processed wait forever.
 			debug_verbose_printf("[NPI Client READ] Read thread Wait forever\n");
 #endif //__DEBUG_TIME__
-			pollRet = poll((struct pollfd*)&ufds, 1, -1);
+#ifdef __WIN32__
+			pollRet = poll((WSAPOLLFD*)&ufds, 1, -1);
+#else
+            pollRet = poll((struct pollfd*)&ufds, 1, -1);
+#endif
 		}
 
 		if (pollRet == -1)
