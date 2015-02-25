@@ -104,7 +104,7 @@ const char * const rtiStatus_list[256] =
         NAME_ELEMENT(RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT),                //0xFF
 };
 
-const char * const rtiProfileId_list[RTI_PROFILE_RTI + 1] =
+const char * const rtiProfileId_list[0xFF + 1] =
 {
 		[0 ... RTI_PROFILE_RTI] = NULL,
 		NAME_ELEMENT(RTI_PROFILE_GDP),
@@ -193,6 +193,7 @@ enum
 	RTI_main_linux_threadId, SIMPLE_App_threadId, RTI_main_threadId_tblSize
 };
 
+sem_t eventSem;
 
 static void print_usage(const char *prog) {
 	printf("Usage: %s [-DlHOLC3]\n", prog);

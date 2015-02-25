@@ -1719,6 +1719,7 @@ static void appConfigParamProcessKey(char* strIn)
 			pStr = strtok (NULL, " ,:;-|");
 		}
 		// Fill in the missing Target Types
+		RCN_APP_CAPA_SET_NUM_DEV_TYPES(appCFGParam.appCapabilities, i);
 		if (i < RTI_MAX_NUM_DEV_TYPES)
 		{
 			for (; i < RTI_MAX_NUM_DEV_TYPES; i ++)
@@ -1819,9 +1820,9 @@ void appInitConfigParam( char tgtSelection )
 			appCFGParam.tgtTypeList[i] = tgtListTGT[i];
 		}
 
-		debug_printf("ZRC profile activated\n");
+		debug_printf("ZRC + ZID profile activated\n");
 		// No User String pairing; 1 Device (Television); 2 Profile (ZRC and ZID)
-		appCFGParam.appCapabilities = RTI_BUILD_APP_CAPABILITIES(1, 1, 2);
+		appCFGParam.appCapabilities = RTI_BUILD_APP_CAPABILITIES(0, 1, 2);
 
 		for (i = 0; i < sizeof(devListTGT); i++) {
 			appCFGParam.devTypeList[i] = devListTGT[i];

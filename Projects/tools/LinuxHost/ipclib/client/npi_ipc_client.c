@@ -198,7 +198,7 @@ npiProcessMsg_t NpiAsyncMsgCbackParserTable[] =
 #define NAME_ELEMENT(element) [element] = #element
 
 
-const char * const RpcCmdType_list[RPC_SYS_MAX + 1] = { //15 Cmd Type
+const char * const RpcCmdType_list[RPC_SYS_MAX + 1] = { //18 Cmd Type
 		[0 ... RPC_SYS_MAX] = NULL,
 		NAME_ELEMENT(RPC_SYS_RES0),
 		NAME_ELEMENT(RPC_SYS_SYS),
@@ -214,6 +214,9 @@ const char * const RpcCmdType_list[RPC_SYS_MAX + 1] = { //15 Cmd Type
 		NAME_ELEMENT(RPC_SYS_RCN),
 		NAME_ELEMENT(RPC_SYS_RCN_CLIENT),
 		NAME_ELEMENT(RPC_SYS_BOOT),
+		NAME_ELEMENT(RPC_SYS_DEBUG),
+		NAME_ELEMENT(RPC_SYS_PERIPHERALS),
+		NAME_ELEMENT(RPC_SYS_NFC),
 		NAME_ELEMENT(RPC_SYS_MAX)
 };
 

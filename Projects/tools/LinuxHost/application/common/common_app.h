@@ -68,8 +68,10 @@ extern "C" {
 // Shared semaphore declared and initialized in main,
 // set (incremented) by main and timer
 // and waited on (decremented) by app
-sem_t eventSem;
-sem_t exit_mutex;
+extern sem_t eventSem;
+extern sem_t exit_mutex;
+
+extern int __APP_LOG_LEVEL;
 
 #if defined _MSC_VER || defined(unix)
 #pragma pack()
