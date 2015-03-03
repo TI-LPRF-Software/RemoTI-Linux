@@ -1,12 +1,12 @@
-// Don't forget that in order to access WitBe Artifactory you need to setup
+// Don't forget that in order to access Witbe Artifactory you need to setup
 // your default user/password in your ~/.gradle/gradle.properties file
 // you can also have a copy of the gradle.properties file in the current directory.
 
-// Build Scripts Plugin Repositories&Dependencies
+// Build Scripts Plugin Repositories & Dependencies
 buildscript {
     repositories {
         maven {
-            url 'http://192.168.250.126:8081/artifactory/plugins-release'
+            url "${artifactory_contextUrl}plugins-release"
             credentials {
                 username = "${artifactory_user}"
                 password = "${artifactory_password}"
@@ -14,158 +14,108 @@ buildscript {
         }
     }
     dependencies {
-        classpath group: 'org.ysb33r.gradle', name: 'gnumake', version: '0.1'
+        classpath group: 'net.witbe.qoe', name: 'witbe-builder', version: '0.0.2'
     }
-}
-
-plugins {
-    id "com.jfrog.artifactory" version "3.0.1"
 }
 
 // Load/Apply Plugins
-apply plugin: 'com.jfrog.artifactory'
 apply plugin: 'maven-publish'
-
-// Import Plugin Class Dependency
-import org.ysb33r.gradle.gnumake.GnuMakeBuild
+apply plugin: 'net.witbe.qoe.witbe-builder'
 
 // Project Settings / Configuration.
-allprojects {
-    group = "net.witbe.qoe.rf4ce"
-    version = currentVersion
-    ext.destDir = "${buildDir}/out"
-    ext.installPrefix = '/usr/'
-    ext.installPath = "${destDir}${installPrefix}"
-    ext.artifactPath = "${buildDir}/artifacts"
-    ext.artifactDir = new File(artifactPath)
-    ext.artifactDir.mkdirs()
-    ext.architecture = standardArchitecture()
-    ext.nbCore = Runtime.runtime.availableProcessors() / 2
-}
+project.group = "net.witbe.qoe.rf4ce"
+project.ext.environment = [
+PATH:         "${System.getenv('PATH')}:${witbeBuilder.nativeDependenciesPath}/bin",
+CPATH:        "${witbeBuilder.nativeDependenciesPath}/include",
+LIBRARY_PATH: "${witbeBuilder.nativeDependenciesPath}/lib",
+DESTDIR:      witbeBuilder.destPath
+]
 
-// Tasks
-task configure(type: Exec) {
-    workingDir(buildDir)
-    executable 'cmake'
-    args '..', "-DCMAKE_INSTALL_PREFIX=${installPrefix}", "-DVERSION=$version"
-}
+dependencies {}
 
-task build(type: GnuMakeBuild) {
-    dependsOn 'configure'
-    workingDir = "$buildDir"
-    targets = []
-}
-
-task install(type: GnuMakeBuild) {
-    dependsOn 'build'
-    targets = ['install']
-    flags = [ DESTDIR : destDir]
-    workingDir = "$buildDir"
-}
-
-task genPackages(type: GnuMakeBuild) {
-    dependsOn 'install'
-    targets = ['package']
-    flags = [ DESTDIR : destDir]
-    workingDir = "$buildDir"
-}
-
-task artifactsTar(type: Tar) {
-    dependsOn genPackages
-    baseName "${project.name}-${project.version}-${project.ext.architecture}"
-    destinationDir = artifactDir
-    compression Compression.GZIP
-    from "${installPath}", {
-        include 'lib/**'
-        include 'include/**'
-    }
-}
-
-// Publications
-publishing {
-  repositories {
-    maven {
-      name 'libs-release'
-      url 'http://192.168.250.126:8081/artifactory/libs-release-local'
-      credentials {
-        username = "${artifactory_user}"
-        password = "${artifactory_password}"
-      }
-    }
-    maven {
-      name 'yum-release'
-      url 'http://192.168.250.126:8081/artifactory/yum-release-local'
-      credentials {
-        username = "${artifactory_user}"
-        password = "${artifactory_password}"
-      }
-    }
-  }
-
-  publications {
-    buildDependency(MavenPublication) {
-      artifactId "remoti"
-      groupId = "net.witbe.qoe.rf4ce"
-
-      artifact artifactsTar
-      ext.repoName = 'libs-release'
+    // Mandatory Tasks
+    task prepare {
+        dependsOn 'extractDependencies'
     }
 
-    remotiServer(MavenPublication) {
-      artifactId "remoti-server"
-      groupId "7.os.x86_64"
-
-      artifact "${buildDir}/remoti-dev-x86_64-server.rpm"
-      ext.repoName = 'yum-release'
+    task clean(dependsOn: ['cleanDependencies', 'cleanInstall']) {
+        // cmake clean
     }
-  }
-}
 
-//
-// Utility Parts of the Scripts, with tools, Extra functions or hack.
-
-// Help maven-publish to publish different publication on different repos
-afterEvaluate {
-  tasks.withType(PublishToMavenRepository).all { Ptask ->
-    Ptask.onlyIf { task ->
-      if (task.publication.hasProperty('repoName') && task.publication.repoName != task.repository.name) {
-        task.enabled = false
-        task.group = null
-        return false
-      }
-      return true
+    task configure(type: Exec, dependsOn: prepare) {
+        environment project.environment
+        workingDir buildDir
+        executable 'cmake'
+        args "..", "-DCMAKE_BUILD_TYPE=RELEASE", "-DVERSION=${version}",
+        "-DCMAKE_INSTALL_PREFIX=${witbeBuilder.installPrefix}",
+        "-DWITBE_NATIVE_DEPENDENCIES_PATH=${witbeBuilder.nativeDependenciesPath}",
+        "-DWITBE_CMAKE_DEPENDENCIES_PATH=${witbeBuilder.cmakeDependenciesPath}"
     }
-  }
-}
 
-// Utility Methods
-def standardArchitecture() {
-    def arch = System.getProperty('os.arch');
-    return (arch == 'amd64') ? "x86_64" : arch;
-}
+    task build(type: Exec, dependsOn: configure) {
+        environment project.environment
+        workingDir buildDir
+        executable 'make'
+        args
+    }
 
-// Artifactory Plugin Configuration (custom artifactory DSL)
-// artifactory {
-//     contextUrl = "http://192.168.250.126:8081/artifactory"
-//     publish {
-//         repository {
-//             repoKey = 'libs-release-local'
-//             username = "${artifactory_user}"
-//             password = "${artifactory_password}"
-//             maven = true
-//         }
-//         defaults {
-//             publications ('cmakeProject')
-//             publishBuildInfo = true
-//             publishPom = false
-//         }
-//     }
-//   resolve {
-//         repository {
-//             repoKey = 'libs-release'
-//             username = "${artifactory_user}"
-//             password = "${artifactory_password}"
-//             maven = true
-//         }
-//     }
-// }
+    task install(type: Exec, dependsOn: [build, 'cleanInstall']) {
+        environment project.environment
+        workingDir buildDir
+        executable 'make'
+        args 'install', "-j${nbCore}"
+    }
+
+    task test(dependsOn: install) {
+    }
+
+    task packages(type: Exec, dependsOn: test) {
+        environment project.environment
+        workingDir buildDir
+        executable 'make'
+        args 'package'
+    }
+
+    task artifacts(dependsOn: develArchiveArtifact) {
+    }
+
+    // Publications
+    publishing {
+        repositories {
+            maven {
+                name 'libs-release'
+                url = witbeBuilder.artifactoryContextUrl + 'libs-release-local'
+                credentials(witbeBuilder.artifactoryCredentials)
+            }
+            maven {
+                name 'yum-release'
+                url = witbeBuilder.artifactoryContextUrl + 'yum-release-local'
+                credentials(witbeBuilder.artifactoryCredentials)
+            }
+        }
+        publications {
+            witbeProject(MavenPublication) {
+                artifact develArchiveArtifact
+                ext.repoName = 'libs-release'
+                ext.dependencyConfiguration = 'natives'
+            }
+            witbeRPMS(MavenPublication) {
+                groupId "7.os.x86_64"
+                artifact(file("${buildDir}/remoti-${project.version}-${project.architecture}-libs.rpm")) { extension 'rpm'; classifier 'libs' }
+                artifact(file("${buildDir}/remoti-${project.version}-${project.architecture}-devel.rpm")) { extension 'rpm'; classifier 'devel' }
+                artifact(file("${buildDir}/remoti-${project.version}-${project.architecture}-server.rpm")) { extension 'rpm'; classifier 'server' }
+                ext.repoName = 'yum-release'
+            }
+        }
+    }
+
+    // Artifactory Plugin Configuration (custom artifactory DSL)
+    def extRepository = { repoKey = "ext-release-local" } << witbeBuilder.artifactoryRepository
+    artifactory {
+        contextUrl = "${artifactory_contextUrl}"
+        resolve { repository(witbeBuilder.artifactoryRepository) }
+        publish {
+            repository(extRepository)
+            defaults { publications ('witbeProject', 'witbeRPMS'); publishArtifacts = false; }
+        }
+    }
