@@ -67,6 +67,7 @@
 #include "npi_lnx.h"
 
 #include "npi_lnx_error.h"
+#include "lprfLogging.h"
 
 #ifdef NPI_SYS
 #include "npi_sys.h"
@@ -99,28 +100,9 @@
 #include "npi_xrTestif.h"
 #endif
 
-#ifdef __DEBUG_TIME__
-#include "time_printf.h"
-#endif //__DEBUG_TIME__
-
 #include "npi_ipc_client.h"
 
 #define NPI_PORT "2533"
-
-
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#define debug_verbose_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-#define debug_printf(fmt, ...) 			st(if (__DEBUG_CLIENT_ACTIVE >= 1) printf( fmt, ##__VA_ARGS__);)
-#define debug_verbose_printf(fmt, ...) 	st(if (__DEBUG_CLIENT_ACTIVE >= 2) printf( fmt, ##__VA_ARGS__);)
-#endif
-
-#ifdef __DEBUG_TIME__
-#define debug_time_printf(fmt)	st(if ( (__DEBUG_CLIENT_ACTIVE >= 1) ) time_printf( fmt);)
-#endif
-
-uint8 __DEBUG_CLIENT_ACTIVE = FALSE;
 
 #define msg_memcpy(src, dst, len)	memcpy(src, dst, len)
 
@@ -315,6 +297,7 @@ static void npi_ipc_delsyncres(void);
 int NPI_ClientInit(const char *devPath)
 {
 	int res = NPI_LNX_SUCCESS;
+	int connectAttemptsLeft = NPI_SERVER_CONNECT_ATTEMPTS_MAX;
 #ifndef NPI_UNIX
 	const char *ipAddress = "", *port = "";
 	int i = 0;
@@ -367,7 +350,7 @@ int NPI_ClientInit(const char *devPath)
 
     if ((sNPIconnected = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
     {
-        perror("socket");
+        LOG_FATAL("%s(): Unable to create a socket! Exiting app!\n", __FUNCTION__);
         exit(1);
     }
 #else
@@ -382,32 +365,32 @@ int NPI_ClientInit(const char *devPath)
 	if (port == NULL)
 	{
 		// Fall back to default if port was not found in the configuration file
-		printf("[NPI Client] Warning! Port not sent to NPI. Will use default port: %s", NPI_PORT);
+		LOG_WARN("%s() Warning! Port not sent to NPI. Will use default port: %s", __FUNCTION__, NPI_PORT);
 
 	    if ((res = getaddrinfo(ipAddress, NPI_PORT, &hints, &resAddr)) != 0)
 	    {
-	    	fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+	    	LOG_ERROR("getaddrinfo: %s\n", gai_strerror(res));
 	    	res = NPI_LNX_ERROR_IPC_SOCKET_GET_ADDRESS_INFO;
 	    }
 	}
 	else
 	{
-	    printf("[NPI Client] Port: %s\n\n", port);
+	    LOG_DEBUG("[NPI Client] Port: %s\n\n", port);
 	    if ((res = getaddrinfo(ipAddress, port, &hints, &resAddr)) != 0)
 	    {
-	    	fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+	    	LOG_ERROR("%s(): getaddrinfo: %s\n", __FUNCTION__, gai_strerror(res));
 	    	res = NPI_LNX_ERROR_IPC_SOCKET_GET_ADDRESS_INFO;
 	    }
 	}
 
-    printf("[NPI Client] IP addresses for %s:\n", ipAddress);
+    LOG_DEBUG("[NPI Client] IP addresses for %s:\n", ipAddress);
 
     struct addrinfo *p;
     char ipstr[INET6_ADDRSTRLEN];
     for(p = resAddr;p != NULL; p = p->ai_next)
     {
         void *addr;
-        char *ipver;
+        char const *ipver;
 
         // get the pointer to the address itself,
         // different fields in IPv4 and IPv6:
@@ -423,46 +406,66 @@ int NPI_ClientInit(const char *devPath)
 
         // convert the IP to a string and print it:
         inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr);
-        printf("  %s: %s\n", ipver, ipstr);
+        LOG_DEBUG("  %s: %s\n", ipver, ipstr);
     }
 
 
     if ((sNPIconnected = socket(resAddr->ai_family, resAddr->ai_socktype, resAddr->ai_protocol)) == -1)
     {
-        perror("socket");
+        LOG_FATAL("%s(): Unable to create a socket! Exiting app!\n", __FUNCTION__);
         res = NPI_LNX_ERROR_IPC_SOCKET_CREATE;
+        exit(1);
     }
 #endif
 
-    printf("[NPI Client] Trying to connect...\n");
+    LOG_INFO("[NPI Client] Connecting to NPI Server...\n");
+
+    do
+    {
+       LOG_DEBUG("%s(): Trying to connect...\n", __FUNCTION__);
 
 #ifdef NPI_UNIX
-    remote.sun_family = AF_UNIX;
-    strcpy(remote.sun_path, unixPath);
-    len = strlen(remote.sun_path) + sizeof(remote.sun_family);
-    if (connect(sNPIconnected, (struct sockaddr *)&remote, len) == -1)
-    {
-        perror("connect");
-        res = NPI_LNX_ERROR_IPC_SOCKET_CONNECT;
-    	printf("[NPI Client] Not connected. res = 0x%.2X\n", res);
-    }
+        remote.sun_family = AF_UNIX;
+        strcpy(remote.sun_path, unixPath);
+        len = strlen(remote.sun_path) + sizeof(remote.sun_family);
+        if (connect(sNPIconnected, (struct sockaddr *)&remote, len) == -1)
+        {
+            LOG_ERROR("[NPI Client] connect");
+            res = NPI_LNX_ERROR_IPC_SOCKET_CONNECT;;
+            LOG_DEBUG("[NPI Client] %s(): Not connected. res = 0x%.2X\n", __FUNCTION__, res);
+        }
 #else
-    if (connect(sNPIconnected, resAddr->ai_addr, resAddr->ai_addrlen) == -1)
-    {
-        perror("connect");
-        res = NPI_LNX_ERROR_IPC_SOCKET_CONNECT;
-    	printf("[NPI Client] Not connected. res = 0x%.2X\n", res);
-    }
+        if (connect(sNPIconnected, resAddr->ai_addr, resAddr->ai_addrlen) == -1)
+        {
+            LOG_ERROR("[NPI Client] connect");
+            res = NPI_LNX_ERROR_IPC_SOCKET_CONNECT;;
+            LOG_DEBUG("[NPI Client] %s(): Not connected. res = 0x%.2X\n", __FUNCTION__, res);
+        }
 #endif
+        else
+        {
+            res =  NPI_LNX_SUCCESS;
+        }
 
-#ifdef __DEBUG_TIME__
-	// Start time_print module here. This way it will be fairly synchronized with the NPI Server time prints
-	time_printf_start();
-#endif //__DEBUG_TIME__
+        if (res != NPI_LNX_SUCCESS)
+        {
+            if (--connectAttemptsLeft)
+            {
+                LOG_WARN("[NPI Client] Unable to connect to NPI server.  Will retry again in %d second%s.  (Will give up after %d more attempts.)\n", 
+                     NPI_SERVER_CONNECT_RETRY_SECONDS, NPI_SERVER_CONNECT_RETRY_SECONDS==1 ? "" : "s", connectAttemptsLeft);
+                sleep(NPI_SERVER_CONNECT_RETRY_SECONDS);
+            }
+            else
+            {
+                LOG_ERROR("[NPI Client] Unable to connect to NPI server after %d seconds.  Giving up!\n", NPI_SERVER_CONNECT_RETRY_SECONDS * NPI_SERVER_CONNECT_ATTEMPTS_MAX);
+            }
+        }
+
+    } while (res != NPI_LNX_SUCCESS && connectAttemptsLeft > 0);
 
     if (res == NPI_LNX_SUCCESS)
     {
-    	printf("[NPI Client] Client connected.\n");
+       LOG_INFO("[NPI Client] Connected to NPI Server.\n");
     }
 
 
@@ -472,8 +475,9 @@ int NPI_ClientInit(const char *devPath)
     	// allow out-of-band data
     	if (setsockopt(sNPIconnected, SOL_SOCKET, SO_OOBINLINE, &no, sizeof(int)) == -1)
     	{
-    		perror("setsockopt");
-            res = NPI_LNX_ERROR_IPC_SOCKET_SET_SOCKET_OPTIONS;
+    		LOG_ERROR("[NPI Client] setsockopt");
+    		LOG_ERROR("[NPI Client] %s(): Failed to set socket options!\n", __FUNCTION__);
+    		res = NPI_LNX_ERROR_IPC_SOCKET_SET_SOCKET_OPTIONS;
     	}
     }
 
@@ -486,7 +490,7 @@ int NPI_ClientInit(const char *devPath)
     	if (pthread_create(&NPIThreadId, NULL, npi_ipc_readThreadFunc, NULL))
     	{
     		// thread creation failed
-    		printf("[NPI Client][ERROR] Failed to create NPI IPC Client read thread\n");
+    		LOG_ERROR("[NPI Client] %s(): Failed to create NPI IPC Client read thread\n", __FUNCTION__);
             res = NPI_LNX_ERROR_IPC_THREAD_CREATION_FAILED;
     	}
     }
@@ -500,7 +504,7 @@ int NPI_ClientInit(const char *devPath)
     	if (pthread_create(&NPIThreadId, NULL, npi_ipc_handleThreadFunc, NULL))
     	{
     		// thread creation failed
-    		printf("[NPI Client][ERROR] Failed to create NPI IPC Client handle thread\n");
+    		LOG_ERROR("[NPI Client] Failed to create NPI IPC Client handle thread\n");
             res = NPI_LNX_ERROR_IPC_THREAD_CREATION_FAILED;
     	}
     }
@@ -511,14 +515,14 @@ int NPI_ClientInit(const char *devPath)
     	uint8 param[2];
 		//Read Software Version.
 		NPI_ReadVersionReq(version);
-		printf("[NPI Client] Connected to Server v%d.%d.%d\n", version[0], version[1], version[2]);
+		LOG_INFO("[NPI Client] Connected to Server v%d.%d.%d\n", version[0], version[1], version[2]);
 
 		//Read Number of Active Connection Version.
 		NPI_ReadParamReq(NPI_LNX_PARAM_NB_CONNECTIONS,2, param);
-		printf("[NPI Client] %d active connection , out of %d maximum connections\n", param[0], param[1]);
+		LOG_INFO("[NPI Client] %d active connection , out of %d maximum connections\n", param[0], param[1]);
 		//Check Which interface is used.
 		NPI_ReadParamReq(NPI_LNX_PARAM_DEVICE_USED, 1 , param);
-		printf("[NPI Client] Interface used y server: %d (0 = UART, 1 = SPI, 2 = I2C, 3 = HID, 4 = ZID)\n", param[0]);
+		LOG_DEBUG("[NPI Client] Interface used y server: %d (0 = UART, 1 = SPI, 2 = I2C, 3 = HID, 4 = ZID)\n", param[0]);
 
 	}
 
@@ -553,13 +557,13 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
 		if (tryLockFirstTimeOnly == 0)
 		{
 			// Lock mutex
-			debug_verbose_printf("[NPI Client HANDLE][MUTEX] Lock AREQ Mutex (Handle)\n");
+			LOG_TRACE("[NPI Client HANDLE][MUTEX] Lock AREQ Mutex (Handle)\n");
 			int mutexRet = 0, writeOnce = 0;
 			while ( (mutexRet = pthread_mutex_trylock(&npiLnxClientAREQmutex)) == EBUSY)
 			{
 				if (writeOnce == 0)
 				{
-					debug_verbose_printf("[NPI Client HANDLE][MUTEX] AREQ Mutex (Handle) busy");
+					LOG_TRACE("[NPI Client HANDLE][MUTEX] AREQ Mutex (Handle) busy");
 					fflush(stdout);
 					writeOnce++;
 				}
@@ -568,38 +572,38 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
 					writeOnce++;
 					if ( (writeOnce % 1000) == 0)
 					{
-						debug_verbose_printf(".");
+						LOG_TRACE(".");
 					}
 					if (writeOnce > 0xEFFFFFF0)
 						writeOnce = 1;
 					fflush(stdout);
 				}
 			}
-			debug_verbose_printf("\n[NPI Client HANDLE][MUTEX] AREQ Lock (Handle) status: %d\n", mutexRet);
+			LOG_TRACE("\n[NPI Client HANDLE][MUTEX] AREQ Lock (Handle) status: %d\n", mutexRet);
 			tryLockFirstTimeOnly = 1;
 		}
 
 		// Conditional wait for the response handled in the AREQ handling thread,
-		debug_verbose_printf("[NPI Client HANDLE][MUTEX] Wait for AREQ Cond (Handle) signal... (areqMsgProcessStatus = %d), effectively releasing lock\n", areqMsgProcessStatus);
+		LOG_TRACE("[NPI Client HANDLE][MUTEX] Wait for AREQ Cond (Handle) signal... (areqMsgProcessStatus = %d), effectively releasing lock\n", areqMsgProcessStatus);
 		pthread_cond_wait(&npiLnxClientAREQcond, &npiLnxClientAREQmutex);
-		debug_verbose_printf("[NPI Client HANDLE][MUTEX] AREQ (Handle) has lock\n");
+		LOG_TRACE("[NPI Client HANDLE][MUTEX] AREQ (Handle) has lock\n");
 
 		// Walk through all received AREQ messages before releasing MUTEX
 		areqMsg *searchList = npi_ipc_areq_proc_buf, *clearList;
 		while (searchList != NULL)
 		{
-			debug_verbose_printf("\n\n[NPI Client HANDLE][DBG] Processing \t@ %p next \t@ %p\n",
+			LOG_TRACE("\n\n[NPI Client HANDLE][DBG] Processing \t@ %p next \t@ %p\n",
 					(void *)searchList,
 					(void *)(searchList->nextMessage));
 
 			// Must remove command type before calling NPI_AsynchMsgCback
 			searchList->message.subSys &= ~(RPC_CMD_TYPE_MASK);
 
-			debug_verbose_printf("[NPI Client HANDLE][MUTEX] AREQ Calling NPI_AsynchMsgCback (Handle)...\n");
+			LOG_TRACE("[NPI Client HANDLE][MUTEX] AREQ Calling NPI_AsynchMsgCback (Handle)...\n");
 
 			NPI_AsynchMsgCback((npiMsgData_t *)&(searchList->message));
 
-			debug_verbose_printf("[NPI Client HANDLE][MUTEX] AREQ (Handle) (message @ %p)...\n", (void *)searchList);
+			LOG_TRACE("[NPI Client HANDLE][MUTEX] AREQ (Handle) (message @ %p)...\n", (void *)searchList);
 
 			clearList = searchList;
 			// Set search list to next message
@@ -609,25 +613,25 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
 			{
 				// Impossible error, must abort
 				done = 1;
-				printf("[NPI Client HANDLE][ERR] clearList buffer was already free\n");
+				LOG_ERROR("[NPI Client HANDLE][ERR] clearList buffer was already free\n");
 				break;
 			}
 			else
 			{
 				messageCount--;
-				debug_verbose_printf("[NPI Client HANDLE][DBG] Clearing \t\t@ %p (processed %d messages)...\n",
+				LOG_TRACE("[NPI Client HANDLE][DBG] Clearing \t\t@ %p (processed %d messages)...\n",
 						(void *)clearList,
 						messageCount);
 				memset(clearList, 0, sizeof(areqMsg));
 				free(clearList);
 			}
 		}
-		debug_verbose_printf("[NPI Client HANDLE][MUTEX] AREQ Signal message(s) handled (Handle) (processed %d messages)...\n", messageCount);
+		LOG_TRACE("[NPI Client HANDLE][MUTEX] AREQ Signal message(s) handled (Handle) (processed %d messages)...\n", messageCount);
 		// Signal to the read thread that we're ready for more
 		//			pthread_cond_signal(&npiLnxClientAREQcond);
 		areqMsgProcessStatus = NPI_MSG_AREQ_READY;
 
-		debug_printf("[NPI Client HANDLE][DBG] Finished processing (processed %d messages)...\n",
+		LOG_DEBUG("[NPI Client HANDLE][DBG] Finished processing (processed %d messages)...\n",
 				messageCount);
 
 	} while (!done);
@@ -654,7 +658,7 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
  **************************************************************************************************/
 static void *npi_ipc_readThreadFunc (void *ptr)
 {
-	int done = 0, n;
+	int done = 0, n = 0;
 
 	int mutexRet = 0;
 #ifdef __BIG_DEBUG__
@@ -676,19 +680,15 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 		if (npi_ipc_areq_rec_buf != NULL)
 		{
 #ifdef __DEBUG_TIME__
-      		debug_time_printf("[NPI Client READ] Read thread 1ms timeout \n");
+      		LOG_DEBUG("[NPI Client READ] Read thread 1ms timeout \n");
 #endif //__DEBUG_TIME__
 			// In case there are messages received yet to be processed allow processing by timing out after 1ms.
 			pollRet = poll((struct pollfd*)&ufds, 1, 1);
 		}
 		else
 		{
-#ifdef __DEBUG_TIME__
-			debug_time_printf("[NPI Client READ] Read thread wait forever\n");
-#else
 			// In case there are no messages received to be processed wait forever.
-			debug_verbose_printf("[NPI Client READ] Read thread Wait forever\n");
-#endif //__DEBUG_TIME__
+			LOG_TRACE("[NPI Client READ] Read thread Wait forever\n");
 			pollRet = poll((struct pollfd*)&ufds, 1, -1);
 		}
 
@@ -698,7 +698,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 			// We simply want to continue on EINTR since we don't have a signal handler anyway
 			if (errno != EINTR)
 			{
-				perror("poll");
+				LOG_ERROR("[NPI Client] poll");
 			}
 		}
 		else if (pollRet == 0)
@@ -722,19 +722,25 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 			if (n <= 0)
 			{
 				if (n < 0)
-					perror("recv");
+					LOG_ERROR("[NPI Client] recv");
 				done = 1;
 			}
-			else if (n == RPC_FRAME_HDR_SZ)
+			else if  (n != RPC_FRAME_HDR_SZ)
+			{
+				// Invalid length received
+				LOG_ERROR("[NPI Client READ] Received invalid number of bytes %d, expected %d. Errno: %d\n",
+						n, RPC_FRAME_HDR_SZ, errno);
+			}
+			else
 			{
 				// We have received the header, now read out length bytes and process it,
 				// if there are bytes to receive.
 				if (((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len > 0)
 				{
-				n = recv(sNPIconnected,
-						(uint8*)&(npi_ipc_buf[0][RPC_FRAME_HDR_SZ]),
-						((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len,
-						0);
+					n = recv(sNPIconnected,
+							(uint8*)&(npi_ipc_buf[0][RPC_FRAME_HDR_SZ]),
+							((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len,
+							0);
 				}
 				else
 				{
@@ -742,18 +748,28 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 					n = ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len;
 				}
 
-				if (n == ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len)
+				if (n != ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len)
+				{
+					// Invalid length received
+					LOG_ERROR("[NPI Client READ] Received invalid number of bytes %d, expected %d. Errno: %d\n",
+							n, ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len, errno);
+				}
+				else
 				{
 					int i;
-					debug_printf("[NPI Client READ] Received %d bytes,\t subSys 0x%.2X, cmdId 0x%.2X, pData:\t",
-							((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len,
-							((npiMsgData_t *)&(npi_ipc_buf[0][0]))->subSys,
-							((npiMsgData_t *)&(npi_ipc_buf[0][0]))->cmdId);
+				    char str[256];
+				    uint8 charWritten;
+				    charWritten = snprintf(str, sizeof(str), "[NPI Client READ] Received %d bytes,\t subSys 0x%.2X, cmdId 0x%.2X, pData:\t",
+											((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len,
+											((npiMsgData_t *)&(npi_ipc_buf[0][0]))->subSys,
+											((npiMsgData_t *)&(npi_ipc_buf[0][0]))->cmdId);
+				    charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\t");
 					for (i = 3; i < (n + RPC_FRAME_HDR_SZ); i++)
-					{
-						debug_printf(" 0x%.2X", (uint8)npi_ipc_buf[0][i]);
-					}
-					debug_printf("\n");
+				    {
+				       charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", (uint8)npi_ipc_buf[0][i]);
+				    }
+				    charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\n");
+				    LOG_DEBUG("%s", str);
 
 					if ( ( (uint8)(((npiMsgData_t *)&(npi_ipc_buf[0][0]))->subSys) & (uint8)RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP )
 					{
@@ -765,20 +781,14 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 								numOfReceievedSRSPbytes);
 
 						// and signal the synchronous reception
-						debug_printf("[NPI Client READ][MUTEX] SRSP Cond signal set\n");
-						debug_verbose_printf("[NPI Client READ] Client Read: (len %d): ", numOfReceievedSRSPbytes);
+						LOG_DEBUG("[NPI Client READ][MUTEX] SRSP Cond signal set\n");
+						LOG_TRACE("[NPI Client READ] Client Read: (len %d): ", numOfReceievedSRSPbytes);
 						fflush(stdout);
 						pthread_cond_signal(&npiLnxClientSREQcond);
 					}
 					else if ( ( (uint8)(((npiMsgData_t *)&(npi_ipc_buf[0][0]))->subSys) & (uint8)RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ )
 					{
-#ifdef __DEBUG_TIME__
-						char str[128];
-						snprintf(str, sizeof(str), "[NPI Client READ] RPC_CMD_AREQ cmdId: 0x%.2X\n", ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->cmdId);
-						debug_time_printf(str);
-#else
-						debug_printf("[NPI Client READ] RPC_CMD_AREQ cmdId: 0x%.2X\n", ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->cmdId);
-#endif //__DEBUG_TIME__
+						LOG_DEBUG("[NPI Client READ] RPC_CMD_AREQ cmdId: 0x%.2X\n", ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->cmdId);
 						// Verify the size of the incoming message before passing it
 						if ( (((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len + RPC_FRAME_HDR_SZ) <= sizeof(npiMsgData_t) )
 						{
@@ -788,19 +798,19 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 							{
 								// Serious error, must abort
 								done = 1;
-								printf("[NPI Client READ][ERR] Could not allocate memory for AREQ message\n");
+								LOG_ERROR("[NPI Client READ] Could not allocate memory for AREQ message\n");
 								break;
 							}
 							else
 							{
 								messageCount++;
 								memset(newMessage, 0, sizeof(areqMsg));
-								debug_verbose_printf("\n[NPI Client READ][DBG] Allocated \t@ %p (received\040 %d messages)...\n",
+								LOG_TRACE("\n[NPI Client READ][DBG] Allocated \t@ %p (received\040 %d messages)...\n",
 										(void *)newMessage,
 										messageCount);
 							}
 
-							debug_verbose_printf("[NPI Client READ] Filling new message (@ %p)...\n", (void *)newMessage);
+							LOG_TRACE("[NPI Client READ] Filling new message (@ %p)...\n", (void *)newMessage);
 
 							// Copy AREQ message into AREQ buffer
 							memcpy(&(newMessage->message),
@@ -827,10 +837,10 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 						else
 						{
 							// Serious error
-							printf("[NPI Client READ] ERR: Incoming AREQ has incorrect length field; %d\n",
+							LOG_ERROR("[NPI Client READ] ERR: Incoming AREQ has incorrect length field; %d\n",
 									((npiMsgData_t *)&(npi_ipc_buf[0][0]))->len);
 
-							debug_verbose_printf("[NPI Client READ][MUTEX] Unlock AREQ Mutex (Read)\n");
+							LOG_TRACE("[NPI Client READ][MUTEX] Unlock AREQ Mutex (Read)\n");
 							// Then unlock the thread so the handle can handle the AREQ
 							pthread_mutex_unlock(&npiLnxClientAREQmutex);
 						}
@@ -839,20 +849,12 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 					else
 					{
 						// Cannot handle synchronous requests from RNP
-						printf("[NPI Client READ] ERR: Received unknown subsystem: 0x%.2X\n", ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->subSys);
+						LOG_ERROR("[NPI Client READ] ERR: Received unknown subsystem: 0x%.2X\n", ((npiMsgData_t *)&(npi_ipc_buf[0][0]))->subSys);
 					}
 
 					// Clear buffer for next message
 					memset(npi_ipc_buf[0], 0, NPI_IPC_BUF_SIZE);
 				}
-				else
-				{
-					// Impossible. ... ;)
-				}
-			}
-			else
-			{
-				// Impossible. ... ;)
 			}
 		}
 
@@ -864,7 +866,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 			// Can only process 1 AREQ at a time...
 			if (writeOnceAREQReady == 0)
 			{
-				debug_verbose_printf("[NPI Client READ][MUTEX] Waiting for AREQ Handle to acknowledge processing the message\n");
+				LOG_TRACE("[NPI Client READ][MUTEX] Waiting for AREQ Handle to acknowledge processing the message\n");
 				fflush(stdout);
 				writeOnceAREQReady++;
 			}
@@ -873,11 +875,11 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 				writeOnceAREQReady++;
 				if ( (writeOnceAREQReady % 1000) == 0)
 				{
-					debug_verbose_printf("[NPI Client READ][MUTEX] Still waiting for AREQ Handle to acknowledge processing the message\n");
+					LOG_TRACE("[NPI Client READ][MUTEX] Still waiting for AREQ Handle to acknowledge processing the message\n");
 				}
 				else if ( (writeOnceAREQReady % 10) == 0)
 				{
-					debug_verbose_printf("*");
+					LOG_TRACE("*");
 				}
 				if (writeOnceAREQReady > 0xEFFFFFF0)
 					writeOnceAREQReady = 1;
@@ -886,11 +888,11 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 #endif //__BIG_DEBUG__
 			if ( (messageCount > 100) && ( (messageCount % 100) == 0) )
 			{
-				printf("[NPI Client READ] [WARNING] AREQ message count: %4d", messageCount);
+				LOG_WARN("[NPI Client READ] AREQ message count: %4d", messageCount);
 				if (messageCount < 500)
 				{
 					// More than 500 messages in the buffer requires attention!
-					printf("\r");
+					LOG_WARN("\n");
 				}
 			}
 		}
@@ -899,14 +901,14 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 		{
 #ifdef __BIG_DEBUG__
 			if (writeOnceAREQMutexTry == 0)
-				debug_verbose_printf("[NPI Client READ][MUTEX] Lock AREQ Mutex (Read)\n");
+				LOG_TRACE("[NPI Client READ][MUTEX] Lock AREQ Mutex (Read)\n");
 #endif //__BIG_DEBUG__
 			if ( (mutexRet = pthread_mutex_trylock(&npiLnxClientAREQmutex)) == EBUSY)
 			{
 #ifdef __BIG_DEBUG__
 				if (writeOnceAREQMutexTry == 0)
 				{
-					debug_verbose_printf("[NPI Client READ][MUTEX] AREQ Mutex (Read) busy");
+					LOG_TRACE("[NPI Client READ][MUTEX] AREQ Mutex (Read) busy");
 					fflush(stdout);
 					writeOnceAREQMutexTry++;
 				}
@@ -915,7 +917,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 					writeOnceAREQMutexTry++;
 					if ( (writeOnceAREQMutexTry % 100) == 0)
 					{
-						debug_verbose_printf(".");
+						LOG_TRACE(".");
 					}
 					if (writeOnceAREQMutexTry > 0xEFFFFFF0)
 						writeOnceAREQMutexTry = 1;
@@ -927,7 +929,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 			{
 #ifdef __BIG_DEBUG__
 				writeOnceAREQMutexTry = 0;
-				debug_verbose_printf("\n[NPI Client READ][MUTEX] AREQ Lock (Read), status: %d\n", mutexRet);
+				LOG_TRACE("\n[NPI Client READ][MUTEX] AREQ Lock (Read), status: %d\n", mutexRet);
 #endif //__BIG_DEBUG__
 
 				areqMsgProcessStatus = NPI_MSG_AREQ_BUSY;
@@ -937,17 +939,17 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 				// Clear receiving buffer for new messages
 				npi_ipc_areq_rec_buf = NULL;
 
-				debug_verbose_printf("[NPI Client READ][DBG] Copied message list (processed %d messages)...\n",
+				LOG_TRACE("[NPI Client READ][DBG] Copied message list (processed %d messages)...\n",
 						messageCount);
 
-				debug_verbose_printf("[NPI Client READ][MUTEX] Unlock AREQ Mutex (Read)\n");
+				LOG_TRACE("[NPI Client READ][MUTEX] Unlock AREQ Mutex (Read)\n");
 				// Then unlock the thread so the handle can handle the AREQ
 				pthread_mutex_unlock(&npiLnxClientAREQmutex);
 
-				debug_verbose_printf("[NPI Client READ][MUTEX] AREQ Signal message read (Read)...\n");
+				LOG_TRACE("[NPI Client READ][MUTEX] AREQ Signal message read (Read)...\n");
 				// Signal to the handle thread an AREQ message is ready
 				pthread_cond_signal(&npiLnxClientAREQcond);
-				debug_verbose_printf("[NPI Client READ][MUTEX] AREQ Signal message read (Read)... sent\n");
+				LOG_TRACE("[NPI Client READ][MUTEX] AREQ Signal message read (Read)... sent\n");
 
 #ifdef __BIG_DEBUG__
 				writeOnceAREQReady = 0;
@@ -1080,25 +1082,28 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 	((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_SREQ;
 
 	int i;
-	debug_verbose_printf("[NPI Client SEND SYNCH] preparing to send %d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData:",
-			pMsg->len,
-			pMsg->subSys,
-			pMsg->cmdId);
-	debug_verbose_printf("\t");
-	for (i = 0; i < pMsg->len; i++)
-	{
-		debug_verbose_printf(" 0x%.2X", pMsg->pData[i]);
-	}
-	debug_verbose_printf("\n");
+    char str[256];
+    uint8 charWritten = 0;
+    charWritten = snprintf(str, sizeof(str), "[NPI Client SEND SYNCH] preparing to send %d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData:",
+    						pMsg->len,
+    						pMsg->subSys,
+    						pMsg->cmdId);
+    charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\t");
+    for (i = 0; i < pMsg->len; i++)
+    {
+       charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", pMsg->pData[i]);
+    }
+    charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\n");
+    LOG_DEBUG("%s", str);
 
 	// Lock mutex
-	debug_verbose_printf("[NPI Client SEND SYNCH][MUTEX] Lock SRSP Mutex");
+	LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Lock SRSP Mutex");
 	int mutexRet = 0, writeOnce = 0;
 	while ( (mutexRet = pthread_mutex_trylock(&npiLnxClientSREQmutex)) == EBUSY)
 	{
 		if (writeOnce == 0)
 		{
-			debug_verbose_printf("\n[NPI Client SEND SYNCH][MUTEX] SRSP Mutex busy");
+			LOG_TRACE("\n[NPI Client SEND SYNCH][MUTEX] SRSP Mutex busy");
 			fflush(stdout);
 			writeOnce++;
 		}
@@ -1107,35 +1112,35 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 			writeOnce++;
 			if ( (writeOnce % 1000) == 0)
 			{
-				debug_verbose_printf(".");
+				LOG_TRACE(".");
 			}
 			if (writeOnce > 0xFFFFFFF0)
 				writeOnce = 1;
 			fflush(stdout);
 		}
 	}
-	debug_verbose_printf("\n[NPI Client SEND SYNCH][MUTEX] SRSP Lock status: %d\n", mutexRet);
+	LOG_TRACE("\n[NPI Client SEND SYNCH][MUTEX] SRSP Lock status: %d\n", mutexRet);
 
 	if (send(sNPIconnected, (uint8 *)pMsg, pMsg->len + RPC_FRAME_HDR_SZ, 0) == -1)
 	{
-		perror("send");
+		LOG_FATAL("[NPI Client] send");
 		exit(1);
 	}
 
-	debug_verbose_printf("[NPI Client SEND SYNCH] Waiting for synchronous response...\n");
+	LOG_TRACE("[NPI Client SEND SYNCH] Waiting for synchronous response...\n");
 
 	// Conditional wait for the response handled in the receiving thread,
 	// wait maximum 4 seconds
 	gettimeofday(&curtime, NULL);
 	expirytime.tv_sec = curtime.tv_sec + NPI_IPC_CLIENT_SYNCH_TIMEOUT;
 	expirytime.tv_nsec = curtime.tv_usec * 1000;
-	debug_verbose_printf("[NPI Client SEND SYNCH][MUTEX] Wait for SRSP Cond signal...\n");
+	LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Wait for SRSP Cond signal...\n");
 	result = pthread_cond_timedwait(&npiLnxClientSREQcond, &npiLnxClientSREQmutex, &expirytime);
 	if (result == ETIMEDOUT)
 	{
 		// TODO: Indicate synchronous transaction error
-		debug_verbose_printf("[NPI Client SEND SYNCH][MUTEX] SRSP Cond Wait timed out!\n");
-		debug_printf("[NPI Client SEND SYNCH][ERR] SRSP Cond Wait timed out!\n");
+		LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] SRSP Cond Wait timed out!\n");
+		LOG_WARN("[NPI Client SEND SYNCH] SRSP Cond Wait timed out!\n");
 
 		// Clear response buffer before processing
 		memset(npi_ipc_srsp_buf, 0, sizeof(npiMsgData_t));
@@ -1145,16 +1150,17 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 	// Wait for response
 	else if ( numOfReceievedSRSPbytes > 0)
 	{
+        charWritten = snprintf(str, sizeof(str), "[NPI Client] received data:");
 		for (i = 0; i < numOfReceievedSRSPbytes; i++)
 		{
-			debug_verbose_printf(" 0x%.2X", (uint8)npi_ipc_srsp_buf[i]);
+	        charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", (uint8)npi_ipc_srsp_buf[i]);
 		}
-		debug_verbose_printf("\n");
+		LOG_TRACE("%s", str);
 
 		// Sanity check on length
 		if (numOfReceievedSRSPbytes != ( ((npiMsgData_t *)npi_ipc_srsp_buf)->len + RPC_FRAME_HDR_SZ))
 		{
-			printf("[NPI Client SEND SYNCH] Mismatch in read IPC data and the expected length\n. \n\tread bytes = %d \n\tnpiMsgLength(+ 3) = %d \n\t\n",
+			LOG_FATAL("[NPI Client SEND SYNCH] Mismatch in read IPC data and the expected length\n. \n\tread bytes = %d \n\tnpiMsgLength(+ 3) = %d \n\t\n",
 					numOfReceievedSRSPbytes,
 					((npiMsgData_t *)npi_ipc_srsp_buf)->len + RPC_FRAME_HDR_SZ);
 			exit(1);
@@ -1166,15 +1172,15 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 	else
 	{
 		if ( numOfReceievedSRSPbytes < 0)
-			perror("recv");
+			LOG_ERROR("[NPI Client] recv");
 		else
-			printf("[NPI Client SEND SYNCH] Server closed connection\n");
+			LOG_WARN("[NPI Client SEND SYNCH] Server closed connection\n");
 	}
 
 	numOfReceievedSRSPbytes = 0;
 
 	// Now unlock the mutex before returning
-	debug_verbose_printf("[NPI Client SEND SYNCH][MUTEX] Unlock SRSP Mutex\n");
+	LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Unlock SRSP Mutex\n");
 	pthread_mutex_unlock(&npiLnxClientSREQmutex);
 }
 
@@ -1203,20 +1209,22 @@ void NPI_SendAsynchData (npiMsgData_t *pMsg)
 		((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_AREQ;
 
 	int i;
-	debug_verbose_printf("[NPI Client SEND ASYNCH] trying to send %d bytes,\t subSys 0x%.2X, cmdId 0x%.2X, pData:",
-			pMsg->len,
-			pMsg->subSys,
-			pMsg->cmdId);
-	debug_verbose_printf("\t");
-	for (i = 0; i < pMsg->len; i++)
-	{
-		debug_verbose_printf(" 0x%.2X", pMsg->pData[i]);
-	}
-	debug_verbose_printf("\n");
+    char str[256];
+    uint8 charWritten;
+    charWritten = snprintf(str, sizeof(str), "[NPI Client SEND ASYNCH] trying to send %d bytes,\t subSys 0x%.2X, cmdId 0x%.2X, pData:",
+							pMsg->len,
+							pMsg->subSys,
+							pMsg->cmdId);
+    charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\t");
+    for (i = 0; i < pMsg->len; i++)
+    {
+       charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", pMsg->pData[i]);
+    }
+    LOG_DEBUG("%s\n", str);
 
 	if (send(sNPIconnected, ((uint8*)pMsg), pMsg->len + RPC_FRAME_HDR_SZ , 0) == -1)
 	{
-		perror("send");
+		LOG_FATAL("[NPI Client SEND ASYNCH] send");
 		exit(1);
 	}
 }
@@ -1224,50 +1232,47 @@ void NPI_SendAsynchData (npiMsgData_t *pMsg)
 int NPI_AsynchMsgCback(npiMsgData_t *pMsg )
 {
   npiProcessMsg_t  func;
-  int res;
+  int res = -1;
 
-  if (npiState != NPI_STATE_READY)
+  if (npiState == NPI_STATE_READY)
   {
-	return -1;
-  }
-
-  /* check subsystem range */
-  if (pMsg->subSys < RPC_SYS_MAX)
-  {
-    /* look up processing function */
-    func = NpiAsyncMsgCbackParserTable[pMsg->subSys];
-    if (func)
+    /* check subsystem range */
+    if (pMsg->subSys < RPC_SYS_MAX)
     {
-#ifdef __DEBUG_TIME__
-    	char str[256];
-    	uint8 charWritten, i;
-    	charWritten = snprintf(str, sizeof(str), "[NPI Client CBACK START] subSys 0x%.2X, cmdId 0x%.2X, pData:",
-		pMsg->subSys,
-		pMsg->cmdId);
-    	charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\t");
-    	for (i = 0; i < pMsg->len; i++)
-    	{
-    		charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", pMsg->pData[i]);
-    	}
-    	charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\n");
-    	debug_time_printf(str);
+      /* look up processing function */
+      func = NpiAsyncMsgCbackParserTable[pMsg->subSys];
+      if (func)
+      {
+#ifdef   __DEBUG_TIME__
+         char str[256];
+         uint8 charWritten, i;
+         charWritten = snprintf(str, sizeof(str), "[NPI Client CBACK START] subSys 0x%.2X, cmdId 0x%.2X, pData:",
+                           pMsg->subSys,
+                           pMsg->cmdId);
+         charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\t");
+         for (i = 0; i < pMsg->len; i++)
+         {
+            charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", pMsg->pData[i]);
+         }
+         charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\n");
+         LOG_DEBUG("%s", str);
 #endif //__DEBUG_TIME__
-      /* execute processing function */
-      res = (*func)(pMsg);
+        /* execute processing function */
+        res = (*func)(pMsg);
 #ifdef __DEBUG_TIME__
-      	debug_time_printf("[NPI Client CBACK ENDED] \n");
+         LOG_DEBUG("[NPI Client CBACK ENDED] \n");
 #endif //__DEBUG_TIME__
+      }
+      else
+      {
+        LOG_TRACE("Warning! Asynch Msg received not handled! Did you register the parser callback for ?: %s \n", RpcCmdType_list[pMsg->subSys]);
+      }
     }
     else
     {
-		debug_verbose_printf("Warning! Asynch Msg received not handleD! Did you register the parser callback for ?: %s \n", RpcCmdType_list[pMsg->subSys]);
+        LOG_TRACE("Warning! Asynch Msg received does not correspond to any module: %d >=  RPC_SYS_MAX: \n", pMsg->subSys);
     }
   }
-  else
-  {
-		debug_verbose_printf("Warning! Asynch Msg received does not correspond to any module: %d >=  RPC_SYS_MAX: \n", pMsg->subSys);
-  }
-
   return res;
 
 }
@@ -1416,6 +1421,47 @@ void NPI_DisconnectReq( uint8 *pStatus )
   // Note: the first byte of the payload is reserved for the status
   msg_memcpy( pStatus, &pMsg.pData[0], pMsg.len );
 }
+
+/**************************************************************************************************
+ *
+ * @fn          NPI_SetWorkaroundReq
+ *
+ * @brief       This API is used to ask NPI server to set workaround.
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * output parameters
+ *
+ * @param       item		- Workaround ID
+ * @param       *pStatus 	- Pointer to buffer where status is read.
+ *
+ * None.
+ *
+ * @return      None.
+ *
+ **************************************************************************************************/
+void NPI_SetWorkaroundReq( uint8 workaroundID, uint8 *pStatus )
+{
+  npiMsgData_t pMsg;
+
+  // Prepare workaround request
+  pMsg.subSys = RPC_SYS_SRV_CTRL;
+//  pMsg.cmdId  = NPI_LNX_CMD_ID_WORKAROUND;
+  pMsg.cmdId  = 2;
+  pMsg.len    = 2;
+
+  pMsg.pData[0] = workaroundID;
+  pMsg.pData[1] = *pStatus;
+
+  NPI_SendSynchData( &pMsg );
+
+  // copy the reply data to the client's buffer
+  // Note: the first byte of the payload is reserved for the status
+  msg_memcpy( pStatus, &pMsg.pData[0], pMsg.len );
+}
+
 
 // -- utility porting --
 

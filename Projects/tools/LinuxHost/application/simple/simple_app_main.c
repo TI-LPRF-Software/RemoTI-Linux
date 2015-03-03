@@ -46,6 +46,7 @@
 #include "simple_app.h"
 #include "common_app.h"
 #include "timer.h"
+#include "lprfLogging.h"
 
 #include "rti_lnx.h"
 // Linux surrogate interface
@@ -188,12 +189,14 @@ struct pollfd fds[1];
 const char *device = "";
 const char *debugOption = "";
 
+/* Global variable definitions. Declared as externs in common_app.h */
+sem_t eventSem;
+int __APP_LOG_LEVEL = LOG_LEVEL_INFO;
+
 enum 
 {
 	RTI_main_linux_threadId, SIMPLE_App_threadId, RTI_main_threadId_tblSize
 };
-
-sem_t eventSem;
 
 static void print_usage(const char *prog) {
 	printf("Usage: %s [-DlHOLC3]\n", prog);

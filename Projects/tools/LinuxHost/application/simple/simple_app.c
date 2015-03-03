@@ -49,6 +49,7 @@
 
 #include "common_app.h"
 #include "timer.h"
+#include "lprfLogging.h"
 
 #include "simple_app_main.h"
 #include "simple_app.h"
@@ -64,24 +65,13 @@
 // macros
 #define PAUSE() { fflush(stdout); while (getchar()!='\n'); }
 
-int __DEBUG_APP_ACTIVE = 0;
-
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-#define debug_printf(fmt, ...)
-#endif
-
-
 // Application state variable
 uint8 appState;
-
 
 struct timeval curTime, startTime, prevTimeSend, prevTimeRec, prevTime;
 
 // Pairing reference
 uint8 destIdx;
-
 
 // ch from console
 char ch;
@@ -299,7 +289,7 @@ int SimpleAppInit(int mode, char threadId)
 	uint8 value[2];
 	SIMPLE_App_threadId = threadId;
 
-	printf("\n-------------------- START TURN ON DEBUG TRACES -------------------\n");
+	LOG_INFO("-------------------- START TOGGLE DEBUG TRACES on SERVER/DAEMON SIDE-------------------\n");
 	npiMsgData_t pMsg;
 	pMsg.len = 1;
 	pMsg.subSys = RPC_SYS_SRV_CTRL | RPC_CMD_SREQ;
@@ -316,7 +306,7 @@ int SimpleAppInit(int mode, char threadId)
 	NPI_SendSynchData( &pMsg );
 	if (RTI_SUCCESS == pMsg.pData[0])
 	{
-		printf("__BIG_DEBUG_ACTIVE set to: 0x%.2X\n", toggleBigDebugPrintOnServer);
+		LOG_INFO("__BIG_DEBUG_ACTIVE set to: 0x%.2X\n", toggleBigDebugPrintOnServer);
 	}
 
 	pMsg.cmdId = NPI_LNX_CMD_ID_CTRL_TIME_PRINT_REQ;
@@ -331,30 +321,30 @@ int SimpleAppInit(int mode, char threadId)
 	NPI_SendSynchData( &pMsg );
 	if (RTI_SUCCESS == pMsg.pData[0])
 	{
-		printf("__DEBUG_TIME_ACTIVE set to: 0x%.2X\n", toggleTimerPrintOnServer);
+		LOG_INFO("__DEBUG_TIME_ACTIVE set to: 0x%.2X\n", toggleTimerPrintOnServer);
 	}
-	printf("debugBig %d, debugTime %d\n", toggleBigDebugPrintOnServer, toggleTimerPrintOnServer);
-	printf("\n-------------------- END TURN ON DEBUG TRACES -------------------\n\n");
+	LOG_INFO("debugBig %d, debugTime %d\n", toggleBigDebugPrintOnServer, toggleTimerPrintOnServer);
+	LOG_INFO("-------------------- END TOGGLE DEBUG TRACES on SERVER/DAEMON SIDE -------------------\n\n");
 
-	printf("\n-------------------- START SOFTWARE VERSION READING-------------------\n");
+	LOG_INFO("[Initialization]-------------------- START SOFTWARE VERSION READING-------------------\n");
 
 	if (RTI_SUCCESS != RTI_ReadItem(RTI_CONST_ITEM_SW_VERSION, 1, value))
 	{
-		fprintf(stderr, "Failed to read Software Version.\n");
+		LOG_ERROR("Failed to read Software Version.\n");
 
-		fprintf(stderr, " Please check connection.\n");
+		LOG_ERROR(" Please check connection.\n");
 		exit(-1);
 	}
 	else
 	{
-		printf("- Software Version = 0x%x\n", value[0]);
-		printf("-------------------- END SOFTWARE VERSION READING-------------------\n");
+		LOG_INFO("[Initialization]- Software Version = 0x%x\n", value[0]);
 
 		if (value[0] >= 0x2D)
 		{
 			getAndPrintExtendedSoftwareVersion(FALSE);
 		}
 	}
+	LOG_INFO("[Initialization]-------------------- END SOFTWARE VERSION READING-------------------\n");
 
 
 	// Setup default configuration
@@ -375,7 +365,7 @@ int SimpleAppInit(int mode, char threadId)
 	if (pthread_create(&AppThreadId, NULL, appThreadFunc, NULL)) 
 	{
 		// thread creation failed
-		printf("Failed to create app thread\n");
+		LOG_ERROR("Failed to create app thread\n");
 		return -1;
 	}
 
@@ -387,13 +377,13 @@ static void appInitSyncRes(void)
 	// initialize all mutexes
 	if (pthread_mutex_init(&appThreadMutex, NULL))
 	{
-		printf("Fail To Initialize Mutex appThreadMutex\n");
+		LOG_ERROR("Fail To Initialize Mutex appThreadMutex\n");
 		exit(-1);
 	}
 
 	if (pthread_mutex_init(&appInitMutex, NULL))
 	{
-		printf("Fail To Initialize Mutex appInitMutex\n");
+		LOG_ERROR("Fail To Initialize Mutex appInitMutex\n");
 		exit(-1);
 	}
 }
@@ -411,7 +401,7 @@ static void *appThreadFunc(void *ptr)
 	// set sample application state to not ready until RTI Init is successfully confirmed
 	appState = AP_STATE_INIT;
 
-	printf("App Thread Started \n");
+	LOG_INFO("App Thread Started \n");
 
 
 	// Display current configuration
@@ -429,7 +419,7 @@ static void *appThreadFunc(void *ptr)
 		// Process events
 		if (events != 0) {
 			appProcessEvents(events);
-			debug_printf("State: %s [0x%.2X]\n", AppState_list[appState], appState);
+			LOG_DEBUG("State: %s [0x%.2X]\n", AppState_list[appState], appState);
 		}
 
 		// Only process actions if there is a character available
@@ -470,13 +460,13 @@ static void *appThreadFunc(void *ptr)
 					if (appCFGParam.nodeCapabilities & RCN_NODE_CAP_TARGET)
 					{
 						// Allow pairing
-						printf("Calling RTI_AllowPairReq\n");
+						LOG_INFO("Calling RTI_AllowPairReq\n");
 						RTI_AllowPairReq();
 					}
 					else // We must be Controller
 					{
 						// Pairing
-						printf("Calling RTI_PairReq\n");
+						LOG_INFO("Calling RTI_PairReq\n");
 						RTI_PairReq();
 					}
 
@@ -489,13 +479,13 @@ static void *appThreadFunc(void *ptr)
 					if (appCFGParam.nodeCapabilities & RCN_NODE_CAP_TARGET)
 					{
 						// Abort AllowPair
-						printf("Calling RTI_AllowPairAbortReq\n");
+						LOG_INFO("Calling RTI_AllowPairAbortReq\n");
 						RTI_AllowPairAbortReq();
 					}
 					else // We must be Controller
 					{
 						// Abort Pair
-						printf("Calling RTI_PairAbortReq\n");
+						LOG_INFO("Calling RTI_PairAbortReq\n");
 						RTI_PairAbortReq();
 					}
 
@@ -510,13 +500,13 @@ static void *appThreadFunc(void *ptr)
 				{
 					appState = AP_STATE_UNPAIR;
 					// Unpair
-					printf("Calling RTI_UnpairReq  for index 0\n");
+					LOG_INFO("Calling RTI_UnpairReq  for index 0\n");
 					RTI_UnpairReq(0);
 				}
 				else
 				{
 					// Simply remain in whatever state we're in
-					printf("Cannot call RTI_UnpairReq, because we're in state: 0x%.2X\n", appState);
+					LOG_INFO("Cannot call RTI_UnpairReq, because we're in state: 0x%.2X\n", appState);
 				}
 			}
 			else if ((ch == 'h') ||
@@ -530,7 +520,7 @@ static void *appThreadFunc(void *ptr)
 				{
 					faEnable = TRUE;
 					status = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
-					printf("Frequency Agility re-enabled (%s)\n", rtiStatus_list[status]);
+					LOG_INFO("Frequency Agility re-enabled (%s)\n", rtiStatus_list[status]);
 				}
 				else
 				{
@@ -547,11 +537,11 @@ static void *appThreadFunc(void *ptr)
 						channel = 25;
 					}
 					status = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
-					printf("Frequency Agility disabled (%s)\n", rtiStatus_list[status]);
+					LOG_INFO("Frequency Agility disabled (%s)\n", rtiStatus_list[status]);
 					if (status == RTI_SUCCESS)
 					{
 						RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_CURRENT_CHANNEL, 1, (uint8 *)&channel);
-						printf("Channel set to %d\n", channel);
+						LOG_INFO("Channel set to %d\n", channel);
 					}
 				}
 			}
@@ -577,10 +567,10 @@ static void *appThreadFunc(void *ptr)
 				pMsg.len    = 1;
 
 				pMsg.pData[0] = NPI_SERVER_DEVICE_INDEX_SPI;
-				printf("Connecting to %d ...", pMsg.pData[0]);
+				LOG_INFO("Connecting to %d ...", pMsg.pData[0]);
 
 				NPI_SendSynchData( &pMsg );
-				printf(" status %d\n", pMsg.pData[0]);
+				LOG_INFO(" status %d\n", pMsg.pData[0]);
 			}
 			else if (ch == '4')
 			{
@@ -591,10 +581,10 @@ static void *appThreadFunc(void *ptr)
 				pMsg.len    = 1;
 
 				pMsg.pData[0] = NPI_SERVER_DEVICE_INDEX_SPI;
-				printf("Disconnecting from %d ...", pMsg.pData[0]);
+				LOG_INFO("Disconnecting from %d ...", pMsg.pData[0]);
 
 				NPI_SendSynchData( &pMsg );
-				printf("Disconnected, status %d\n", pMsg.pData[0]);
+				LOG_INFO("Disconnected, status %d\n", pMsg.pData[0]);
 			}
 			else if (ch == '7')
 			{
@@ -606,7 +596,7 @@ static void *appThreadFunc(void *ptr)
 				}
 				else
 				{
-					printf("ERR: Cannot send data in this state: %s [0x%.2X]\nRNP Power State: \t %s [0x%.2X]\n",
+					LOG_ERROR("Cannot send data in this state: %s [0x%.2X]\nRNP Power State: \t %s [0x%.2X]\n",
 							AppState_list[appState], appState,
 							RNPpowerState_list[appRNPpowerState], appRNPpowerState);
 				}
@@ -645,7 +635,7 @@ static void *appThreadFunc(void *ptr)
 				NPI_SendSynchData( &pMsg );
 				if (RTI_SUCCESS == pMsg.pData[0])
 				{
-					printf("__DEBUG_TIME_ACTIVE set to: 0x%.2X\n", toggleTimerPrintOnServer);
+					LOG_INFO("__DEBUG_TIME_ACTIVE set to: 0x%.2X\n", toggleTimerPrintOnServer);
 				}
 			}
 			else if (ch == 'y')
@@ -672,12 +662,12 @@ static void *appThreadFunc(void *ptr)
 				NPI_SendSynchData( &pMsg );
 				if (RTI_SUCCESS == pMsg.pData[0])
 				{
-					printf("__BIG_DEBUG_ACTIVE set to: 0x%.2X\n", toggleBigDebugPrintOnServer);
+					LOG_INFO("__BIG_DEBUG_ACTIVE set to: 0x%.2X\n", toggleBigDebugPrintOnServer);
 				}
 			}
 			else if (ch == 'a')
 			{
-				printf("Application State: \t %s [0x%.2X]\nRNP Power State: \t %s [0x%.2X]\n",
+				LOG_INFO("Application State: \t %s [0x%.2X]\nRNP Power State: \t %s [0x%.2X]\n",
 						AppState_list[appState], appState,
 						RNPpowerState_list[appRNPpowerState], appRNPpowerState);
 			}
@@ -702,13 +692,13 @@ static void *appThreadFunc(void *ptr)
 				if (appState == AP_STATE_READY)
 				{
 					appState = AP_STATE_SIMPLE_TEST_MODE;
-					printf("Display messages for simple testing\n");
+					LOG_INFO("Display messages for simple testing\n");
 				}
 				else if (appState == AP_STATE_SIMPLE_TEST_MODE)
 				{
 					appState = AP_STATE_READY;
 					DispMenuReady();
-					printf("Back to normal state\n");
+					LOG_INFO("Back to normal state\n");
 				}
 			}
 			else if (ch == 'g')
@@ -718,19 +708,19 @@ static void *appThreadFunc(void *ptr)
 
 				RTI_ReadItemEx(RTI_PROFILE_RTI, 0x61, 1, &macChannel); // RTI_SA_ITEM_CURRENT_CHANNEL == 0x61
 
-				printf ("Current MAC Channel %.2d\n", macChannel);
+				LOG_INFO("Current MAC Channel %.2d\n", macChannel);
 
 //				// Get Latest Energy Samples
 //				uint8 energySamples[20] = {0};
 //
 //				RTI_ReadItemEx(RTI_PROFILE_RTI, 0x8A, sizeof(energySamples), energySamples); // RCN_NIB_ENERGY_SAMPLES == 0x8A
 //
-//				printf ("[");
+//				LOG_INFO("[");
 //				for (macChannel = 1; macChannel < (sizeof(energySamples)-1); macChannel++)
 //				{
-//					printf(" %d,", (91*energySamples[macChannel])/255 - 91);
+//					LOG_INFO(" %d,", (91*energySamples[macChannel])/255 - 91);
 //				}
-//				printf(" %d]\n\n", (91*energySamples[sizeof(energySamples)-1])/255 - 91);
+//				LOG_INFO(" %d]\n\n", (91*energySamples[sizeof(energySamples)-1])/255 - 91);
 			}
 			else if (ch == 's')
 			{
@@ -739,7 +729,7 @@ static void *appThreadFunc(void *ptr)
 
 				RTI_StandbyReq(standbyState);
 
-				printf ("Currently %s in standby mode\n", (standbyState == RTI_STANDBY_ON) ? " " : " not ");
+				LOG_INFO("Currently %s in standby mode\n", (standbyState == RTI_STANDBY_ON) ? " " : " not ");
 
 				if (standbyState == RTI_STANDBY_ON)
 				{
@@ -752,7 +742,7 @@ static void *appThreadFunc(void *ptr)
 			}
 			else if (ch != '\n')
 			{
-//				printf("unknown command %c (0x%.2X) \n", ch, ch);
+//				LOG_INFO("unknown command %c (0x%.2X) \n", ch, ch);
 //				DispMenuReady();
 			}
 
@@ -792,13 +782,13 @@ static void appProcessEvents(uint32 events)
 
 	if (events & SIMPLE_APP_EVT_DATA_RCV)
 	{
-		printf("State: %s [0x%.2X]\n", AppState_list[appState], appState);
+		LOG_INFO("State: %s [0x%.2X]\n", AppState_list[appState], appState);
 		// Prepare to clear event
 		procEvents |= SIMPLE_APP_EVT_DATA_RCV;
 	}
 	if (events & SIMPLE_APP_EVT_INIT)
 	{
-		printf("State: %s [0x%.2X]\n", AppState_list[appState], appState);
+		LOG_INFO("State: %s [0x%.2X]\n", AppState_list[appState], appState);
 		// Prepare to clear event
 		procEvents |= SIMPLE_APP_EVT_INIT;
 		if (appState == AP_STATE_INIT_COLD)
@@ -809,11 +799,11 @@ static void appProcessEvents(uint32 events)
 			retVal = RTI_WriteItem(RTI_CP_ITEM_STARTUP_CTRL, 1, &startupFlg);
 			if (retVal != RTI_SUCCESS)
 			{
-				printf ("Could no set Cold Start flag\n");
+				LOG_INFO("Could no set Cold Start flag\n");
 			}
 			else
 			{
-				printf ("Successfully set Cold Start flag\n");
+				LOG_INFO("Successfully set Cold Start flag\n");
 			}
 		}
 		if (appCFGParam.nodeCapabilities & RCN_NODE_CAP_TARGET)
@@ -822,16 +812,16 @@ static void appProcessEvents(uint32 events)
 			appInitConfigParam('c');
 		// Apply changes
 		appSetCFGParamOnRNP();
-		printf("Trying to initialize again, as %s\n",
+		LOG_INFO("Trying to initialize again, as %s\n",
 				(appCFGParam.nodeCapabilities & RCN_NODE_CAP_TARGET) ? "Target" : "Controller");
 		//When Launching the Thread, Mutex is unlocked.
 		if ( (mutexRet = pthread_mutex_trylock(&appInitMutex)) == EBUSY)
 		{
-			debug_printf("[MUTEX] appInit Mutex busy\n");
+			LOG_DEBUG("[MUTEX] appInit Mutex busy\n");
 		}
 		else
 		{
-			debug_printf("[MUTEX] appInit Lock status: %d\n", mutexRet);
+			LOG_DEBUG("[MUTEX] appInit Lock status: %d\n", mutexRet);
 		}
 		RTI_InitReq();
 
@@ -883,9 +873,9 @@ void appClearPairingTable()
 		}
 	}
 
-	printf("*************************************\n");
-	printf("* Pairing Table Is Empty\n");
-	printf("*************************************\n");
+	LOG_INFO("*************************************\n");
+	LOG_INFO("* Pairing Table Is Empty\n");
+	LOG_INFO("*************************************\n");
 
 	// Free pairing entry buffer
 	free(pEntry);
@@ -912,8 +902,8 @@ void appDisplayPairingTable()
 	RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_CONST_ITEM_MAX_PAIRING_TABLE_ENTRIES,
 			1, (uint8 *) &numOfEntries);
 
-	printf("*************************************\n");
-	printf("* Max number of pairing entries: %d\n", numOfEntries);
+	LOG_INFO("*************************************\n");
+	LOG_INFO("* Max number of pairing entries: %d\n", numOfEntries);
 	for (i = 0; i < numOfEntries; i++)
 	{
 		// Set current pairing entry
@@ -933,13 +923,13 @@ void appDisplayPairingTable()
 
 	if (atLeastOneEntryFound != 0) 
 	{
-		printf("*************************************\n");
+		LOG_INFO("*************************************\n");
 	}
 	else
 	{
-		printf("*************************************\n");
-		printf("* Pairing Table Is Empty\n");
-		printf("*************************************\n");
+		LOG_INFO("*************************************\n");
+		LOG_INFO("* Pairing Table Is Empty\n");
+		LOG_INFO("*************************************\n");
 	}
 
 	// Free pairing entry buffer
@@ -964,7 +954,7 @@ void RTI_InitCnf(rStatus_t status)
 {
 	if (status == RTI_SUCCESS) 
 	{
-		printf("RTI_InitCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+		LOG_INFO("RTI_InitCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 
 		uint8 startupFlg;
 		startupFlg = RESTORE_STATE;
@@ -977,7 +967,7 @@ void RTI_InitCnf(rStatus_t status)
 		// Display what we have configured
 		DispCFGCurrentCfg(appCFGParam, ownNwkAddr, ownPANID, ownIEEE);
 
-		printf("Entered %s [0x%.2X]\n", AppState_list[appState], appState);
+		LOG_INFO("Entered %s [0x%.2X]\n", AppState_list[appState], appState);
 		//Display menu...
 		DispMenuReady();
 
@@ -986,7 +976,7 @@ void RTI_InitCnf(rStatus_t status)
 	}
 	else
 	{
-		printf("ERR: RTI_InitCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+		LOG_ERROR("RTI_InitCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 		// Try to reset RNP
 		RTI_SwResetReq();
 
@@ -996,7 +986,7 @@ void RTI_InitCnf(rStatus_t status)
 	}
 
 	//Unlock Mutex So that Application can continue
-	debug_printf("[MUTEX] Unlock appInit Mutex\n");
+	LOG_DEBUG("[MUTEX] Unlock appInit Mutex\n");
 	pthread_mutex_unlock(&appInitMutex);
 }
 
@@ -1022,7 +1012,7 @@ void RTI_PairCnf(rStatus_t status, uint8 dstIndex, uint8 devType)
 
 	if (status == RTI_SUCCESS)
 	{
-		printf("RTI_PairCnf(0x%.2X - %s), dstIndex: 0x%.2X, devType: %s[0x%.2X]\n",
+		LOG_INFO("RTI_PairCnf(0x%.2X - %s), dstIndex: 0x%.2X, devType: %s[0x%.2X]\n",
 				status,
 				rtiStatus_list[status],
 				dstIndex,
@@ -1031,7 +1021,7 @@ void RTI_PairCnf(rStatus_t status, uint8 dstIndex, uint8 devType)
 	}
 	else
 	{
-		printf("ERR: RTI_PairCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+		LOG_ERROR("RTI_PairCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 	}
 }
 
@@ -1060,11 +1050,11 @@ void RTI_AllowPairCnf(rStatus_t status, uint8 dstIndex, uint8 devType)
 
 	if (0 == status)
 	{
-		printf("\tPaired!! Waiting for data from RC, press the <q> key followed by <enter> at any time to quit\n\n");
+		LOG_INFO("\tPaired!! Waiting for data from RC, press the <q> key followed by <enter> at any time to quit\n\n");
 	}
 	else
 	{
-		printf("\tRTI_AllowPairCnf(0x%.2X)\n\n", status);
+		LOG_INFO("\tRTI_AllowPairCnf(0x%.2X)\n\n", status);
 	}
 }
 
@@ -1086,7 +1076,7 @@ void RTI_SendDataCnf(rStatus_t status)
 {
 	if (appState == AP_STATE_READY)
 	{
-		printf("ERR: RTI_SendDataCnf(0x%.2X - %s), but sent in wrong state: %s\n",
+		LOG_ERROR("RTI_SendDataCnf(0x%.2X - %s), but sent in wrong state: %s\n",
 				status,
 				rtiStatus_list[status],
 				AppState_list[appState]);
@@ -1094,9 +1084,9 @@ void RTI_SendDataCnf(rStatus_t status)
 	else if (appState == AP_STATE_NDATA)
 	{
 		if (status == RTI_SUCCESS)
-			printf("Data sent successfully\n");
+			LOG_INFO("Data sent successfully\n");
 		else
-			printf("ERR: RTI_SendDataCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+			LOG_ERROR("RTI_SendDataCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 		// Return to Send Data Prepare state
 		appState = AP_STATE_NDATA_PREPARE;
 	}
@@ -1132,12 +1122,12 @@ void RTI_StandbyCnf(rStatus_t status)
 	{
 		if (appRNPpowerState & SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT)
 		{
-			printf("\nExited Standby\n");
+			LOG_INFO("Exited Standby\n");
 			appRNPpowerState &= ~(SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT);
 		}
 		else
 		{
-			printf("\nEntered Standby\n");
+			LOG_INFO("Entered Standby\n");
 			appRNPpowerState |= SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT;
 
 //			// Enable Sleep here, NPI is not responsive after this
@@ -1146,7 +1136,7 @@ void RTI_StandbyCnf(rStatus_t status)
 	}
 	else
 	{
-		printf("ERR: RTI_StandbyCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+		LOG_ERROR("RTI_StandbyCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 	}
 }
 
@@ -1176,6 +1166,8 @@ void RTI_StandbyCnf(rStatus_t status)
 void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 		uint8 rxLQI, uint8 rxFlags, uint8 len, uint8 *pData) {
 	int i, error = FALSE;
+	char tmpStr[512];
+	size_t strLen;
 	static uint8 lastSource = RTI_INVALID_PAIRING_REF;
 
 	if (appRNPpowerState & SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT)
@@ -1200,12 +1192,12 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 		{
 			if (error)
 			{
-				printf("UNDEFINED PACKET Source Idx: %d, profileId %d , vendorId: %d , rxFlags: 0x%x, rxLQI %d \n",
+				LOG_INFO("UNDEFINED PACKET Source Idx: %d, profileId %d , vendorId: %d , rxFlags: 0x%x, rxLQI %d \n",
 						srcIndex, profileId, vendorId, rxFlags, rxLQI);
 				profileId = 0xff;
 			} else
 			{
-				printf("Source Idx: %d, profileId %d (%s), vendorId: %d (%s), rxFlags 0x%x, rxLQI %d \n",
+				LOG_INFO("Source Idx: %d, profileId %d (%s), vendorId: %d (%s), rxFlags 0x%x, rxLQI %d \n",
 						srcIndex, profileId,
 						profile_list[profileId] ? profile_list[profileId] : "?",
 								vendorId,
@@ -1220,37 +1212,47 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 				error = TRUE;
 			if (error)
 			{
-				printf("Raw ZRC Data: ");
+				strLen = 0;
 				for (i = 0; i < len; i++)
-					printf("%d ", pData[i]);
-				printf("\n");
+				{
+					snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "%.2X ", pData[i]);
+					strLen += 3;
+				}
+				LOG_INFO("Raw ZRC Data: %s (len = %d)\n", tmpStr, len);
 			} else
-				printf("ZRC Data: Cmd: %d (%s), Key %d (%s) \n", pData[0],
+				LOG_INFO("ZRC Data: Cmd: %d (%s), Key %d (%s) \n", pData[0],
 						Command_list[pData[0]] ? Command_list[pData[0]] : "?",
 								pData[1],
 								ZRC_Key_list[pData[1]] ? ZRC_Key_list[pData[1]] : "?");
 		}
 		else
 		{
-			printf("Raw Data: ");
+			strLen = 0;
 			for (i = 0; i < len; i++)
-				printf("%d ", pData[i]);
-			printf("\n");
+			{
+				snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "%.2X ", pData[i]);
+				strLen += 3;
+			}
+			LOG_INFO("Raw Data: %s (len = %d)\n", tmpStr, len);
 		}
 	}
 	else if ( appState == AP_STATE_SIMPLE_TEST_MODE )
 	{
+		strLen = 0;
 		if (srcIndex != lastSource)
-			printf("\n");
-		printf("Source Idx: %d, profileId %d (%s), rxLQI %d (-%3d dBm)",
+		{
+			snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "\n");
+			strLen += 1;
+		}
+		for (i = 0; i < len; i++)
+		{
+			snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "%.2X ", pData[i]);
+			strLen += 3;
+		}
+		LOG_INFO("Source Idx: %d, profileId %d (%s), rxLQI %d (-%3d dBm)\tData: %s (len = %d)\n",
 				srcIndex, profileId,
 				profile_list[profileId] ? profile_list[profileId] : "?",
-						rxLQI, (0xFF - rxLQI)/2);
-
-		printf("\tData: ");
-		for (i = 0; i < len; i++)
-			printf("%d ", pData[i]);
-		printf("\n");
+				rxLQI, (0xFF - rxLQI)/2, tmpStr, len);
 	}
 
 	lastSource = srcIndex;
@@ -1274,9 +1276,9 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 void RTI_RxEnableCnf(rStatus_t status)
 {
 	if (status == RTI_SUCCESS)
-		printf("RTI_RxEnableCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+		LOG_INFO("RTI_RxEnableCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 	else
-		printf("ERR: RTI_RxEnableCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+		LOG_ERROR("RTI_RxEnableCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 }
 
 /**************************************************************************************************
@@ -1295,12 +1297,12 @@ void RTI_EnableSleepCnf(rStatus_t status)
 {
 	if (status == RTI_SUCCESS)
 	{
-		printf("\nSleep enabled\n");
+		LOG_INFO("Sleep enabled\n");
 		appRNPpowerState |= SIMPLE_APP_RNP_POWER_STATE_NPI_BIT;
 	}
 	else
 	{
-		printf("ERR: RTI_EnableSleepCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+		LOG_ERROR("RTI_EnableSleepCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 	}
 }
 
@@ -1320,7 +1322,7 @@ void RTI_DisableSleepCnf(rStatus_t status)
 {
 	if (status == RTI_SUCCESS)
 	{
-		printf("\nSleep disabled\n");
+		LOG_INFO("Sleep disabled\n");
 		appRNPpowerState &= ~(SIMPLE_APP_RNP_POWER_STATE_NPI_BIT);
 		// Toggle StandBy mode
 		if (appRNPpowerState & SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT)
@@ -1330,12 +1332,12 @@ void RTI_DisableSleepCnf(rStatus_t status)
 		}
 		else
 		{
-			printf("Already exited Standby\n");
+			LOG_INFO("Already exited Standby\n");
 		}
 	}
 	else
 	{
-		printf("ERR: RTI_DisableSleepCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+		LOG_ERROR("RTI_DisableSleepCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 	}
 }
 
@@ -1354,11 +1356,11 @@ void RTI_UnpairInd(uint8 dstIndex)
 	if (appState == AP_STATE_PAIR)
 	{
 		appState = AP_STATE_READY;
-		printf("Controller %d did not accept pairing request. Check configuration, note that security is required for ZRC and ZID profiles. \n", dstIndex);
+		LOG_INFO("Controller %d did not accept pairing request. Check configuration, note that security is required for ZRC and ZID profiles. \n", dstIndex);
 	}
 	else
 	{
-		printf("RTI_UnpairInd, dstIndex : %d \n", dstIndex);
+		LOG_INFO("RTI_UnpairInd, dstIndex : %d \n", dstIndex);
 	}
 }
 
@@ -1379,11 +1381,11 @@ void RTI_PairAbortCnf(rStatus_t status)
 {
 	if (status == RTI_SUCCESS)
 	{
-		printf("RTI_PairAbortCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+		LOG_INFO("RTI_PairAbortCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 	}
 	else
 	{
-		printf("ERR: RTI_DisableSleepCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+		LOG_ERROR("RTI_DisableSleepCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 	}
 }
 
@@ -1408,14 +1410,14 @@ void RTI_UnpairCnf(rStatus_t status, uint8 dstIndex)
 	if (appState == AP_STATE_UNPAIR)
 	{
 		appState = AP_STATE_READY;
-		printf("RTI_UnpairCnf(0x%.2X - %s), dstIndex: 0x%2X\n",
+		LOG_INFO("RTI_UnpairCnf(0x%.2X - %s), dstIndex: 0x%2X\n",
 				status,
 				rtiStatus_list[status],
 				dstIndex);
 	}
 	else
 	{
-		printf("ERR: RTI_UnpairCnf(0x%.2X - %s), dstIndex : %d , \n\tcalled from illegal state: %s\n",
+		LOG_ERROR("RTI_UnpairCnf(0x%.2X - %s), dstIndex : %d , \n\tcalled from illegal state: %s\n",
 				status,
 				rtiStatus_list[status],
 				dstIndex,
@@ -1444,11 +1446,11 @@ void RTI_ResetInd( void )
 		retVal = RTI_WriteItem(RTI_CP_ITEM_STARTUP_CTRL, 1, &startupFlg);
 		if (retVal != RTI_SUCCESS)
 		{
-			printf ("Could no set Cold Start flag\n");
+			LOG_INFO("Could no set Cold Start flag\n");
 		}
 		else
 		{
-			printf ("Successfully set Cold Start flag\n");
+			LOG_INFO("Successfully set Cold Start flag\n");
 		}
 
 		appState = AP_STATE_INIT;
@@ -1460,12 +1462,12 @@ void RTI_ResetInd( void )
 	else if (appState == AP_STATE_RESET_FOR_PHY_TESTMODE)
 	{
 		// Warn user of reset
-		printf("RNP reset as expected\n");
+		LOG_INFO("RNP reset as expected\n");
 	}
 	else
 	{
 		// Warn user of reset
-		printf("[WARNING] RNP reset unexpectedly\n");
+		LOG_WARN("RNP reset unexpectedly\n");
 	}
 
 	// RNP is now back in default state
@@ -1481,26 +1483,26 @@ void RTI_ResetInd( void )
 	else
 	{
 		// Initialize node and RF4CE stack
-		printf("Calling RTI_InitReq...\n");
+		LOG_INFO("Calling RTI_InitReq...\n");
 		//When Launching the Thread, Mutex is unlocked.
-		debug_printf("[MUTEX] Lock appInit Mutex\n");
+		LOG_DEBUG("[MUTEX] Lock appInit Mutex\n");
 		if ( (mutexRet = pthread_mutex_trylock(&appInitMutex)) == EBUSY)
 		{
-			debug_printf("[MUTEX] appInit Mutex busy\n");
+			LOG_DEBUG("[MUTEX] appInit Mutex busy\n");
 		}
 		else
 		{
-			debug_printf("[MUTEX] appInit Lock status: %d\n", mutexRet);
+			LOG_DEBUG("[MUTEX] appInit Lock status: %d\n", mutexRet);
 		}
 		RTI_InitReq();
-		printf("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
+		LOG_INFO("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
 	}
 }
 
 void RTI_IrInd( uint8 irData )
 {
 	// Print received IR Data
-	printf("Received IR Data: \t0x%.2X\n", irData);
+	LOG_INFO("Received IR Data: \t0x%.2X\n", irData);
 }
 
 // List of supported target device types: maximum up to 6 device types.
@@ -1574,12 +1576,12 @@ static void appConfigParamProcessKey(char* strIn)
 		case 'k':
 			// Enter number of key seeds
 			appCFGstate = APP_CFG_STATE_KEY_SEED;
-			printf("Set # key seed\n");
+			LOG_INFO("Set # key seed\n");
 			break;
 		case 'i':
 			// Initialize without configuration
 			RTI_InitReq();
-			printf("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
+			LOG_INFO("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
 			break;
 		case 'g':
 			// Get configuration parameters from RNP, to make sure we display the correct settings
@@ -1590,7 +1592,7 @@ static void appConfigParamProcessKey(char* strIn)
 		case 'r':
 			appState = AP_STATE_READY;
 
-			printf("Entered %s [0x%.2X]\n", AppState_list[appState], appState);
+			LOG_INFO("Entered %s [0x%.2X]\n", AppState_list[appState], appState);
 			//Display menu...
 			DispMenuReady();
 			break;
@@ -1599,20 +1601,20 @@ static void appConfigParamProcessKey(char* strIn)
 			appSetCFGParamOnRNP();
 
 			// Initialize node and RF4CE stack
-			printf("Calling RTI_InitReq...\n");
+			LOG_INFO("Calling RTI_InitReq...\n");
 			//When Launching the Thread, Mutex is unlocked.
 			//When Launching the Thread, Mutex is unlocked.
-			debug_printf("[MUTEX] Lock appInit Mutex\n");
+			LOG_DEBUG("[MUTEX] Lock appInit Mutex\n");
 			if ( (mutexRet = pthread_mutex_trylock(&appInitMutex)) == EBUSY)
 			{
-				debug_printf("[MUTEX] appInit Mutex busy\n");
+				LOG_DEBUG("[MUTEX] appInit Mutex busy\n");
 			}
 			else
 			{
-				debug_printf("[MUTEX] appInit Lock status: %d\n", mutexRet);
+				LOG_DEBUG("[MUTEX] appInit Lock status: %d\n", mutexRet);
 			}
 			RTI_InitReq();
-			printf("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
+			LOG_INFO("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
 
 			break;
 		case 'c':
@@ -1624,19 +1626,19 @@ static void appConfigParamProcessKey(char* strIn)
 			appSetCFGParamOnRNP();
 
 			// Initialize node and RF4CE stack
-			printf("Calling RTI_InitReq...\n");
+			LOG_INFO("Calling RTI_InitReq...\n");
 			//When Launching the Thread, Mutex is unlocked.
-			debug_printf("[MUTEX] Lock appInit Mutex\n");
+			LOG_DEBUG("[MUTEX] Lock appInit Mutex\n");
 			if ( (mutexRet = pthread_mutex_trylock(&appInitMutex)) == EBUSY)
 			{
-				debug_printf("[MUTEX] appInit Mutex busy\n");
+				LOG_DEBUG("[MUTEX] appInit Mutex busy\n");
 			}
 			else
 			{
-				debug_printf("[MUTEX] appInit Lock status: %d\n", mutexRet);
+				LOG_DEBUG("[MUTEX] appInit Lock status: %d\n", mutexRet);
 			}
 			RTI_InitReq();
-			printf("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
+			LOG_INFO("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
 
 			break;
 		case 'l':
@@ -1768,7 +1770,7 @@ static void appConfigParamProcessKey(char* strIn)
 		/* init key exchange transfer count to something small so key ex doesn't dominate logs */
 		pData[0] = atoi(strIn);
 		RTI_WriteItemEx( RTI_PROFILE_GDP, aplKeyExchangeTransferCount, 1, pData );
-		printf("Set key seeds %d\n", pData[0]);
+		LOG_INFO("Set key seeds %d\n", pData[0]);
 		// Return to CFG state
 		appCFGstate = APP_CFG_STATE_INIT;
 		DispMenuInit();
@@ -1782,7 +1784,7 @@ void appInitConfigParam( char tgtSelection )
 	if (tgtSelection == 'c')
 	{
 		// Controll Type; Battery Powered; Security capable; Channel Normalization capable.
-		debug_printf("\nController Configuration\n");
+		LOG_DEBUG("Controller Configuration\n");
 		appCFGParam.nodeCapabilities = RTI_BUILD_NODE_CAPABILITIES(0, 0, 1, 1);
 
 		// Set up configuration parameters that are different from default values
@@ -1790,7 +1792,7 @@ void appInitConfigParam( char tgtSelection )
 			appCFGParam.tgtTypeList[i] = tgtListCTL[i];
 		}
 
-		debug_printf("ZID and ZRC profile activated\n");
+		LOG_DEBUG("ZID and ZRC profile activated\n");
 		// No User String pairing; 1 Device (Remote Controller); 2 Profiles (ZRC & ZID)
 		appCFGParam.appCapabilities = RTI_BUILD_APP_CAPABILITIES(0, 1, 2);
 
@@ -1812,7 +1814,7 @@ void appInitConfigParam( char tgtSelection )
 	else if (tgtSelection == 't')
 	{
 		// Target Type; A/C Pwr; Security capable; Channel Normalization capable.
-		debug_printf("\nTarget Configuration\n");
+		LOG_DEBUG("Target Configuration\n");
 		appCFGParam.nodeCapabilities = RTI_BUILD_NODE_CAPABILITIES(1, 1, 1, 1);
 
 		// Set up configuration parameters that are different from default values
@@ -1820,7 +1822,7 @@ void appInitConfigParam( char tgtSelection )
 			appCFGParam.tgtTypeList[i] = tgtListTGT[i];
 		}
 
-		debug_printf("ZRC + ZID profile activated\n");
+		LOG_DEBUG("ZRC + ZID profile activated\n");
 		// No User String pairing; 1 Device (Television); 2 Profile (ZRC and ZID)
 		appCFGParam.appCapabilities = RTI_BUILD_APP_CAPABILITIES(0, 1, 2);
 
@@ -1852,70 +1854,70 @@ static void appSetCFGParamOnRNP( void )
 	// Apply Configuration Parameters //
 	////////////////////////////////////
 
-	printf("\n-------------------- SET RNP CONFIGURATION PARAMETERS-------------------\n");
+	LOG_INFO("-------------------- SET RNP CONFIGURATION PARAMETERS-------------------\n");
 	if (RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_NODE_CAPABILITIES, 1,
 			(uint8*)&(appCFGParam.nodeCapabilities)) != RTI_SUCCESS) {
 		//   AP_FATAL_ERROR();
-		debug_printf("[ERR] Could not write RTI_CP_ITEM_NODE_CAPABILITIES\n");
+		LOG_ERROR("Could not write RTI_CP_ITEM_NODE_CAPABILITIES\n");
 	}
 	else
-		debug_printf("[DEB] Successfully wrote RTI_CP_ITEM_NODE_CAPABILITIES\n");
+		LOG_DEBUG("Successfully wrote RTI_CP_ITEM_NODE_CAPABILITIES\n");
 
 	if (RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_NODE_SUPPORTED_TGT_TYPES,
 			RTI_MAX_NUM_SUPPORTED_TGT_TYPES, appCFGParam.tgtTypeList) != RTI_SUCCESS) {
 		///AP_FATAL_ERROR();
-		debug_printf("[ERR] Could not write RTI_CP_ITEM_NODE_SUPPORTED_TGT_TYPES\n");
+		LOG_ERROR("Could not write RTI_CP_ITEM_NODE_SUPPORTED_TGT_TYPES\n");
 	}
 	else
-		debug_printf("[DEB] Successfully wrote RTI_CP_ITEM_NODE_SUPPORTED_TGT_TYPES\n");
+		LOG_DEBUG("Successfully wrote RTI_CP_ITEM_NODE_SUPPORTED_TGT_TYPES\n");
 
 	if (RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_APPL_CAPABILITIES, 1,
 			(uint8*)&(appCFGParam.appCapabilities)) != RTI_SUCCESS) {
 		// AP_FATAL_ERROR();
-		debug_printf("[ERR] Could not write RTI_CP_ITEM_APPL_CAPABILITIES\n");
+		LOG_ERROR("Could not write RTI_CP_ITEM_APPL_CAPABILITIES\n");
 	}
 	else
-		debug_printf("[DEB] Successfully wrote RTI_CP_ITEM_APPL_CAPABILITIES\n");
+		LOG_DEBUG("Successfully wrote RTI_CP_ITEM_APPL_CAPABILITIES\n");
 
 	if (RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_APPL_DEV_TYPE_LIST,
 			RTI_MAX_NUM_DEV_TYPES, appCFGParam.devTypeList) != RTI_SUCCESS) {
 		//   AP_FATAL_ERROR();
-		debug_printf("[ERR] Could not write RTI_CP_ITEM_APPL_DEV_TYPE_LIST\n");
+		LOG_ERROR("Could not write RTI_CP_ITEM_APPL_DEV_TYPE_LIST\n");
 	}
 	else
-		debug_printf("[DEB] Successfully wrote RTI_CP_ITEM_APPL_DEV_TYPE_LIST\n");
+		LOG_DEBUG("Successfully wrote RTI_CP_ITEM_APPL_DEV_TYPE_LIST\n");
 
 	if (RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_APPL_PROFILE_ID_LIST,
 			RTI_MAX_NUM_PROFILE_IDS, appCFGParam.profileIdList) != RTI_SUCCESS) {
 		//    AP_FATAL_ERROR();
-		debug_printf("[ERR] Could not write RTI_CP_ITEM_APPL_PROFILE_ID_LIST\n");
+		LOG_ERROR("Could not write RTI_CP_ITEM_APPL_PROFILE_ID_LIST\n");
 	}
 	else
-		debug_printf("[DEB] Successfully wrote RTI_CP_ITEM_APPL_PROFILE_ID_LIST\n");
+		LOG_DEBUG("Successfully wrote RTI_CP_ITEM_APPL_PROFILE_ID_LIST\n");
 
 	if (RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_VENDOR_ID, 2,
 			(uint8*)&(appCFGParam.vendorId)) != RTI_SUCCESS) {
 		//  AP_FATAL_ERROR();
-		debug_printf("[ERR] Could not write RTI_CP_ITEM_VENDOR_ID\n");
+		LOG_ERROR("Could not write RTI_CP_ITEM_VENDOR_ID\n");
 	}
 	else
-		debug_printf("[DEB] Successfully wrote RTI_CP_ITEM_VENDOR_ID\n");
+		LOG_DEBUG("Successfully wrote RTI_CP_ITEM_VENDOR_ID\n");
 
 	if (RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_VENDOR_NAME,
 			sizeof(vendorName), appCFGParam.vendorString) != RTI_SUCCESS) {
 		//  AP_FATAL_ERROR();
-		debug_printf("[ERR] Could not write RTI_CP_ITEM_VENDOR_NAME\n");
+		LOG_ERROR("Could not write RTI_CP_ITEM_VENDOR_NAME\n");
 	}
 	else
-		debug_printf("[DEB] Successfully wrote RTI_CP_ITEM_VENDOR_NAME\n");
+		LOG_DEBUG("Successfully wrote RTI_CP_ITEM_VENDOR_NAME\n");
 
 	if (RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_USER_STRING,
 			sizeof(userString), appCFGParam.userString) != RTI_SUCCESS) {
 		//  AP_FATAL_ERROR();
-		debug_printf("[ERR] Could not write RTI_SA_ITEM_USER_STRING\n");
+		LOG_ERROR("Could not write RTI_SA_ITEM_USER_STRING\n");
 	}
 	else
-		debug_printf("[DEB] Successfully wrote RTI_SA_ITEM_USER_STRING\n");
+		LOG_DEBUG("Successfully wrote RTI_SA_ITEM_USER_STRING\n");
 
 }
 
@@ -1929,66 +1931,66 @@ void appGetCFGParamFromRNP( void )
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_NODE_CAPABILITIES, 1,
 			(uint8*)&(appCFGParam.nodeCapabilities)) != RTI_SUCCESS) {
 		//   AP_FATAL_ERROR();
-		printf("ERR: Failed to read Node Capabilities\n");
+		LOG_ERROR("Failed to read Node Capabilities\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_NODE_SUPPORTED_TGT_TYPES,
 			RTI_MAX_NUM_SUPPORTED_TGT_TYPES, appCFGParam.tgtTypeList) != RTI_SUCCESS) {
 		///AP_FATAL_ERROR();
-		printf("ERR: Failed to read Target Types\n");
+		LOG_ERROR("Failed to read Target Types\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_APPL_CAPABILITIES, 1,
 			(uint8*)&(appCFGParam.appCapabilities)) != RTI_SUCCESS) {
 		// AP_FATAL_ERROR();
-		printf("ERR: Failed to read Application Capabilities\n");
+		LOG_ERROR("Failed to read Application Capabilities\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_APPL_DEV_TYPE_LIST,
 			RTI_MAX_NUM_DEV_TYPES, appCFGParam.devTypeList) != RTI_SUCCESS) {
 		//   AP_FATAL_ERROR();
-		printf("ERR: Failed to read Device Types\n");
+		LOG_ERROR("Failed to read Device Types\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_APPL_PROFILE_ID_LIST,
 			RTI_MAX_NUM_PROFILE_IDS, appCFGParam.profileIdList) != RTI_SUCCESS) {
 		//    AP_FATAL_ERROR();
-		printf("ERR: Failed to read Profile IDs\n");
+		LOG_ERROR("Failed to read Profile IDs\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_VENDOR_ID, 2,
 			(uint8*)&(appCFGParam.vendorId)) != RTI_SUCCESS) {
 		//  AP_FATAL_ERROR();
-		printf("ERR: Failed to read Vendor ID\n");
+		LOG_ERROR("Failed to read Vendor ID\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_CP_ITEM_VENDOR_NAME,
 			sizeof(vendorName), appCFGParam.vendorString) != RTI_SUCCESS) {
 		//  AP_FATAL_ERROR();
-		printf("ERR: Failed to read Vendor String\n");
+		LOG_ERROR("Failed to read Vendor String\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_USER_STRING,
 			sizeof(userString), appCFGParam.userString) != RTI_SUCCESS) {
 		//  AP_FATAL_ERROR();
-		printf("ERR: Failed to read User String\n");
+		LOG_ERROR("Failed to read User String\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_SHORT_ADDRESS,
 			sizeof(uint16), (uint8 *)&ownNwkAddr) != RTI_SUCCESS) {
 		//  AP_FATAL_ERROR();
-		printf("ERR: Failed to read network address\n");
+		LOG_ERROR("Failed to read network address\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_PAN_ID,
 			sizeof(uint16), (uint8 *)&ownPANID) != RTI_SUCCESS) {
 		//  AP_FATAL_ERROR();
-		printf("ERR: Failed to read PAN ID\n");
+		LOG_ERROR("Failed to read PAN ID\n");
 	}
 
 	if (RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_IEEE_ADDRESS, sizeof(ownIEEE), ownIEEE)) {
 		//  AP_FATAL_ERROR();
-		printf("ERR: Failed to read IEEE address\n");
+		LOG_ERROR("Failed to read IEEE address\n");
 	}
 
 }
@@ -2012,13 +2014,13 @@ void appGetCFGParamFromRNP( void )
 void appPhysicalTestModeProcessKey (char* strIn)
 {
 
-//	printf("------------------------------------------------------\n");
-//	printf("Physical Test Mode MENU:\n");
-//	printf("r- Return to Main Menu\n");
-//	printf("1- Tx Raw Carrier\n");
-//	printf("2- Tx Modulated Carrier\n");
-//	printf("3- Rx Test\n");
-//	printf("m- Show This Menu\n");
+//	LOG_INFO("------------------------------------------------------\n");
+//	LOG_INFO("Physical Test Mode MENU:\n");
+//	LOG_INFO("r- Return to Main Menu\n");
+//	LOG_INFO("1- Tx Raw Carrier\n");
+//	LOG_INFO("2- Tx Modulated Carrier\n");
+//	LOG_INFO("3- Rx Test\n");
+//	LOG_INFO("m- Show This Menu\n");
 
 //	// Physical Test Mode States
 //	enum {
@@ -2058,7 +2060,7 @@ void appPhysicalTestModeProcessKey (char* strIn)
 			DispPhyTestModeRxMenu();
 			break;
 		default:
-			printf("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
+			LOG_INFO("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
 			DispPhyTestModeMenu();
 			return;
 		}
@@ -2148,7 +2150,7 @@ void appPhysicalTestModeProcessKey (char* strIn)
 			DispPhyTestModeActiveMenu();
 			break;
 		default:
-			printf("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
+			LOG_INFO("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
 			DispPhyTestModeTxRawMenu();
 			return;
 		}
@@ -2224,7 +2226,7 @@ void appPhysicalTestModeProcessKey (char* strIn)
 			DispPhyTestModeActiveMenu();
 			break;
 		default:
-			printf("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
+			LOG_INFO("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
 			DispPhyTestModeTxModulatedMenu();
 			return;
 		}
@@ -2262,7 +2264,7 @@ void appPhysicalTestModeProcessKey (char* strIn)
 			DispPhyTestModeActiveMenu();
 			break;
 		default:
-			printf("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
+			LOG_INFO("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
 			DispPhyTestModeRxMenu();
 			return;
 		}
@@ -2289,16 +2291,16 @@ void appPhysicalTestModeProcessKey (char* strIn)
 void appSendDataProcessKey (char* strIn)
 {
 
-//	printf("------------------------------------------------------\n");
-//	printf("Send Data MENU:");
-//	printf("r- Return to Main Menu\n");
-//	printf("s- Send Data\n");
-//	printf("1- Set Destination Index\n");
-//	printf("2- Set Payload\n");
-//	printf("3- Set Tx Options\n");
-//	printf("4- Send ZID Keyboard data\n");
-//	printf("l- List current configuration\n");
-//	printf("m- Show This Menu\n");
+//	LOG_INFO("------------------------------------------------------\n");
+//	LOG_INFO("Send Data MENU:");
+//	LOG_INFO("r- Return to Main Menu\n");
+//	LOG_INFO("s- Send Data\n");
+//	LOG_INFO("1- Set Destination Index\n");
+//	LOG_INFO("2- Set Payload\n");
+//	LOG_INFO("3- Set Tx Options\n");
+//	LOG_INFO("4- Send ZID Keyboard data\n");
+//	LOG_INFO("l- List current configuration\n");
+//	LOG_INFO("m- Show This Menu\n");
 
 //	// Send Data States
 //	enum {
@@ -2358,7 +2360,7 @@ void appSendDataProcessKey (char* strIn)
 			DispSendDataCurrentCfg(appSendData_s);
 			break;
 		default:
-			printf("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
+			LOG_INFO("unknown command %c (0x%.2X) \n", strIn[0], strIn[0]);
 			DispSendDataMenu();
 			return;
 		}
@@ -2377,12 +2379,12 @@ void appSendDataProcessKey (char* strIn)
 		char *pEnd, *pEndOld;
 		uint8 i = 0;
 		appSendData_s.pData[0] = strtol(strIn, &pEnd, 16);
-		debug_printf("payload[%d] 0x%.2X (int)%d\n", i, appSendData_s.pData[i], (int)appSendData_s.pData[i]);
+		LOG_DEBUG("payload[%d] 0x%.2X (int)%d\n", i, appSendData_s.pData[i], (int)appSendData_s.pData[i]);
 		while ( strlen(pEnd) != 0 )
 		{
 			pEndOld = pEnd;
 			appSendData_s.pData[++i] = strtol(pEnd, &pEnd, 16);
-			debug_printf("payload[%d] 0x%.2X (int)%d\n", i, appSendData_s.pData[i], (int)appSendData_s.pData[i]);
+			LOG_DEBUG("payload[%d] 0x%.2X (int)%d\n", i, appSendData_s.pData[i], (int)appSendData_s.pData[i]);
 
 			// Check for global error code
 			if (errno == ERANGE)
@@ -2395,7 +2397,7 @@ void appSendDataProcessKey (char* strIn)
 			// Or simply check if the pointer has increased, or if the number of bytes exceeds the legal input
 			if ( (pEndOld == pEnd) || (i >= 90) )
 			{
-				printf("ERR: Illegal input");
+				LOG_ERROR("Illegal input");
 				break;
 			}
 		}
@@ -2407,7 +2409,7 @@ void appSendDataProcessKey (char* strIn)
 	{
 		appSendData_s.txOptions = strtol(strIn, NULL, 16);
 
-		printf("Tx Options set to: 0x%.2X\n", appSendData_s.txOptions);
+		LOG_INFO("Tx Options set to: 0x%.2X\n", appSendData_s.txOptions);
 
 		// Return to Send Data Init state
 		appSendDataState = APP_SEND_DATA_STATE_INIT;
@@ -2416,7 +2418,7 @@ void appSendDataProcessKey (char* strIn)
 	{
 		appSendData_s.profileId = atoi(strIn);
 
-		printf("Set Profile ID: 0x%.2X\n", appSendData_s.profileId);
+		LOG_INFO("Set Profile ID: 0x%.2X\n", appSendData_s.profileId);
 
 		// Return to Send Data Init state
 		appSendDataState = APP_SEND_DATA_STATE_INIT;
@@ -2478,18 +2480,18 @@ static void getAndPrintExtendedSoftwareVersion(uint8 timePrint)
 		if (timePrint)
 		{
 //			time_printf(tmpStrForTimePrint);
-			printf("%s", tmpStrForTimePrint);
+			LOG_INFO("%s", tmpStrForTimePrint);
 		}
 		else
 		{
-			printf("%s", tmpStrForTimePrint);
+			LOG_INFO("%s", tmpStrForTimePrint);
 		}
 	}
 
 	uint16 shortAddr = 0;
 	RTI_ReadItemEx (RTI_PROFILE_RTI, RTI_SA_ITEM_SHORT_ADDRESS, 2, (uint8*)&shortAddr);
-	printf("Short Address:\t 0x%4X\n", shortAddr);
+	LOG_INFO("Short Address:\t 0x%4X\n", shortAddr);
 	uint16 panId = 0;
 	RTI_ReadItemEx (RTI_PROFILE_RTI, RTI_SA_ITEM_PAN_ID, 2, (uint8*)&panId);
-	printf("PAN ID:\t\t 0x%4X\n", panId);
+	LOG_INFO("PAN ID:\t\t 0x%4X\n", panId);
 }

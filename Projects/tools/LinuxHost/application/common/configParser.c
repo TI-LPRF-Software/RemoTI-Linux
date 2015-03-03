@@ -38,31 +38,11 @@
 
 #include "configParser.h"
 #include "pthread.h"
-
-#ifdef __DEBUG_TIME__
-#include "time_printf.h"
-#endif //__DEBUG_TIME__
-
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#define debug_verbose_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-extern int __DEBUG_APP_ACTIVE;
-#define debug_printf(fmt, ...) 			st(if (__DEBUG_APP_ACTIVE > 1) printf( fmt, ##__VA_ARGS__);)
-#define debug_verbose_printf(fmt, ...) 	st(if (__DEBUG_APP_ACTIVE >= 3) printf( fmt, ##__VA_ARGS__);)
-#endif
-
-#ifdef __DEBUG_TIME__
-#define debug_time_printf(str) 	st(if (__DEBUG_APP_ACTIVE > 1) time_printf(str);)
-#else
-#define time_printf(str) printf( "%s", str)
-#define debug_time_printf(str) debug_printf( "%s", str)
-#endif //__DEBUG_TIME__
+#include "common_app.h"
+#include "lprfLogging.h"
 
 static FILE *configFileFd;
 static FILE *shadowFileFd;
-
-static char tmpStrForTimePrint[1024];
 
 static pthread_mutex_t cfgFileAccessMutex;
 
@@ -91,7 +71,7 @@ int ConfigParserInit(const char *configFilePath, const char *shadowPath)
 {
 	ConfigParserClose();
 
-	debug_verbose_printf("[CFG_PRS] Init\n");
+	LOG_TRACE2("[CFG_PRS] Init\n");
 
 	configFileFd = fopen(configFilePath, "r");
 	if (configFileFd)
@@ -119,8 +99,7 @@ int ConfigParserInit(const char *configFilePath, const char *shadowPath)
 
 	if (pthread_mutex_init(&cfgFileAccessMutex, NULL))
 	{
-		sprintf(tmpStrForTimePrint, "[CFG_PRS][ERROR] Failed To Initialize Mutex cfgFileAccessMutex\n");
-		time_printf(tmpStrForTimePrint);
+		LOG("[CFG_PRS][ERROR] Failed To Initialize Mutex cfgFileAccessMutex\n");
 		return -1;
 	}
 }
@@ -144,7 +123,7 @@ int ConfigParserInit(const char *configFilePath, const char *shadowPath)
  **************************************************************************************************/
 void ConfigParserClose()
 {
-	debug_verbose_printf("[CFG_PRS] Closing (if open)\n");
+	LOG_TRACE2("[CFG_PRS] Closing (if open)\n");
 	if (configFileFd)
 	{
 		// Close previous file descriptor if it exist.
@@ -192,8 +171,8 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 			if (0 == ConfigParser("DEBUG_MODE", "APP", strBuf))
 			{
 				baseSettings->debug.app = strtol(strBuf, NULL, 10);
-				__DEBUG_APP_ACTIVE = baseSettings->debug.app;
-				debug_printf("[CFG_PRS] baseSettings->debug.app = 0x%.2X\n", baseSettings->debug.app);
+				__APP_LOG_LEVEL = baseSettings->debug.app;
+				LOG_TRACE("[CFG_PRS] baseSettings->debug.app = 0x%.2X\n", baseSettings->debug.app);
 			}
 			else
 			{
@@ -203,7 +182,7 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 			{
 				if (0 == ConfigParser("BASE_SETTINGS", "IP_ADDR", baseSettings->ip_addr))
 				{
-					debug_printf("[CFG_PRS] baseSettings->ip_addr = %s\n", baseSettings->ip_addr);
+					LOG_TRACE("[CFG_PRS] baseSettings->ip_addr = %s\n", baseSettings->ip_addr);
 				}
 				else
 				{
@@ -214,7 +193,7 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 			{
 				if (0 == ConfigParser("BASE_SETTINGS", "PORT", baseSettings->port))
 				{
-					debug_printf("[CFG_PRS] baseSettings->port = %s\n", baseSettings->port);
+					LOG_TRACE("[CFG_PRS] baseSettings->port = %s\n", baseSettings->port);
 				}
 				else
 				{
@@ -224,7 +203,7 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 			if (0 == ConfigParser("BASE_SETTINGS", "FA_ENABLED", strBuf))
 			{
 				baseSettings->freqAgilityEnabled = strtol(strBuf, NULL, 10);
-				debug_printf("[CFG_PRS] baseSettings->freqAgilityEnabled = 0x%.2X\n", baseSettings->freqAgilityEnabled);
+				LOG_TRACE("[CFG_PRS] baseSettings->freqAgilityEnabled = 0x%.2X\n", baseSettings->freqAgilityEnabled);
 			}
 			else
 			{
@@ -233,7 +212,7 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 			if (0 == ConfigParser("BASE_SETTINGS", "MAC_CH", strBuf))
 			{
 				baseSettings->macChannel = strtol(strBuf, NULL, 10);
-				debug_printf("[CFG_PRS] baseSettings->macChannel = 0x%.2X\n", baseSettings->macChannel);
+				LOG_TRACE("[CFG_PRS] baseSettings->macChannel = 0x%.2X\n", baseSettings->macChannel);
 			}
 			else
 			{
@@ -242,7 +221,7 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 			if (0 == ConfigParser("DEBUG_MODE", "BIG", strBuf))
 			{
 				baseSettings->debug.big = strtol(strBuf, NULL, 10);
-				debug_printf("[CFG_PRS] baseSettings->debug.big = 0x%.2X\n", baseSettings->debug.big);
+				LOG_TRACE("[CFG_PRS] baseSettings->debug.big = 0x%.2X\n", baseSettings->debug.big);
 			}
 			else
 			{
@@ -251,7 +230,7 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 			if (0 == ConfigParser("DEBUG_MODE", "TIMER", strBuf))
 			{
 				baseSettings->debug.timer = strtol(strBuf, NULL, 10);
-				debug_printf("[CFG_PRS] baseSettings->debug.timer = 0x%.2X\n", baseSettings->debug.timer);
+				LOG_TRACE("[CFG_PRS] baseSettings->debug.timer = 0x%.2X\n", baseSettings->debug.timer);
 			}
 			else
 			{
@@ -260,7 +239,7 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 			if (0 == ConfigParser("DEBUG_MODE", "CLIENT", strBuf))
 			{
 				baseSettings->debug.client = strtol(strBuf, NULL, 10);
-				debug_printf("[CFG_PRS] baseSettings->debug.client = 0x%.2X\n", baseSettings->debug.client);
+				LOG_TRACE("[CFG_PRS] baseSettings->debug.client = 0x%.2X\n", baseSettings->debug.client);
 			}
 			else
 			{
@@ -320,9 +299,6 @@ int ConfigParserSet(const char *configFilePath, const char *shadowPath, const ch
 {
 	int returnVal = 0;
 
-	int debugSettingBefore = __DEBUG_APP_ACTIVE;
-	__DEBUG_APP_ACTIVE = FALSE;
-
 	// First initialize the ConfigParser
 	ConfigParserInit(configFilePath, shadowPath);
 
@@ -341,8 +317,6 @@ int ConfigParserSet(const char *configFilePath, const char *shadowPath, const ch
 
 	// The following function assumes that the system will overwrite the existing file.
 	rename(shadowPath, configFilePath);
-
-	__DEBUG_APP_ACTIVE = debugSettingBefore;
 
 	return returnVal;
 }
@@ -480,11 +454,6 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 	char* psStr; // Processing string pointer
 	int res = -1;
 
-	int debugSettingBefore = __DEBUG_APP_ACTIVE;
-//	if (strcmp(key, "ValidationConfig") != 0)
-//	{
-//		__DEBUG_APP_ACTIVE = FALSE;
-//	}
 	// Get file access lock first
 	pthread_mutex_lock(&cfgFileAccessMutex);
 
@@ -498,16 +467,15 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 	resStringToFree = resString;
 	lineToShadowToFree = lineToShadow;
 	lineToShadowCreatedToFree = lineToShadowCreated;
-	debug_verbose_printf("[CFG_PRS]------------------------------------------------------\n");
-	debug_verbose_printf("[CFG_PRS]Config Parsing:\n");
-	debug_verbose_printf("[CFG_PRS]- \tSection \t%s:\n", section);
-	debug_verbose_printf("[CFG_PRS]- \tKey \t\t%s:\n", key);
+	LOG_TRACE2("[CFG_PRS]------------------------------------------------------\n");
+	LOG_TRACE2("[CFG_PRS]Config Parsing:\n");
+	LOG_TRACE2("[CFG_PRS]- \tSection \t%s:\n", section);
+	LOG_TRACE2("[CFG_PRS]- \tKey \t\t%s:\n", key);
 
 	// Do nothing if the file doesn't exist
 	if (cfgFd != NULL)
 	{
-		sprintf(tmpStrForTimePrint, "[CFG_PRS][INFO] Resetting files - \tSection \t%s:\t%s:\n", section, key);
-		debug_time_printf(tmpStrForTimePrint);
+		LOG_TRACE("[CFG_PRS][INFO] Resetting files - \tSection \t%s:\t%s:\n", section, key);
 		if (shadowFileFd != NULL)
 		{
 			// Make sure we restart the shadow file
@@ -516,8 +484,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 		// Make sure we start search from the beginning of the file
 		fseek(cfgFd, 0, SEEK_SET);
 
-		sprintf(tmpStrForTimePrint, "[CFG_PRS][INFO] Files reset, now searching\n");
-		debug_time_printf(tmpStrForTimePrint);
+		LOG_TRACE("[CFG_PRS][INFO] Files reset, now searching\n");
 
 		// Search through the configuration file for the wanted
 		while ((resString = fgets(resString, 2048, cfgFd)) != NULL)
@@ -534,8 +501,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 			if (strlen(resString) == 2048)
 			{
 				invalidLineLen = TRUE;
-				debug_verbose_printf("[CFG_PRS]Found line > 2048 bytes\r");
-				fflush(stdout);
+				LOG_TRACE2("[CFG_PRS]Found line > 2048 bytes");
 			}
 			else
 			{
@@ -549,11 +515,11 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 					// Remove the newline character (ok even if line had length 2048)
 					resString[strlen(resString) - 1] = '\0';
 
-					debug_verbose_printf("[CFG_PRS]Found line < 2048 bytes\r");
+					LOG_TRACE2("[CFG_PRS]Found line < 2048 bytes");
 					fflush(stdout);
 					if (resString[0] == '[')
 					{
-						debug_verbose_printf("[CFG_PRS]Found section %s\n", resString);
+						LOG_TRACE2("[CFG_PRS]Found section %s\n", resString);
 						// Search for wanted section
 						psStr = strstr(resString, section);
 						if (psStr != NULL)
@@ -561,7 +527,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 							resString = psStr;
 							// We found our wanted section. Now search for wanted key.
 							sectionFound = TRUE;
-							debug_verbose_printf("[CFG_PRS]Found wanted section!\n");
+							LOG_TRACE2("[CFG_PRS]Found wanted section!\n");
 						}
 						else
 						{
@@ -573,11 +539,11 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 								{
 									if (newValueWritten == TRUE)
 									{
-										debug_verbose_printf("[CFG_PRS] Value already written, can move on!\n");
+										LOG_TRACE2("[CFG_PRS] Value already written, can move on!\n");
 									}
 									else
 									{
-										debug_printf("[CFG_PRS][NEW] Section found, but not value in it. We add it here: ");
+										LOG_TRACE("[CFG_PRS][NEW] Section found, but not value in it. We add it here: ");
 										// Create new line based on known key and value
 										lineToShadowCreated[0] = '\0';
 										strcat(lineToShadowCreated, key);
@@ -586,7 +552,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 										strcat(lineToShadowCreated, "\n");
 										// Write it to file
 										fputs(lineToShadowCreated, shadowFileFd);
-										debug_printf("%s", lineToShadowCreated);
+										LOG_TRACE("%s", lineToShadowCreated);
 										newValueWritten = TRUE;
 									}
 								}
@@ -596,7 +562,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 					}
 					else if (sectionFound == TRUE)
 					{
-						debug_verbose_printf("[CFG_PRS]Line to process %s (strlen=%zd)\n",
+						LOG_TRACE2("[CFG_PRS]Line to process %s (strlen=%zd)\n",
 								resString,
 								strlen(resString));
 						// We have found our section, now we search for wanted key
@@ -608,24 +574,21 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 							psStr = strstr(resString, key);
 							if (psStr != NULL)
 							{
-								debug_verbose_printf("[CFG_PRS]Found key \t'%s' in \t'%s'\n", key, resString);
+								LOG_TRACE2("[CFG_PRS]Found key \t'%s' in \t'%s'\n", key, resString);
 								// The value is located after the '='
 								// after the key.
-								//                                                                                                                            printf("%s\n", psStr);
 								psStr = strtok(psStr, "=");
-								//                                                                                                                            printf("%s\n", psStr);
 								psStr = strtok(NULL, "=;\"");
-								//                                                                                                                            printf("%s\n", psStr);
 
 								resString = psStr;
 								res = 0;
-								debug_verbose_printf("[CFG_PRS]Found value '%s'\n", resString);
+								LOG_TRACE2("[CFG_PRS]Found value '%s'\n", resString);
 
 								// Only copy result if it was asked for.
 								if (resultString)
 								{
 									strcpy(resultString, resString);
-									debug_verbose_printf("[CFG_PRS]Found value2 '%s'\n", resultString);
+									LOG_TRACE2("[CFG_PRS]Found value2 '%s'\n", resultString);
 								}
 
 								// Update shadow file if new value is provided
@@ -633,7 +596,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 								{
 									if (newValueWritten == TRUE)
 									{
-										debug_verbose_printf("[CFG_PRS] Value already written!\n");
+										LOG_TRACE2("[CFG_PRS] Value already written!\n");
 									}
 									else
 									{
@@ -642,7 +605,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 										strcat(lineToShadow, "=");
 										strcat(lineToShadow, newValue);
 										strcat(lineToShadow, "\n");
-										debug_printf("[CFG_PRS] Updated line to '%s'\n", lineToShadow);
+										LOG_TRACE("[CFG_PRS] Updated line to '%s'\n", lineToShadow);
 										newValueWritten = TRUE;
 									}
 									// Move back pointer
@@ -661,22 +624,19 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 					// Write line to shadow file
 					if (shadowFileFd && lineToShadow && newValue)
 					{
-						debug_verbose_printf("[CFG_PRS][OLD] Writing existing line '%s' to shadow file...", lineToShadow);
-						fflush(stdout);
+						LOG_TRACE2("[CFG_PRS][OLD] Writing existing line '%s' to shadow file\n", lineToShadow);
 						fputs(lineToShadow, shadowFileFd);
-						debug_verbose_printf(" done\n");
 					}
 				}
 				else
 				{
-					debug_verbose_printf("[CFG_PRS]Found end of line > 2048 bytes\n");
+					LOG_TRACE2("[CFG_PRS]Found end of line > 2048 bytes\n");
 					invalidLineLen = FALSE;
 				}
 			}
 		}
 
-		sprintf(tmpStrForTimePrint, "[CFG_PRS][INFO] Search complete\n");
-		debug_time_printf(tmpStrForTimePrint);
+		LOG_TRACE("[CFG_PRS][INFO] Search complete\n");
 	}
 	else
 	{
@@ -691,13 +651,13 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 	{
 		if (newValueWritten == TRUE)
 		{
-			debug_verbose_printf("[CFG_PRS] Value written successfully!\n");
+			LOG_TRACE2("[CFG_PRS] Value written successfully!\n");
 		}
 		else
 		{
 			if (sectionFound == FALSE)
 			{
-				debug_printf("[CFG_PRS] Section not found. We add it here\n");
+				LOG_TRACE("[CFG_PRS] Section not found. We add it here\n");
 				// Create new section line
 				lineToShadowCreated[0] = '[';
 				lineToShadowCreated[1] = '\0';
@@ -705,17 +665,17 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 				strcat(lineToShadowCreated, "]");
 				strcat(lineToShadowCreated, "\n");
 				// Write it to file
-				debug_printf("[CFG_PRS][NEW] Writing line '%s' to shadow file\n", lineToShadowCreated);
+				LOG_TRACE("[CFG_PRS][NEW] Writing line '%s' to shadow file\n", lineToShadowCreated);
 				fputs(lineToShadowCreated, shadowFileFd);
 			}
-			debug_printf("[CFG_PRS][NEW] Preparing line to shadow file\n");
+			LOG_TRACE("[CFG_PRS][NEW] Preparing line to shadow file\n");
 			// Create new line based on known key and value
 			lineToShadowCreated[0] = '\0';
 			strcat(lineToShadowCreated, key);
 			strcat(lineToShadowCreated, "=");
 			strcat(lineToShadowCreated, newValue);
 			strcat(lineToShadowCreated, "\n");
-			debug_printf("[CFG_PRS][NEW] Writing line '%s' to shadow file\n", lineToShadowCreated);
+			LOG_TRACE("[CFG_PRS][NEW] Writing line '%s' to shadow file\n", lineToShadowCreated);
 			// Write it to file
 			fputs(lineToShadowCreated, shadowFileFd);
 		}
@@ -727,8 +687,5 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 
 	// Release file access lock first
 	pthread_mutex_unlock(&cfgFileAccessMutex);
-
-	__DEBUG_APP_ACTIVE = debugSettingBefore;
-
 	return res;
 }

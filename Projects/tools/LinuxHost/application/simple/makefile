@@ -15,7 +15,7 @@ app := simple
 #LIBS_x86= -lpthread ../ipclib/client/rtisClientLib_x86.a
 #LIBS_armBeagleBoard= -lpthread ../ipclib/client/rtisClientLib_armBeagleBoard.a
 #LIBS_armBeagleBone= -lpthread ../ipclib/client/rtisClientLib_armBeagleBone.a
-LIBS_x86= -lpthread 
+LIBS_x86= -lpthread -lrt
 LIBS_armBeagleBoard= -lpthread 
 LIBS_armBeagleBone= -lpthread 
 

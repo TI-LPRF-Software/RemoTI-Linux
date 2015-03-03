@@ -50,20 +50,15 @@
 #include "hal_defs.h"
 #include "npi_lnx_error.h"
 
-#ifdef __DEBUG_TIME__
-#include "time_printf.h"
-#endif //__DEBUG_TIME__
-
-
-#ifdef TIMER_DEBUG
-#define TIMER_TICKS				100
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-extern int __DEBUG_APP_ACTIVE;
-#define debug_printf(fmt, ...) st(if (__DEBUG_APP_ACTIVE > 0) printf(fmt, ##__VA_ARGS__);)
-#endif
+#include "lprfLogging.h"
 
 #define TIMER_MAX			(0xFFFF * 1000 + 1)
+
+#ifdef TIMER_DEBUG
+#define LOG_DEBUG_TIMER(__FMT, __REST...)	LOG_DEBUG(__FMT, __REST...)
+#else
+#define LOG_DEBUG_TIMER(__FMT, __REST...)
+#endif
 
 static void timerInitSyncRes(void);
 static void *timerThreadFunc(void *ptr);
@@ -96,7 +91,7 @@ int timer_init(uint16 numOfThreads)
 	if(pthread_create(&timerThreadId, NULL, timerThreadFunc, NULL))
 	{
 		// thread creation failed
-		printf("Failed to create timer thread\n");
+		LOG_ERROR("[TIMER]Failed to create timer thread\n");
 		return -1;
 	}
 
@@ -117,23 +112,21 @@ static void *timerThreadFunc(void *ptr)
 	gettimeofday(&startTime, NULL);
 	prevTime = startTime;
 
-#ifdef TIMER_DEBUG
-	printf("Timer Thread Started \n");
-	printf("\t %d threads supported \n", timerNumOfThreads);
-#endif //TIMER_DEBUG
+	LOG_DEBUG_TIMER("[TIMER]  Timer Thread Started \n");
+	LOG_DEBUG_TIMER("[TIMER] \t%d threads supported \n", timerNumOfThreads);
 
 	while(!timerThreadTerminate)
 	{
 		if (tryLockFirstTimeOnly == 0)
 		{
 			// Lock mutex
-			debug_printf("[MUTEX] Lock TIMER Mutex (Handle)\n");
+			LOG_DEBUG_TIMER("[TIMER][MUTEX] Lock TIMER Mutex (Handle)\n");
 			int mutexRet = 0, writeOnce = 0;
 			while ( (mutexRet = pthread_mutex_trylock(&timerMutex)) == EBUSY)
 			{
 				if (writeOnce == 0)
 				{
-					debug_printf("[MUTEX] TIMER Mutex (Handle) busy");
+					LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER Mutex (Handle) busy");
 					fflush(stdout);
 					writeOnce++;
 				}
@@ -142,30 +135,29 @@ static void *timerThreadFunc(void *ptr)
 					writeOnce++;
 					if ( (writeOnce % 1000) == 0)
 					{
-						debug_printf(".");
+						LOG_DEBUG_TIMER("[TIMER].");
 					}
 					if (writeOnce > 0xEFFFFFF0)
 						writeOnce = 1;
 					fflush(stdout);
 				}
 			}
-			debug_printf("\n[MUTEX] TIMER Lock (Handle) status: %d\n", (int)mutexRet);
+			LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER Lock (Handle) status: %d\n", (int)mutexRet);
 			tryLockFirstTimeOnly = 1;
 
-			debug_printf("Timer Table\n");
+			LOG_DEBUG_TIMER("[TIMER] Timer Table\n");
 			int i, j;
 			for (i = 0; i < timerNumOfThreads; i++)
 			{
-				debug_printf("Thread %d\n", i);
-				debug_printf("\t Events:\t0x%.8X\n", timerThreadTbl[i].eventFlag);
-				debug_printf("\t Enabled:\t0x%.8X\n", timerThreadTbl[i].timerEnabled);
-				debug_printf("\t Timeouts:\n");
+				LOG_DEBUG_TIMER("[TIMER] Thread %d\n", i);
+				LOG_DEBUG_TIMER("[TIMER]\t Events:\t0x%.8X\n", timerThreadTbl[i].eventFlag);
+				LOG_DEBUG_TIMER("[TIMER]\t Enabled:\t0x%.8X\n", timerThreadTbl[i].timerEnabled);
+				LOG_DEBUG_TIMER("[TIMER]\t Timeouts:\n");
 				for (j = 0; j < 32; j++)
 				{
-					debug_printf("\t\t %d:\t%ld\n", j, timerThreadTbl[i].timeoutValue[j]);
+					LOG_DEBUG_TIMER("[TIMER]\t\t %d:\t%ld\n", j, timerThreadTbl[i].timeoutValue[j]);
 				}
 			}
-			debug_printf("\n");
 		}
 
 		// Get current time to compensate for processing.
@@ -191,27 +183,26 @@ static void *timerThreadFunc(void *ptr)
 		// The adjustment time is also updated if we're still waking up too late.
 		if (active == TRUE)
 		{
-			debug_printf("Timer Table\n");
+			LOG_DEBUG_TIMER("[TIMER] Timer Table\n");
 			int i, j;
 			for (i = 0; i < timerNumOfThreads; i++)
 			{
-				debug_printf("Thread %d\n", i);
-				debug_printf("\t Events:\t0x%.8X\n", timerThreadTbl[i].eventFlag);
-				debug_printf("\t Enabled:\t0x%.8X\n", timerThreadTbl[i].timerEnabled);
-				debug_printf("\t Timeouts:\n");
+				LOG_DEBUG_TIMER("[TIMER] Thread %d\n", i);
+				LOG_DEBUG_TIMER("[TIMER]\t Events:\t0x%.8X\n", timerThreadTbl[i].eventFlag);
+				LOG_DEBUG_TIMER("[TIMER]\t Enabled:\t0x%.8X\n", timerThreadTbl[i].timerEnabled);
+				LOG_DEBUG_TIMER("[TIMER]\t Timeouts:\n");
 				for (j = 0; j < 32; j++)
 				{
-					debug_printf("\t\t %d:\t%ld\n", j, timerThreadTbl[i].timeoutValue[j]);
+					LOG_DEBUG_TIMER("[TIMER]\t\t %d:\t%ld\n", j, timerThreadTbl[i].timeoutValue[j]);
 				}
 			}
-			debug_printf("\n");
 			long int timeWaitedDifference = (decrementValue - minimumTimeout);
-			debug_printf("[TIMER] Decrementing value %dus, diff %dus\n", (int)decrementValue, (int)timeWaitedDifference);
+			LOG_DEBUG_TIMER("[TIMER][TIMER] Decrementing value %dus, diff %dus\n", (int)decrementValue, (int)timeWaitedDifference);
 			if ( timeWaitedDifference > 250)
 			{
 				// Waited too long, must increase waitMargin, add the difference
 				waitMargin += (decrementValue - minimumTimeout);
-				debug_printf("[TIMER] Adjusting waitMargin %dus, because decrementValue = %dus and minimumTimeout = %dus\n",
+				LOG_DEBUG_TIMER("[TIMER] Adjusting waitMargin %dus, because decrementValue = %dus and minimumTimeout = %dus\n",
 						(int)waitMargin, (int)decrementValue, (int)minimumTimeout);
 			}
 			else if ( (timeWaitedDifference < -200) && (timeWaitedDifference > (-waitMargin)) )
@@ -233,7 +224,7 @@ static void *timerThreadFunc(void *ptr)
 						}
 						else
 						{
-							perror("Nanosleep failed:");
+							LOG_ERROR("[TIMER] Nanosleep failed:");
 							break;
 						}
 					}
@@ -256,7 +247,7 @@ static void *timerThreadFunc(void *ptr)
 					decrementValue = diffPrev  + 1000000 * (curTime.tv_sec - prevTime.tv_sec - t);
 					timeWaitedDifference = (decrementValue - minimumTimeout);
 				}
-				debug_printf("[TIMER] Updated decrementing value %dus\n", (int)decrementValue);
+				LOG_DEBUG_TIMER("[TIMER] Updated decrementing value %dus\n", (int)decrementValue);
 			}
 		}
 
@@ -272,7 +263,7 @@ static void *timerThreadFunc(void *ptr)
 				// Check if event j for timer (for thread) i is enabled
 				if (timerThreadTbl[i].timerEnabled & BV(j))
 				{
-					debug_printf("[TIMER] Decrementing %.4ldus for ThreadID 0x%.2X, event 0x%.8X. Time left before decrementing: %d\n",
+					LOG_DEBUG_TIMER("[TIMER] Decrementing %.4ldus for ThreadID 0x%.2X, event 0x%.8X. Time left before decrementing: %d\n",
 								decrementValue,
 								i,
 								j,
@@ -290,7 +281,7 @@ static void *timerThreadFunc(void *ptr)
 					// !!! Possible race condition !!!
 					if (timerThreadTbl[i].timeoutValue[j] <= 0)
 					{
-						debug_printf("[TIMER] Timer Expired. \t Thread ID: %.2d \t Event Mask: 0x%.8X\n",
+						LOG_DEBUG_TIMER("[TIMER] Timer Expired. \t Thread ID: %.2d \t Event Mask: 0x%.8X\n",
 								i, BV(j));
 						// timerEnabled can only be set to 0 here
 						timerThreadTbl[i].timerEnabled &= ~(BV(j));
@@ -311,7 +302,7 @@ static void *timerThreadFunc(void *ptr)
 		waitToTime.tv_nsec = prevTime.tv_usec * 1000;
 
 		// We need to adjust for the inaccuracy of pthread_cond_timedwait
-		debug_printf("[TIMER] wait margin %dus, minimumTimeout %dus\n", (int)waitMargin, (int)minimumTimeout);
+		LOG_DEBUG_TIMER("[TIMER] wait margin %dus, minimumTimeout %dus\n", (int)waitMargin, (int)minimumTimeout);
 		if ( (minimumTimeout > (waitMargin + 1)) || (minimumTimeout == 0) )
 		{
 			if (active == TRUE)
@@ -336,7 +327,7 @@ static void *timerThreadFunc(void *ptr)
 			// Conditional wait for a call to TimerSet()
 			if ((minimumTimeout <= 0) || (active == FALSE))
 			{
-				debug_printf("[TIMER][MUTEX] TIMER Wait forever\n");
+				LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER Wait forever\n");
 				res = pthread_cond_wait(&timerSetCond, &timerMutex);
 
 				// Since we have waited an unknown period we set previous time here.
@@ -344,15 +335,15 @@ static void *timerThreadFunc(void *ptr)
 			}
 			else
 			{
-				debug_printf("[TIMER][MUTEX] Wait %dus (%ds:%dns) for TIMER Set Cond (Handle) signal... effectively releasing lock\n",
+				LOG_DEBUG_TIMER("[TIMER][MUTEX] Wait %dus (%ds:%dns) for TIMER Set Cond (Handle) signal... effectively releasing lock\n",
 						(int)minimumTimeout, (int)(minimumTimeout / 1000000), (int)((minimumTimeout % 1000000) * 1000));
 				res = pthread_cond_timedwait(&timerSetCond, &timerMutex, &waitToTime);
 				if ( (res != ETIMEDOUT) && (res != 0) )
 				{
-					debug_printf("[TIMER][MUTEX] TIMER conditional wait returned with %d\n", res);
+					LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER conditional wait returned with %d\n", res);
 					if (res == EINVAL)
 					{
-						debug_printf("[TIMER][MUTEX] Wait until %lds:%ldns\n",
+						LOG_DEBUG_TIMER("[TIMER][MUTEX] Wait until %lds:%ldns\n",
 							waitToTime.tv_sec, waitToTime.tv_nsec);
 						// Terminate thread
 						timerThreadTerminate = 1;
@@ -365,7 +356,7 @@ static void *timerThreadFunc(void *ptr)
 			{
 				minimumTimeout += waitMargin;
 			}
-			debug_printf("[TIMER][MUTEX] TIMER (Handle) has lock\n");
+			LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER (Handle) has lock\n");
 		}
 		else
 		{
@@ -429,11 +420,11 @@ uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 			break;
 	}
 
-	debug_printf("[TIMER] timer_start_timerEx(%d, 0x%.8X, %d)... ", threadId, event, timeout);
+	LOG_DEBUG_TIMER("[TIMER] timer_start_timerEx(%d, 0x%.8X, %d)... ", threadId, event, timeout);
 	fflush(stdout);
 	// To avoid race conditions we cannot update timerThreadTbl without mutex lock
 	pthread_mutex_lock(&timerMutex);
-	debug_printf("lock\n");
+	LOG_DEBUG_TIMER("lock\n");
 
 	// Value is stored in us for better precision
 	timerThreadTbl[threadId].timeoutValue[i] = timeout * 1000;
@@ -452,14 +443,8 @@ uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 		timer_clear_event(threadId, event);
 	}
 
-#if (defined __DEBUG_TIME__) && (defined TIMER_DEBUG)
-	char str[128];
-	snprintf(str, sizeof(str), "[TIMER] %dus timer started for event 0x%.8X and thread %d\n",
+	LOG_DEBUG_TIMER("[TIMER] Timer started for %dus, for event 0x%.8X and thread %d\n",
 			(int)timerThreadTbl[threadId].timeoutValue[i], event, threadId);
-	time_printf(str);
-#elif defined TIMER_DEBUG
-	printf("Timer started for %dus\n", (int)timerThreadTbl[threadId].timeoutValue[i]);
-#endif //TIMER_DEBUG
 
 	// Unlock mutex before notifying timer thread
 	pthread_mutex_unlock(&timerMutex);
@@ -472,27 +457,18 @@ uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 
 uint8 timer_set_event(uint8 threadId, uint32 event)
 {
-#ifdef TIMER_DEBUG
-	printf("[TIMER] Setting event 0x%.2X\n", event);
-#endif //TIMER_DEBUG
+	LOG_DEBUG_TIMER("[TIMER][TIMER] Setting event 0x%.2X\n", event);
 
 	//Mutex needs to be used in order to provide access to set/clear event to several thread...
 	// Set event in table
 
 	pthread_mutex_lock(&timerEventMutex);
-#if (defined __DEBUG_TIME__) && (defined TIMER_DEBUG)
-	char str[128];
-	snprintf(str, sizeof(str), "[TIMER] Event 0x%.8X set for thread %d\n", event, threadId);
-	time_printf(str);
-#endif //__DEBUG_TIME__
 	timerThreadTbl[threadId].eventFlag |= event;
 
 	// Release resources waiting for this event
 	if (sem_post(&eventSem) < 0)
 	{
-		char strArr[128];
-		sprintf(strArr, "Failed to post event 0x%.8X", event);
-		perror(strArr);
+		LOG_ERROR("[TIMER] Failed to post event 0x%.8X", event);
 	}
 
 	pthread_mutex_unlock(&timerEventMutex);
@@ -503,15 +479,8 @@ uint8 timer_set_event(uint8 threadId, uint32 event)
 
 uint8 timer_clear_event(uint8 threadId, uint32 event)
 {
-#ifdef TIMER_DEBUG
-	printf("clearing event 0x%.8X\n", event);
-#endif //TIMER_DEBUG
+	LOG_DEBUG_TIMER("[TIMER] clearing event 0x%.8X\n", event);
 	pthread_mutex_lock(&timerEventMutex);
-#if (defined __DEBUG_TIME__) && (defined TIMER_DEBUG)
-	char str[128];
-	snprintf(str, sizeof(str), "[TIMER] Event 0x%.8X cleared for thread %d\n", event, threadId);
-	time_printf(str);
-#endif //__DEBUG_TIME__
 	timerThreadTbl[threadId].eventFlag &= ~event;
 	pthread_mutex_unlock(&timerEventMutex);
 	return TRUE;
@@ -521,11 +490,7 @@ uint32 timer_get_event(uint8 threadId)
 {
 	pthread_mutex_lock(&timerEventMutex);
 	pthread_mutex_unlock(&timerEventMutex);
-#if (defined __DEBUG_TIME__) && (defined TIMER_DEBUG)
-	char str[128];
-	snprintf(str, sizeof(str), "[TIMER] Event 0x%.8X read for thread %d\n", timerThreadTbl[threadId].eventFlag, threadId);
-	time_printf(str);
-#endif //__DEBUG_TIME__
+	LOG_DEBUG_TIMER("[TIMER] Event 0x%.8X read for thread %d\n", timerThreadTbl[threadId].eventFlag, threadId);
 	return timerThreadTbl[threadId].eventFlag;
 }
 
@@ -552,32 +517,32 @@ static void timerInitSyncRes(void)
 	// initialize all mutexes
 	if (pthread_mutex_init(&timerThreadMutex, NULL))
 	{
-		printf("Fail To Initialize Mutex appThreadMutex\n");
+		LOG_ERROR("[TIMER]Fail To Initialize Mutex appThreadMutex\n");
 		exit(-1);
 	}
 
 	if(pthread_mutex_init(&timerInitMutex, NULL))
 	{
-		printf("Fail To Initialize Mutex timerInitMutex\n");
+		LOG_ERROR("[TIMER]Fail To Initialize Mutex timerInitMutex\n");
 		exit(-1);
 	}
 
 	if(pthread_mutex_init(&timerMutex, NULL))
 	{
-		printf("Fail To Initialize Mutex timerMutex\n");
+		LOG_ERROR("[TIMER]Fail To Initialize Mutex timerMutex\n");
 		exit(-1);
 	}
 
 	if(pthread_mutex_init(&timerEventMutex, NULL))
 	{
-		printf("Fail To Initialize Mutex timerEventMutex\n");
+		LOG_ERROR("[TIMER]Fail To Initialize Mutex timerEventMutex\n");
 		exit(-1);
 	}
 
 	// initialize conditions
 	if (pthread_cond_init(&timerSetCond, NULL))
 	{
-		printf("Fail To Initialize Cond timerSetCond\n");
+		LOG_ERROR("[TIMER]Fail To Initialize Cond timerSetCond\n");
 		exit(-1);
 	}
 }
