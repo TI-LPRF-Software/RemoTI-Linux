@@ -237,15 +237,13 @@ uint8 BOOT_HandshakeReq( void )
   pMsg.cmdId    = SB_HANDSHAKE_CMD;
   pMsg.len      = 0;
 
-
   // send Read Item request to NP RTIS synchronously
   NPI_SendSynchData( &pMsg );
 
-  // DEBUG
-  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
+  // If command ID should have bit 7 set, otherwise the API was not handled
+  if ( pMsg.cmdId != (SB_HANDSHAKE_CMD | SB_RSP_MASK ) )
   {
-//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
-	  return( (rStatus_t)pMsg.pData[0] );
+	  return( SB_NO_RESPOSNE );
   }
 
   // return the status, which is stored is the first byte of the payload
