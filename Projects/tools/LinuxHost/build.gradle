@@ -84,7 +84,7 @@ dependencies {}
         repositories {
             maven {
                 name 'libs-release'
-                url = witbeBuilder.artifactoryContextUrl + 'libs-release-local'
+                url = witbeBuilder.artifactoryContextUrl + "${System.properties['os.name'].toLowerCase()}_libs-release.${project.architecture}"
                 credentials(witbeBuilder.artifactoryCredentials)
             }
             maven {
@@ -100,7 +100,7 @@ dependencies {}
                 ext.dependencyConfiguration = 'natives'
             }
             witbeRPMS(MavenPublication) {
-                groupId "7.os.x86_64"
+                groupId "7.${System.properties['os.name'].toLowerCase()}.${project.architecture}"
                 artifact(file("${buildDir}/remoti-${project.version}-${project.architecture}-libs.rpm")) { extension 'rpm'; classifier 'libs' }
                 artifact(file("${buildDir}/remoti-${project.version}-${project.architecture}-devel.rpm")) { extension 'rpm'; classifier 'devel' }
                 artifact(file("${buildDir}/remoti-${project.version}-${project.architecture}-server.rpm")) { extension 'rpm'; classifier 'server' }
