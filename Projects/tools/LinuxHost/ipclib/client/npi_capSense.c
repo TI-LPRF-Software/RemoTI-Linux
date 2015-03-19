@@ -103,7 +103,9 @@ int CAP_AsynchMsgCback( npiMsgData_t *pMsg )
 		case RPC_CMD_ID_CAPSENSE_BUTTON_STATS:
 		{
 			CapSenseRawDataInd(pMsg->pData[0],
-					*(uint16*)(&pMsg->pData[1]));
+					*(uint16*)(&pMsg->pData[1]),
+					*(uint16*)(&pMsg->pData[3]),
+					*(uint16*)(&pMsg->pData[5]));
 			break;
 		}
 		default:

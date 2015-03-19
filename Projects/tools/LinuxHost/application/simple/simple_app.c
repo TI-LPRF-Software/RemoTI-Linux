@@ -112,7 +112,7 @@ static const char * const Command_list[5 + 1] = { //5 Elements for now
 				NAME_ELEMENT(RTI_CERC_COMMAND_DISCOVERY_REQUEST),
 				NAME_ELEMENT(RTI_CERC_COMMAND_DISCOVERY_RESPONSE), };
 
-const char * const AppState_list[AP_STATE_SIMPLE_TEST_MODE + 1] = { // Application States
+const char * const AppState_list[AP_STATE_PHY_TESTMODE + 1] = { // Application States
 		[0 ... AP_STATE_SIMPLE_TEST_MODE] = NULL, NAME_ELEMENT(AP_STATE_INIT),
 		NAME_ELEMENT(AP_STATE_INIT_COLD),
 		NAME_ELEMENT(AP_STATE_READY),
@@ -123,7 +123,9 @@ const char * const AppState_list[AP_STATE_SIMPLE_TEST_MODE + 1] = { // Applicati
 		NAME_ELEMENT(AP_STATE_WAIT_WAKEUP_FOR_PAIR),
 		NAME_ELEMENT(AP_STATE_WAIT_WAKEUP_FOR_UNPAIR),
 		NAME_ELEMENT(AP_STATE_WAIT_WAKEUP_FOR_NDATA),
-		NAME_ELEMENT(AP_STATE_SIMPLE_TEST_MODE)
+		NAME_ELEMENT(AP_STATE_SIMPLE_TEST_MODE),
+		NAME_ELEMENT(AP_STATE_RESET_FOR_PHY_TESTMODE),
+		NAME_ELEMENT(AP_STATE_PHY_TESTMODE)
 };
 
 static const char * const ZRC_Key_list[255 + 1] =
@@ -266,6 +268,7 @@ enum {
 };
 uint8 appPhyTestState = APP_PHY_TEST_STATE_INIT;
 void appPhysicalTestModeProcessKey (char* strIn);
+int totalPacketCount = 0;
 
 appSendData_t appSendData_s;
 uint8 appSendDataState;
@@ -392,7 +395,7 @@ static void *appThreadFunc(void *ptr)
 {
 	//uint8 readbuf[128];
 	//uint8 pollStatus = FALSE;
-	uint16 events = 0;
+	uint32 events = 0;
 
 	/* lock mutex in order not to lose signal */
 	pthread_mutex_lock(&appThreadMutex);
@@ -419,7 +422,7 @@ static void *appThreadFunc(void *ptr)
 		// Process events
 		if (events != 0) {
 			appProcessEvents(events);
-			LOG_DEBUG("State: %s [0x%.2X]\n", AppState_list[appState], appState);
+			LOG_INFO("State: %s [0x%.2X]\n", AppState_list[appState], appState);
 		}
 
 		// Only process actions if there is a character available
@@ -547,6 +550,21 @@ static void *appThreadFunc(void *ptr)
 			}
 			else if (ch == '6')
 			{
+#ifdef SPI
+				npiMsgData_t pMsg;
+				pMsg.len = 0;
+				pMsg.subSys = RPC_SYS_SRV_CTRL | RPC_CMD_AREQ;
+				pMsg.cmdId = NPI_LNX_CMD_ID_RESET_DEVICE;
+				// send debug flag value
+				NPI_SendAsynchData( &pMsg );
+				// Now we work with the RTI_TestModeReq() API.
+				appState = AP_STATE_PHY_TESTMODE;
+				appPhyTestState = APP_PHY_TEST_STATE_INIT;
+				// Display GUI for these APIs
+				DispPhyTestModeMenu();
+
+#else
+
 				appState = AP_STATE_RESET_FOR_PHY_TESTMODE;
 				appPhyTestState = APP_PHY_TEST_STATE_INIT;
 
@@ -557,6 +575,7 @@ static void *appThreadFunc(void *ptr)
 
 				// send debug flag value
 				NPI_SendAsynchData( &pMsg );
+#endif
 			}
 			else if (ch == '3')
 			{
@@ -771,7 +790,7 @@ static void *appThreadFunc(void *ptr)
  *
  * @brief   Process events function
  *
- * @param   events - 16 bit mask
+ * @param   events - 32 bit mask
  *
  * @return  void
  */
@@ -829,6 +848,16 @@ static void appProcessEvents(uint32 events)
 		pthread_mutex_lock(&appInitMutex);
 
 	}
+	if (events & SIMPLE_APP_EVT_RX_COUNT_CHECK)
+	{
+		uint16 packetCount = RTI_TestRxCounterGetReq(TRUE);
+		totalPacketCount += packetCount;
+		LOG_INFO("[RX Test] Received %d packets since last call. Totally %d packets\n", packetCount, totalPacketCount);
+		// Prepare to clear event
+		procEvents |= SIMPLE_APP_EVT_RX_COUNT_CHECK;
+		timer_start_timerEx(SIMPLE_App_threadId, SIMPLE_APP_EVT_RX_COUNT_CHECK, 250); // Retry initialization after 500 ms
+	}
+
 	// Clear event
 	timer_clear_event(SIMPLE_App_threadId, procEvents);
 }
@@ -2069,6 +2098,8 @@ void appPhysicalTestModeProcessKey (char* strIn)
 	{
 		appPhyTestState = APP_PHY_TEST_STATE_INIT;
 		appState = AP_STATE_RESET_FOR_PHY_TESTMODE;
+		// Stop timer that schedules event to check number of received packets
+		timer_start_timerEx(SIMPLE_App_threadId, SIMPLE_APP_EVT_RX_COUNT_CHECK, 0); // Stop by setting timeout to 0
 
 		npiMsgData_t pMsg;
 		pMsg.len = 0;
@@ -2135,6 +2166,7 @@ void appPhysicalTestModeProcessKey (char* strIn)
 		case '9':
 			// Call RTI_TestModeReq()
 			appPhyTestState = APP_PHY_TEST_STATE_ACTIVE;
+			totalPacketCount = 0;
 			if (strIn[0] == '7')
 			{
 				RTI_TestModeReq(RTI_TEST_MODE_TX_RAW_CARRIER, -20, 15);
@@ -2261,6 +2293,8 @@ void appPhysicalTestModeProcessKey (char* strIn)
 			{
 				RTI_TestModeReq(RTI_TEST_MODE_RX_AT_FREQ, 0, 25);
 			}
+			// Schedule event to check number of received packets
+			timer_start_timerEx(SIMPLE_App_threadId, SIMPLE_APP_EVT_RX_COUNT_CHECK, 250); // Retry initialization after 500 ms
 			DispPhyTestModeActiveMenu();
 			break;
 		default:

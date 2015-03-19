@@ -56,6 +56,7 @@ extern "C" {
 #define SIMPLE_APP_EVT_NONE                   			0x00000000 // No event
 #define SIMPLE_APP_EVT_INIT                   			0x00000001 // Initial Boot up Event
 #define SIMPLE_APP_EVT_DATA_RCV               			0x00000002 // Data Receive Event
+#define SIMPLE_APP_EVT_RX_COUNT_CHECK          			0x00010000 // Read Rx packet count
 
 // RNP sleep mode have two dependencies; Rx and NPI
 #define SIMPLE_APP_RNP_POWER_STATE_STANDBY_BIT			BV(0)
@@ -85,7 +86,7 @@ enum {
 	AP_STATE_PHY_TESTMODE, // State to call RTI_TestModeReq() APIs
 };
 
-extern const char * const AppState_list[AP_STATE_SIMPLE_TEST_MODE + 1];//18 Application States
+extern const char * const AppState_list[AP_STATE_PHY_TESTMODE + 1];//18 Application States
 
 
 // Send Data States

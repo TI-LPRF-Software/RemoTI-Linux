@@ -251,7 +251,10 @@ int PollLockVarError(int originator)
  */
 int NPI_SPI_OpenDevice(const char *portName, void *pCfg)
 {
-	int ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_OPEN_DEVICE;
+	int ret = NPI_LNX_SUCCESS;
+#ifndef PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
+	int funcID = NPI_LNX_ERROR_FUNC_ID_OPEN_DEVICE;
+#endif //PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 
 	if(npiOpenFlag)
 	{
@@ -300,6 +303,7 @@ int NPI_SPI_OpenDevice(const char *portName, void *pCfg)
 
 
 	//Polling forbid until the Reset and Sync is done
+#ifndef PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 	debug_printf("LOCK POLL WHILE INIT\n");
 	pthread_mutex_lock(&npiPollLock);
 	if (PollLockVar)
@@ -313,6 +317,7 @@ int NPI_SPI_OpenDevice(const char *portName, void *pCfg)
 	}
 
 	debug_printf("PollLockVar = %d\n", PollLockVar);
+#endif // ! PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 
 	// TODO: it is ideal to make this thread higher priority
 	// but Linux does not allow real time of FIFO scheduling policy for
@@ -831,6 +836,26 @@ int NPI_SPI_ResetSlave( void )
   printf("\n\n-------------------- START RESET SLAVE -------------------\n");
 #endif //(defined __DEBUG_TIME__)
 
+
+#ifdef PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
+   {
+      npiMsgData_t pMsg;
+
+      pMsg.subSys   = RPC_SYS_RCAF;
+      pMsg.cmdId    = 0x13;
+      pMsg.len      = 0;
+      printf("---------- %s WARNING: ATTEMPTING SW RESET AND CROSSING FINGERS. ---------\n", __FUNCTION__);
+
+      // send command to slave
+      ret = NPI_SPI_SendAsynchData( &pMsg );
+
+      // If the chip was already in the bootloader when this was called, then we need to write 3 bytes to synch up the bootloader.
+      //Do a Three Byte Dummy Write to read the RPC Header
+      uint8 i;
+      for (i = 0 ;i < RPC_FRAME_HDR_SZ; i++ ) ((uint8*)&pMsg)[i] = 0;
+      HalSpiWrite( 0, (uint8*) &pMsg, RPC_FRAME_HDR_SZ);
+   }
+#else
   ret = HalGpioReset();
 
   if (forceRun != NPI_LNX_UINT8_ERROR)
@@ -855,6 +880,7 @@ int NPI_SPI_ResetSlave( void )
 		  HalGpioWaitSrdySet();
 	  }
   }
+#endif
 
   printf("Wait 500us for RNP to initialize after a Reset... This may change in the future, check for RTI_ResetInd()...\n");
   usleep(500); //wait 500us for RNP to initialize
@@ -1481,7 +1507,7 @@ static void *npi_event_entry(void *ptr)
 				// We are in Asynch or Synch, so return to poll
 				if (HAL_RNP_SRDY_SET() == TRUE)
 				{
-					time_printf("[INT]: SRDY found to be de-asserted while we are transmitting");
+//					time_printf("[INT]: SRDY found to be de-asserted while we are transmitting");
 				}
 				else
 				{
@@ -1494,8 +1520,8 @@ static void *npi_event_entry(void *ptr)
 		{
 			if ( __BIG_DEBUG_ACTIVE == TRUE)
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread has SRDY mutex lock, result = %d", result);
-				time_printf(tmpStr);
+//				snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread has SRDY mutex lock, result = %d", result);
+//				time_printf(tmpStr);
 			}
 			// We got lock, move on
 			switch (result)
@@ -1673,8 +1699,8 @@ missedInterrupt, whileIt);
 
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread is releasing SRDY mutex lock");
-					time_printf(tmpStr);
+//					snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread is releasing SRDY mutex lock");
+//					time_printf(tmpStr);
 				}
 
 				// Unlock before signaling poll thread
@@ -1691,8 +1717,8 @@ missedInterrupt, whileIt);
 			{
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread is releasing SRDY mutex lock");
-					time_printf(tmpStr);
+//					snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread is releasing SRDY mutex lock");
+//					time_printf(tmpStr);
 				}
 				pthread_mutex_unlock(&npiSrdyLock);
 			}
@@ -1704,8 +1730,8 @@ missedInterrupt, whileIt);
 			//debug_printf("Unknown Event or timeout, ignore it, result:%d \n",result);
 			if ( __BIG_DEBUG_ACTIVE == TRUE )
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread is releasing SRDY mutex lock, result = %d",result);
-				time_printf(tmpStr);
+//				snprintf(tmpStr, sizeof(tmpStr), "[INT]: Event thread is releasing SRDY mutex lock, result = %d",result);
+//				time_printf(tmpStr);
 			}
 			pthread_mutex_unlock(&npiSrdyLock);
 		}

@@ -590,7 +590,11 @@ int main(int argc, char ** argv)
 	// Copy from buffer to variable
 	devIdx = strBuf[0] - '0';
 	//            debug_
-	printf("deviceKey = %i  (%s)\n", devIdx, strBuf);
+	printf("deviceKey = %i  (%s - %s)\n", devIdx, strBuf, 
+	      (devIdx == NPI_SERVER_DEVICE_INDEX_UART) ? "UART" :
+			(devIdx == NPI_SERVER_DEVICE_INDEX_SPI)  ? "SPI" :
+			(devIdx == NPI_SERVER_DEVICE_INDEX_I2C)  ? "I2C" : "?");
+
 
 	// Get path to the device
 	strBuf = pStrBufRoot;
@@ -953,14 +957,14 @@ int main(int argc, char ** argv)
 	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "PORT", "port", strBuf)))
 	{
 		// Fall back to default if port was not found in the configuration file
-		strncpy(port, NPI_PORT, 128);
+		strncpy(port, NPI_PORT, sizeof(port)-1);
 		printf(
 				"Warning! Port not found in configuration file. Will use default port: %s\n",
 				port);
 	} 
 	else 
 	{
-		strncpy(port, strBuf, 128);
+		strncpy(port, strBuf, sizeof(port)-1);
 	}
 
 		// Now configure Debug Interface if supported
@@ -1071,13 +1075,13 @@ int main(int argc, char ** argv)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	printf("Port: %s\n", port);
+	printf("Listen port: %s\n", port);
 
 	if ((status = getaddrinfo(NULL, port, &hints, &servinfo)) != 0)
 	{
 		fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
 		//                port = NPI_PORT;
-		strncpy(port, NPI_PORT, 128);
+		strncpy(port, NPI_PORT, sizeof(port)-1);
 		printf("Trying default port: %s instead\n", port);
 		if ((status = getaddrinfo(NULL, port, &hints, &servinfo)) != 0)
 		{

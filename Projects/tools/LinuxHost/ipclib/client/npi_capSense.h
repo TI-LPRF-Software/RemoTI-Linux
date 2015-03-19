@@ -106,7 +106,8 @@ int CAP_AsynchMsgCback( npiMsgData_t *pMsg );
 extern void HalCapSenseControlStat(uint8 statOnOff);
 
 extern void CapSenseButtonPressedInd(uint16 buttonBitMap);
-extern void CapSenseRawDataInd(uint8 btnId, uint16 value);
+extern void CapSenseRawDataInd(uint8 btnId, uint16 value, uint16 mean, uint16 detectionOffset);
+
 
 #ifdef __cplusplus
 }

@@ -197,7 +197,7 @@ static void *timerThreadFunc(void *ptr)
 				}
 			}
 			long int timeWaitedDifference = (decrementValue - minimumTimeout);
-			LOG_DEBUG_TIMER("[TIMER][TIMER] Decrementing value %dus, diff %dus\n", (int)decrementValue, (int)timeWaitedDifference);
+			LOG_DEBUG_TIMER("[TIMER] Decrementing value %dus, diff %dus\n", (int)decrementValue, (int)timeWaitedDifference);
 			if ( timeWaitedDifference > 250)
 			{
 				// Waited too long, must increase waitMargin, add the difference
@@ -457,7 +457,7 @@ uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 
 uint8 timer_set_event(uint8 threadId, uint32 event)
 {
-	LOG_DEBUG_TIMER("[TIMER][TIMER] Setting event 0x%.2X\n", event);
+	LOG_DEBUG("[TIMER] Setting event 0x%.2X\n", event);
 
 	//Mutex needs to be used in order to provide access to set/clear event to several thread...
 	// Set event in table
@@ -468,7 +468,8 @@ uint8 timer_set_event(uint8 threadId, uint32 event)
 	// Release resources waiting for this event
 	if (sem_post(&eventSem) < 0)
 	{
-		LOG_ERROR("[TIMER] Failed to post event 0x%.8X", event);
+		LOG_ERROR("[TIMER] Failed to post event 0x%.8X, semaphore %p\n", event, &eventSem);
+		perror("eventSem");
 	}
 
 	pthread_mutex_unlock(&timerEventMutex);
@@ -490,7 +491,7 @@ uint32 timer_get_event(uint8 threadId)
 {
 	pthread_mutex_lock(&timerEventMutex);
 	pthread_mutex_unlock(&timerEventMutex);
-	LOG_DEBUG_TIMER("[TIMER] Event 0x%.8X read for thread %d\n", timerThreadTbl[threadId].eventFlag, threadId);
+	LOG_TRACE("[TIMER] Event 0x%.8X read for thread %d\n", timerThreadTbl[threadId].eventFlag, threadId);
 	return timerThreadTbl[threadId].eventFlag;
 }
 

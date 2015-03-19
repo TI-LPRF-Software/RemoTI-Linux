@@ -57,9 +57,8 @@ MAINAPP_OBJS= \
 	$(OBJS)/$(app)_app_main.o \
 	$(OBJS)/$(app)_app.o \
 	$(OBJS)/timer.o \
-	$(OBJS)/time_printf.o \
 	$(OBJS)/npi_rti.o \
-	$(OBJS)/npi_ipc_client.o \
+	$(OBJS)/npi_ipc_client.o
 
 #by default, do not use the library.
 PROJ_OBJS=$(MAINAPP_OBJS)
@@ -143,10 +142,6 @@ $(OBJS)/$(app)_app.o: $(app)_app.c
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 
 $(OBJS)/timer.o: ../common/timer.c
-	@echo "Compiling" $< "..."
-	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
-
-$(OBJS)/time_printf.o: ../common/time_printf.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 

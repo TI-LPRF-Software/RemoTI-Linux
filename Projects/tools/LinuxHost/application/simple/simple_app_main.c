@@ -337,7 +337,10 @@ int main(int argc, char **argv)
 				// Indicate to application thread that the input is ready
 				consoleInput.handle = RTI_MAIN_INPUT_READY;
 				// Release resources waiting for this event
-				sem_post(&eventSem);
+				if (sem_post(&eventSem) < 0)
+				{
+					LOG_ERROR("[MAIN] Failed to post semaphore %p\n", &eventSem);
+				}
 			}
 //			printf("Character read: \t%c, int: %d\n", consoleInput.latestCh,
 //					consoleInput.latestCh);

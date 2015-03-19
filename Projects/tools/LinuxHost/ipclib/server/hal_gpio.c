@@ -668,6 +668,7 @@ int HalGpioResetSet(uint8 state)
 			return NPI_LNX_FAILURE;
 		}
 	}
+	debug_printf("[GPIO] Reset called with state = %d\n", state);
 
 	return NPI_LNX_SUCCESS;
 
@@ -906,16 +907,14 @@ int HalGpioWaitSrdyClr(void)
 				else
 				{
 					// This timeout is expected, and ok. Nothing to report, only for debug.
-					debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go low intermediate timed out, %d\n",
-							(unsigned int) pthread_self(), accTimeout);
+//					debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go low intermediate timed out, %d\n", (unsigned int) pthread_self(), accTimeout);
 				}
 			}
 			else
 			{
 				// Missed interrupt waiting for SRDY to go high
 				// This timeout is expected, and ok. Nothing to report, only for debug.
-				debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go low intermediate timed out, %d. However, SRDY is now low\n",
-						(unsigned int) pthread_self(), accTimeout);
+				debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go low intermediate timed out, %d. However, SRDY is now low\n", (unsigned int) pthread_self(), accTimeout);
 				break;
 			}
 		}
