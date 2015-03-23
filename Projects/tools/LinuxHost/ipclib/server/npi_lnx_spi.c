@@ -221,9 +221,9 @@ void time_printf(char *strToPrint)
  * None.
  ******************************************************************************
  */
-int PollLockVarError(int originator)
+int PollLockVarError(int originator, int shouldNotBe)
 {
-    printf("PollLock Var ERROR, it is %d, it should be %d. Called by 0x%.8X\n", PollLockVar, !PollLockVar, originator);
+    printf("PollLock Var ERROR, it is %d, it should be %d. Called by 0x%.8X\n", !shouldNotBe, shouldNotBe, originator);
     npi_ipc_errno = NPI_LNX_ERROR_SPI_POLL_LOCK_VAR_ERROR;
     return NPI_LNX_FAILURE;
 }
@@ -308,7 +308,7 @@ int NPI_SPI_OpenDevice(const char *portName, void *pCfg)
 	pthread_mutex_lock(&npiPollLock);
 	if (PollLockVar)
 	{
-		ret = PollLockVarError(funcID++);
+		ret = PollLockVarError(funcID++, PollLockVar);
 	}
 	else
 	{
@@ -393,7 +393,7 @@ int NPI_SPI_SendAsynchData( npiMsgData_t *pMsg )
 #endif
 	if (PollLockVar)
 	{
-		ret = PollLockVarError(funcID++);
+		ret = PollLockVarError(funcID++, PollLockVar);
 	}
 	else
 	{
@@ -425,7 +425,7 @@ int NPI_SPI_SendAsynchData( npiMsgData_t *pMsg )
 
 	if (!PollLockVar)
 	{
-		ret = PollLockVarError(funcID++);
+		ret = PollLockVarError(funcID++, !PollLockVar);
 	}
 	else
 	{
@@ -639,30 +639,18 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	// Do not attempt to send until polling is finished
 
 	int lockRetPoll = 0, lockRetSrdy = 0;
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		time_printf("[SYNCH] Lock POLL mutex");
-	}
+	debug_printf("[SYNCH] Lock POLL mutex\n");
 	//Lock the polling until the command is send
 	lockRetPoll = pthread_mutex_lock(&npiPollLock);
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		time_printf("[SYNCH] POLL mutex locked");
-	}
+	debug_printf("[SYNCH] POLL mutex locked\n");
 #ifdef SRDY_INTERRUPT
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		time_printf("[SYNCH] Lock SRDY mutex");
-	}
+	debug_printf("[SYNCH] Lock SRDY mutex\n");
 	lockRetSrdy = pthread_mutex_lock(&npiSrdyLock);
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		time_printf("[SYNCH] SRDY mutex locked");
-	}
+	debug_printf("[SYNCH] SRDY mutex locked\n");
 #endif
 	if (PollLockVar)
 	{
-		ret = PollLockVarError(funcID++);
+		ret = PollLockVarError(funcID++, PollLockVar);
 	}
 	else
 	{
@@ -773,7 +761,7 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
     debug_printf("\n==================== END SEND SYNC DATA ====================\n");
 	if (!PollLockVar)
 	{
-		ret = PollLockVarError(funcID++);
+		ret = PollLockVarError(funcID++, !PollLockVar);
 	}
 	else
 	{
@@ -965,7 +953,10 @@ static int npi_initThreads(void)
  */
 int NPI_SPI_SynchSlave( void )
 {
-	int ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_SYNCH_SLAVE;
+	int ret = NPI_LNX_SUCCESS;
+#ifndef PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
+	funcID = NPI_LNX_ERROR_FUNC_ID_SYNCH_SLAVE;
+#endif //!PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 
 	if (srdyMrdyHandshakeSupport == TRUE)
 	{
@@ -974,25 +965,21 @@ int NPI_SPI_SynchSlave( void )
 		// At this point we already have npiPollMutex lock
 		int lockRetSrdy = 0;
 #ifdef SRDY_INTERRUPT
-		if (__DEBUG_TIME_ACTIVE == TRUE)
-		{
-			time_printf("[HANDSHAKE] Lock SRDY mutex");
-		}
+		printf("[HANDSHAKE] Lock SRDY mutex\n");
 		lockRetSrdy = pthread_mutex_lock(&npiSrdyLock);
-		if (__DEBUG_TIME_ACTIVE == TRUE)
-		{
-			time_printf("[HANDSHAKE] SRDY mutex locked");
-		}
+		printf("[HANDSHAKE] SRDY mutex locked\n");
 #endif
+#ifndef PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 		if (!PollLockVar)
 		{
-			ret = PollLockVarError(funcID);
+			ret = PollLockVarError(funcID, !PollLockVar);
 		}
 		else
 		{
 			PollLockVar = 1;
 			debug_printf("[HANDSHAKE] PollLockVar set to %d\n", PollLockVar);
 		}
+#endif //PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 		if (lockRetSrdy != 0)
 		{
 			printf("[HANDSHAKE] [ERR] Could not get SRDY mutex lock\n");
@@ -1027,6 +1014,12 @@ int NPI_SPI_SynchSlave( void )
 
 		// Check that SRDY is low
 		ret = HalGpioWaitSrdyClr();
+#ifdef PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
+		if ((ret == NPI_LNX_FAILURE) && (npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT))
+		{
+			printf("[HANDSHAKE] We may have attempted a soft reset while in bootloader. In this case a timeout is expected. Writing 3 bytes to release situation\n");
+		}
+#endif //PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 
 #ifdef __DEBUG_TIME__
 		gettimeofday(&curTime, NULL);
@@ -1117,9 +1110,10 @@ int NPI_SPI_SynchSlave( void )
 		if (ret == NPI_LNX_SUCCESS)
 			ret = HalGpioSrdyCheck(1);
 
+#ifndef PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 		if (!PollLockVar)
 		{
-			ret = PollLockVarError(funcID++);
+			ret = PollLockVarError(funcID++, !PollLockVar);
 		}
 		else
 		{
@@ -1129,6 +1123,7 @@ int NPI_SPI_SynchSlave( void )
 
 		printf("[HANDSHAKE] unLock Poll ...");
 		pthread_mutex_unlock(&npiPollLock);
+#endif //PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 		printf("(Handshake) success \n");
 #ifdef SRDY_INTERRUPT
 		pthread_mutex_unlock(&npiSrdyLock);
@@ -1261,7 +1256,7 @@ static void *npi_poll_entry(void *ptr)
 #endif
 		if (PollLockVar)
 		{
-			ret = PollLockVarError(funcID+1);
+			ret = PollLockVarError(funcID+1, PollLockVar);
 		}
 		else
 		{
@@ -1317,7 +1312,7 @@ static void *npi_poll_entry(void *ptr)
 
 			if (!PollLockVar)
 			{
-				ret = PollLockVarError(funcID+2);
+				ret = PollLockVarError(funcID+2, !PollLockVar);
 			}
 			else
 			{
@@ -1344,7 +1339,7 @@ static void *npi_poll_entry(void *ptr)
 		{
 			if (!PollLockVar)
 			{
-				ret = PollLockVarError(funcID+3);
+				ret = PollLockVarError(funcID+3, !PollLockVar);
 			}
 			else
 			{
