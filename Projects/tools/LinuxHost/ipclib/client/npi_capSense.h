@@ -70,7 +70,10 @@ extern "C"
 /*******************************************/
 
 // Asynchronous Request IDs
+#define RPC_CMD_ID_CAPSENSE_SUB_SUBSYSTEM_ID		0x01
+
 #define RPC_CMD_ID_CAPSENSE_STATS_CONTROL_REQ 		0x01
+#define RPC_CMD_ID_CAPSENSE_SET_THRESHOLDS			0x02
 
 // Asynchronous Command IDs
 #define RPC_CMD_ID_CAPSENSE_BUTTON_IND        		0x01
@@ -104,6 +107,7 @@ extern "C"
 int CAP_AsynchMsgCback( npiMsgData_t *pMsg );
 
 extern void HalCapSenseControlStat(uint8 statOnOff);
+extern void HalCapSenseSetThresholds(uint8 length, uint8 *thresholds);
 
 extern void CapSenseButtonPressedInd(uint16 buttonBitMap);
 extern void CapSenseRawDataInd(uint8 btnId, uint16 value, uint16 mean, uint16 detectionOffset);

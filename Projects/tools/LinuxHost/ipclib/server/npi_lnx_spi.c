@@ -839,9 +839,8 @@ int NPI_SPI_ResetSlave( void )
 
       // If the chip was already in the bootloader when this was called, then we need to write 3 bytes to synch up the bootloader.
       //Do a Three Byte Dummy Write to read the RPC Header
-      uint8 i;
-      for (i = 0 ;i < RPC_FRAME_HDR_SZ; i++ ) ((uint8*)&pMsg)[i] = 0;
-      HalSpiWrite( 0, (uint8*) &pMsg, RPC_FRAME_HDR_SZ);
+	  memset(pMsg.pData, 0, RPC_FRAME_HDR_SZ);
+	  HalSpiWrite( 0, pMsg.pData, RPC_FRAME_HDR_SZ);
    }
 #else
   ret = HalGpioReset();
@@ -955,7 +954,7 @@ int NPI_SPI_SynchSlave( void )
 {
 	int ret = NPI_LNX_SUCCESS;
 #ifndef PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
-	funcID = NPI_LNX_ERROR_FUNC_ID_SYNCH_SLAVE;
+	int funcID = NPI_LNX_ERROR_FUNC_ID_SYNCH_SLAVE;
 #endif //!PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 
 	if (srdyMrdyHandshakeSupport == TRUE)
@@ -1706,6 +1705,9 @@ missedInterrupt, whileIt);
 					snprintf(tmpStr, sizeof(tmpStr), "[INT]: MRDY High??: %d, send H2L to POLL (srdy = %d)", ret, global_srdy);
 					time_printf(tmpStr);
 				}
+				// Before we can signal poll thread we need to make sure SynchData has completed
+				pthread_mutex_lock(&npiPollLock);
+				pthread_mutex_unlock(&npiPollLock);
 				pthread_cond_signal(&npi_srdy_H2L_poll);
 			}
 			else

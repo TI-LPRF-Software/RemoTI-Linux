@@ -91,21 +91,21 @@ typedef uint8 rStatus_t;
  */
 int CAP_AsynchMsgCback( npiMsgData_t *pMsg )
 {
-	if (pMsg->subSys == RPC_SYS_PERIPHERALS)
+	if ((pMsg->subSys == RPC_SYS_PERIPHERALS) && (pMsg->cmdId == RPC_CMD_ID_CAPSENSE_SUB_SUBSYSTEM_ID))
 	{
-		switch (pMsg->cmdId)
+		switch (pMsg->pData[0])
 		{
 		case RPC_CMD_ID_CAPSENSE_BUTTON_IND:
 		{
-			CapSenseButtonPressedInd(*(uint16*)(pMsg->pData));
+			CapSenseButtonPressedInd(*(uint16*)(&pMsg->pData[1]));
 			break;
 		}
 		case RPC_CMD_ID_CAPSENSE_BUTTON_STATS:
 		{
-			CapSenseRawDataInd(pMsg->pData[0],
-					*(uint16*)(&pMsg->pData[1]),
-					*(uint16*)(&pMsg->pData[3]),
-					*(uint16*)(&pMsg->pData[5]));
+			CapSenseRawDataInd(pMsg->pData[1],
+					*(uint16*)(&pMsg->pData[2]),
+					*(uint16*)(&pMsg->pData[4]),
+					*(uint16*)(&pMsg->pData[6]));
 			break;
 		}
 		default:
@@ -132,14 +132,43 @@ int CAP_AsynchMsgCback( npiMsgData_t *pMsg )
 void  HalCapSenseControlStat(uint8 statOnOff)
 {
 	npiMsgData_t pMsg;
-	pMsg.len = 1;
+	pMsg.len = 2;
 	pMsg.subSys = RPC_SYS_PERIPHERALS | RPC_CMD_AREQ;
-	pMsg.cmdId = RPC_CMD_ID_CAPSENSE_STATS_CONTROL_REQ;
-	pMsg.pData[0] = statOnOff;
+	pMsg.cmdId = RPC_CMD_ID_CAPSENSE_SUB_SUBSYSTEM_ID;
+	pMsg.pData[0] = RPC_CMD_ID_CAPSENSE_STATS_CONTROL_REQ;
+	pMsg.pData[1] = statOnOff;
 
 	// send Program Buffer request to NP RTIS asynchronously as a confirm is due back
 	NPI_SendAsynchData( &pMsg );
 }
+
+/**************************************************************************************************
+ *
+ * @fn          HalCapSenseSetThresholds
+ *
+ * @brief       This API is used to set CapSense thresholds
+ *
+ * input parameters
+ *
+ * @param    thresholds		pointer to buffer containing new thresholds
+ *
+ * @return   Status
+ *
+ **************************************************************************************************/
+void  HalCapSenseSetThresholds(uint8 length, uint8 *thresholds)
+{
+	npiMsgData_t pMsg;
+	pMsg.len = 2 + length;
+	pMsg.subSys = RPC_SYS_PERIPHERALS | RPC_CMD_AREQ;
+	pMsg.cmdId = RPC_CMD_ID_CAPSENSE_SUB_SUBSYSTEM_ID;
+	pMsg.pData[0] = RPC_CMD_ID_CAPSENSE_SET_THRESHOLDS;
+	pMsg.pData[1] = length;
+	memcpy(&pMsg.pData[2], thresholds, length);
+
+	// send Program Buffer request to NP RTIS asynchronously as a confirm is due back
+	NPI_SendAsynchData( &pMsg );
+}
+
 
 
 /**************************************************************************************************
