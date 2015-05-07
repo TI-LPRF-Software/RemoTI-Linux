@@ -8,11 +8,11 @@ OBJS = out
 TEMP = temp
 
 #library to use
-LIBS_x86= -lpthread
+LIBS_x86= -lpthread -lrt
 # -lusb-1.0
-LIBS_armBeagleBoard= -lpthread
+LIBS_armBeagleBoard= -lpthread -lrt
 # -lusb-1.0
-LIBS_armBeagleBone= -lpthread
+LIBS_armBeagleBone= -lpthread -lrt
 # -lusb-1.0
 
 #include path
@@ -32,8 +32,8 @@ CC_x86 = gcc
 #predefine
 #DEFINES = -DRNP_HOST -D__BIG_DEBUG__
 #DEFINES = -DRNP_HOST -DSRDY_INTERRUPT -DNPI_UNIX
-DEFINES = -DMRDY_EARLY_FIX -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=TRUE -DNPI_UART_USB=TRUE -D__DEBUG_TIME__ -D__DEBUG_TIME__I2C -DSRDY_INTERRUPT -DPERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
-# -D__DEBUG_TIME__HID -D__DEBUG_MUTEX__ -DNPI_HID=TRUE 
+DEFINES = -DMRDY_EARLY_FIX -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=TRUE -DNPI_UART_USB=TRUE -D__DEBUG_TIME__ -D__DEBUG_TIME__I2C -DSRDY_INTERRUPT
+# -D__DEBUG_TIME__HID -D__DEBUG_MUTEX__ -DNPI_HID=TRUE -DPERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 
 #compilation Option
 COMPILO_FLAGS_x86 = "-Wall  $(INCLUDES) $(DEFINES)" 
@@ -49,6 +49,7 @@ SERVER_OBJS= \
 	$(OBJS)/hal_gpio.o \
 	$(OBJS)/hal_i2c.o \
 	$(OBJS)/hal_spi.o \
+	$(OBJS)/time_printf.o \
 	$(OBJS)/hal_dbg_ifc.o
 
 
@@ -158,6 +159,10 @@ $(OBJS)/hal_i2c.o: ipclib/server/hal_i2c.c
 #	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
 $(OBJS)/hal_gpio.o: ipclib/server/hal_gpio.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+
+$(OBJS)/time_printf.o: ipclib/server/time_printf.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 

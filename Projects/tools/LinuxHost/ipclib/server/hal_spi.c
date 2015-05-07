@@ -55,8 +55,9 @@
 
 #include "pthread.h"
 
-#include  "hal_types.h"
-#include  "hal_spi.h"
+#include "hal_types.h"
+#include "hal_spi.h"
+#include "time_printf.h"
 
 #include "npi_lnx_error.h"
 
@@ -269,29 +270,11 @@ int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 		(void)port;
 
 #ifdef __DEBUG_TIME__
-		gettimeofday(&curTime, NULL);
-		long int diffPrev;
-		int t = 0;
-		if (curTime.tv_usec >= prevTime.tv_usec)
+		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
 		{
-			diffPrev = curTime.tv_usec - prevTime.tv_usec;
+			static struct timespec prevTime;
+			time_printf_always_localized(" ----- WRITE SPI LOCK MUTEX ---------\n", NULL, NULL, &prevTime);
 		}
-		else
-		{
-			diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-			t = 1;
-		}
-
-		prevTime = curTime;
-		int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-		int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] ----- WRITE SPI LOCK MUTEX ---------\n",
-				hours,											// hours
-				minutes,										// minutes
-				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-				curTime.tv_usec,
-				curTime.tv_sec - prevTime.tv_sec - t,
-				diffPrev);
 #endif //(defined __DEBUG_TIME__)
 		pthread_mutex_lock(&spiMutex1);
 #ifdef __BIG_DEBUG__
@@ -318,28 +301,11 @@ int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 		}
 
 #ifdef __DEBUG_TIME__
-		gettimeofday(&curTime, NULL);
-		t = 0;
-		if (curTime.tv_usec >= prevTime.tv_usec)
+		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
 		{
-			diffPrev = curTime.tv_usec - prevTime.tv_usec;
+			static struct timespec prevTime;
+			time_printf_always_localized(" ----- WRITE SPI DONE ---------------\n", NULL, NULL, &prevTime);
 		}
-		else
-		{
-			diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-			t = 1;
-		}
-
-		prevTime = curTime;
-		hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-		minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] ----- WRITE SPI DONE ---------------\n",
-				hours,											// hours
-				minutes,										// minutes
-				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-				curTime.tv_usec,
-				curTime.tv_sec - prevTime.tv_sec - t,
-				diffPrev);
 #endif //(defined __DEBUG_TIME__)
 
 		pthread_mutex_unlock(&spiMutex1);
@@ -374,29 +340,11 @@ int HalSpiRead(uint8 port, uint8 *pBuf, uint8 len)
 		(void)port;
 
 #ifdef __DEBUG_TIME__
-		gettimeofday(&curTime, NULL);
-		long int diffPrev;
-		int t = 0;
-		if (curTime.tv_usec >= prevTime.tv_usec)
+		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
 		{
-			diffPrev = curTime.tv_usec - prevTime.tv_usec;
+			static struct timespec prevTime;
+			time_printf_always_localized(" ----- READ SPI LOCK MUTEX ---------\n", NULL, NULL, &prevTime);
 		}
-		else
-		{
-			diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-			t = 1;
-		}
-
-		prevTime = curTime;
-		int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-		int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] ----- READ SPI LOCK MUTEX ---------\n",
-				hours,											// hours
-				minutes,										// minutes
-				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-				curTime.tv_usec,
-				curTime.tv_sec - prevTime.tv_sec - t,
-				diffPrev);
 #endif //(defined __DEBUG_TIME__)
 		pthread_mutex_lock(&spiMutex1);
 
@@ -424,28 +372,11 @@ int HalSpiRead(uint8 port, uint8 *pBuf, uint8 len)
 		}
 
 #ifdef __DEBUG_TIME__
-		gettimeofday(&curTime, NULL);
-		t = 0;
-		if (curTime.tv_usec >= prevTime.tv_usec)
+		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
 		{
-			diffPrev = curTime.tv_usec - prevTime.tv_usec;
+			static struct timespec prevTime;
+			time_printf_always_localized(" ----- READ SPI DONE ---------------\n", NULL, NULL, &prevTime);
 		}
-		else
-		{
-			diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-			t = 1;
-		}
-
-		prevTime = curTime;
-		hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-		minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] ----- READ SPI DONE ---------------\n",
-				hours,											// hours
-				minutes,										// minutes
-				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-				curTime.tv_usec,
-				curTime.tv_sec - prevTime.tv_sec - t,
-				diffPrev);
 #endif //(defined __DEBUG_TIME__)
 
 		pthread_mutex_unlock(&spiMutex1);
@@ -485,29 +416,11 @@ int HalSpiWriteRead(uint8 port, uint8 *pBuf, uint8 len)
   tr.bits_per_word = bits;
 
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
-	long int diffPrev;
-	int t = 0;
-	if (curTime.tv_usec >= prevTime.tv_usec)
+	if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
 	{
-		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+		static struct timespec prevTime;
+		time_printf_always_localized(" ----- WRITE_READ SPI LOCK MUTEX ---------\n", NULL, NULL, &prevTime);
 	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-		t = 1;
-	}
-
-	prevTime = curTime;
-	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-	debug_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] ----- WRITE_READ SPI LOCK MUTEX ---------\n",
-			hours,											// hours
-			minutes,										// minutes
-			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-			curTime.tv_usec,
-			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev);
 #endif //(defined __DEBUG_TIME__)
   pthread_mutex_lock(&spiMutex1);
 #ifdef __BIG_DEBUG__
@@ -534,28 +447,11 @@ int HalSpiWriteRead(uint8 port, uint8 *pBuf, uint8 len)
   }
 
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
-	t = 0;
-	if (curTime.tv_usec >= prevTime.tv_usec)
+	if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
 	{
-		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+		static struct timespec prevTime;
+		time_printf_always_localized(" ----- WRITE_READ SPI DONE ---------------\n", NULL, NULL, &prevTime);
 	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-		t = 1;
-	}
-
-	prevTime = curTime;
-	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-	debug_printf("[%.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] ----- WRITE_READ SPI DONE ---------------\n",
-			hours,											// hours
-			minutes,										// minutes
-			(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-			curTime.tv_usec,
-			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev);
 #endif //(defined __DEBUG_TIME__)
 
   memcpy(pBuf, rx, len);

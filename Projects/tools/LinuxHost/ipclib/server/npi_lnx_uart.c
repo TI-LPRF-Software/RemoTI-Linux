@@ -56,6 +56,7 @@
 #include "aic.h"
 #include "npi_lnx.h"
 #include "npi_lnx_uart.h"
+#include "time_printf.h"
 
 #include "npi_lnx_error.h"
 
@@ -70,18 +71,13 @@
 # define FALSE (0)
 #endif
 
+#define error_printf(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+
 #ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
+#define debug_printf(fmt, ...) fprintf( stderr, fmt, ##__VA_ARGS__); fflush(stdout);
 #else
-#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
+#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) fprintf(stderr, fmt, ##__VA_ARGS__);)
 #endif
-
-#define time_printf(fmt, ...) st (if ( (__BIG_DEBUG_ACTIVE == TRUE) && (__DEBUG_TIME_ACTIVE == TRUE)) printf( fmt, ##__VA_ARGS__);)
-
-#if (defined __DEBUG_TIME__)
-struct timeval curTime, targetDelayTime;
-extern struct timeval startTime, prevTimeSend, prevTimeRec;
-#endif //__DEBUG_TIME__
 
 // -- Constants --
 
@@ -385,13 +381,7 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 {
 	int result, ret = NPI_LNX_SUCCESS;
 	struct timespec expirytime;
-	struct timeval curtime;
-
-#ifdef __DEBUG_TIME__
-	long int diffPrev;
-	int t = 0;
-	int hours = 0, minutes = 0;
-#endif //__DEBUG_TIME__
+	struct timespec curtime;
 
 	pthread_mutex_lock(&npiSyncRespLock);
 	pNpiSyncData = pMsg;
@@ -401,37 +391,16 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 
 	if (ret == NPI_LNX_SUCCESS)
 	{
-		gettimeofday(&curtime, NULL);
+		clock_gettime(CLOCK_MONOTONIC, &curtime);
 		expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
-		expirytime.tv_nsec = curtime.tv_usec * 1000;
+		expirytime.tv_nsec = curtime.tv_nsec * 1000000;
 #ifdef __DEBUG_TIME__
 		if (__DEBUG_TIME_ACTIVE == TRUE)
 		{
-			//            debug_
-			gettimeofday(&curTime, NULL);
-			t = 0;
-			if (curTime.tv_usec >= prevTimeRec.tv_usec)
-			{
-				diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
-			}
-			else
-			{
-				diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
-				t = 1;
-			}
-
-			hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-			minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-			//            debug_
-			time_printf("[<-- %.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] [UART] (synch data) Conditional wait %d s\n",
-					hours,											// hours
-					minutes,										// minutes
-					(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-					curTime.tv_usec,
-					curTime.tv_sec - prevTimeRec.tv_sec - t,
-					diffPrev,
-					NPI_RNP_TIMEOUT);
-			prevTimeRec = curTime;
+			static struct timespec prevTime;
+			char tmpStr[512];
+			snprintf(tmpStr, sizeof(tmpStr), "[UART] (synch data) Conditional wait %d\n", NPI_RNP_TIMEOUT);
+			time_printf_always_localized(tmpStr, NULL, NULL, &prevTime);
 		}
 #endif //__DEBUG_TIME__
 		// Response may have already come in. This may be the case for Serial Bootloader which is really fast.
@@ -495,7 +464,7 @@ void npiUartDisableSleep( void )
 {
 	static uint8 pBuf[] = { 0x00 };
 	struct timespec expirytime;
-	struct timeval curtime;
+	struct timespec curtime;
 
 	// wait for a signal triggered by a character received only after
 	// sending wakeup character.
@@ -506,9 +475,9 @@ void npiUartDisableSleep( void )
 
 	// wait 20 seconds for wakeup
 	// The timeout is handy for the PC host application to move on when RNP goes wrong.
-	gettimeofday(&curtime, NULL);
+	clock_gettime(CLOCK_MONOTONIC, &curtime);
 	expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
-	expirytime.tv_nsec = curtime.tv_usec * 1000;
+	expirytime.tv_nsec = curtime.tv_nsec * 1000000;
 	pthread_cond_timedwait(&npiUartWakeupCond, &npiUartWakeupLock, &expirytime);
 
 	pthread_mutex_unlock(&npiUartWakeupLock);
@@ -680,12 +649,12 @@ static void *npi_rx_entry(void *ptr)
 			/* In some system, sigaction is not reliable hence poll reading even without signal. */
 			{
 				struct timespec expirytime;
-				struct timeval curtime;
+				struct timespec curtime;
 
 				int waitTime = 10000000;
-				gettimeofday(&curtime, NULL);
+				clock_gettime(CLOCK_MONOTONIC, &curtime);
 				expirytime.tv_sec = curtime.tv_sec;
-				expirytime.tv_nsec = (curtime.tv_usec * 1000) + waitTime;
+				expirytime.tv_nsec = (curtime.tv_nsec * 1000000) + waitTime;
 				if (expirytime.tv_nsec >= 1000000000) {
 					expirytime.tv_nsec -= 1000000000;
 					expirytime.tv_sec++;
@@ -836,36 +805,12 @@ static int npi_write(const void *buf, size_t count)
 	int result;
 
 #ifdef __DEBUG_TIME__
-	long int diffPrev;
-	int t = 0;
-	int hours, minutes;
+	static struct timespec prevTimeWrite;
 	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		//            debug_
-		gettimeofday(&curTime, NULL);
-		if (curTime.tv_usec >= prevTimeRec.tv_usec)
-		{
-			diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
-		}
-		else
-		{
-			diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
-			t = 1;
-		}
-
-		hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-		minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		//            debug_
-		time_printf("[<-- %.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] [UART] write %d bytes to %d\n",
-				hours,											// hours
-				minutes,										// minutes
-				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-				curTime.tv_usec,
-				curTime.tv_sec - prevTimeRec.tv_sec - t,
-				diffPrev,
-				(int)count,
-				npi_fd);
-		prevTimeRec = curTime;
+		char tmpStr[512];
+		snprintf(tmpStr, sizeof(tmpStr), "[UART] write %d bytes to %d\n", (int)count, npi_fd);
+		time_printf_always_localized(tmpStr, NULL, NULL, &prevTimeWrite);
 	}
 #endif //__DEBUG_TIME__
 
@@ -876,31 +821,9 @@ static int npi_write(const void *buf, size_t count)
 #ifdef __DEBUG_TIME__
 	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		//            debug_
-		gettimeofday(&curTime, NULL);
-		t = 0;
-		if (curTime.tv_usec >= prevTimeRec.tv_usec)
-		{
-			diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
-		}
-		else
-		{
-			diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
-			t = 1;
-		}
-
-		hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-		minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		//            debug_
-		time_printf("[<-- %.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] [UART] result: %d\n",
-				hours,											// hours
-				minutes,										// minutes
-				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-				curTime.tv_usec,
-				curTime.tv_sec - prevTimeRec.tv_sec - t,
-				diffPrev,
-				(int)result);
-		prevTimeRec = curTime;
+		char tmpStr[512];
+		snprintf(tmpStr, sizeof(tmpStr), "[UART] result: %d\n", (int)result);
+		time_printf_always_localized(tmpStr, NULL, NULL, &prevTimeWrite);
 	}
 #endif //__DEBUG_TIME__
 
@@ -1192,33 +1115,10 @@ static void npi_iohandler(int status)
 
 	/* send wakeup signal */
 #ifdef __DEBUG_TIME__
-	long int diffPrev;
-	int t = 0, hours, minutes;
+	static struct timespec prevTimeSignalhandler;
 	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		//            debug_
-		gettimeofday(&curTime, NULL);
-		if (curTime.tv_usec >= prevTimeRec.tv_usec)
-		{
-			diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
-		}
-		else
-		{
-			diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
-			t = 1;
-		}
-
-		hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-		minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		//            debug_
-		time_printf("[<-- %.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] Signal from UART, grabbing mutex\n",
-				hours,											// hours
-				minutes,										// minutes
-				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-				curTime.tv_usec,
-				curTime.tv_sec - prevTimeRec.tv_sec - t,
-				diffPrev);
-		prevTimeRec = curTime;
+		time_printf_always_localized("Signal from UART, grabbing mutex\n", NULL, NULL, &prevTimeSignalhandler);
 	}
 #endif //__DEBUG_TIME__
 
@@ -1227,30 +1127,7 @@ static void npi_iohandler(int status)
 #ifdef __DEBUG_TIME__
 	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		//            debug_
-		gettimeofday(&curTime, NULL);
-		t = 0;
-		if (curTime.tv_usec >= prevTimeRec.tv_usec)
-		{
-			diffPrev = curTime.tv_usec - prevTimeRec.tv_usec;
-		}
-		else
-		{
-			diffPrev = (curTime.tv_usec + 1000000) - prevTimeRec.tv_usec;
-			t = 1;
-		}
-
-		hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-		minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		//            debug_
-		time_printf("[<-- %.3d:%.2d:%.2ld.%.6ld (+%ld.%6ld)] Signal read handle, owning mutex\n",
-				hours,											// hours
-				minutes,										// minutes
-				(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-				curTime.tv_usec,
-				curTime.tv_sec - prevTimeRec.tv_sec - t,
-				diffPrev);
-		prevTimeRec = curTime;
+		time_printf_always_localized(" Signal read handle, owning mutex\n", NULL, NULL, &prevTimeSignalhandler);
 	}
 #endif //__DEBUG_TIME__
 }

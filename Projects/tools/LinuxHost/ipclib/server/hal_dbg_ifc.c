@@ -53,10 +53,11 @@
 #include <sys/poll.h>
 
 //#include  "hal_board.h"
-#include  "hal_types.h"
-#include  "hal_rpc.h"
-#include  "hal_dbg_ifc.h"
-#include  "hal_dbg_ifc_rpc.h"
+#include "hal_types.h"
+#include "hal_rpc.h"
+#include "hal_dbg_ifc.h"
+#include "hal_dbg_ifc_rpc.h"
+#include "time_printf.h"
 
 #include "npi_lnx_error.h"
 
@@ -181,8 +182,7 @@ static halGpioCfg_t ddGpioCfg;
 static halGpioCfg_t dcGpioCfg;
 
 #if defined __DEBUG_TIME__
-struct timeval curTime, prevTime;
-extern struct timeval startTime;
+struct timespec curTime, prevTime;
 #endif //__DEBUG_TIME__
 
 /******************************************************************************
@@ -2139,29 +2139,10 @@ int HalGpioWaitDDClr(void)
 //	ufds[0].events = POLLPRI;
 
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
-	long int diffPrev;
-	int t = 0;
-	if (curTime.tv_usec >= prevTime.tv_usec)
+	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+		time_printf_always_localized(" DD: wait to go low\n", NULL, NULL, &prevTime);
 	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-		t = 1;
-	}
-
-	prevTime = curTime;
-	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] DD: wait to go Low\n",
-			hours,										// hours
-			minutes,									// minutes
-			(int)(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
-			curTime.tv_usec,
-			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev);
 #endif //(defined __DEBUG_TIME__)
 
 	while(dd == '1')
@@ -2202,58 +2183,20 @@ int HalGpioWaitDDClr(void)
 		}
 	}
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
-	t = 0;
-	if (curTime.tv_usec >= prevTime.tv_usec)
+	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+		char tmpStr[512];
+		snprintf(tmpStr, sizeof(tmpStr), " dd: %c  (%c)\n", dd, dd);
+		time_printf_always_localized(tmpStr, NULL, NULL, &prevTime);
 	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-		t = 1;
-	}
-
-	prevTime = curTime;
-	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] dd: %c  (%c)\n",
-			hours,										// hours
-			minutes,									// minutes
-			(int)(curTime.tv_sec - startTime.tv_sec) % 60,	// seconds
-			curTime.tv_usec,
-			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev,
-			dd,
-			dd);
 #endif //(defined __DEBUG_TIME__)
 
 
 #ifdef __STRESS_TEST__
-  //	debug_
-  gettimeofday(&curTime, NULL);
-  long int diffPrev;
-  int t = 0;
-  if (curTime.tv_usec >= prevTimeI2C.tv_usec)
-  {
-	  diffPrev = curTime.tv_usec - prevTimeI2C.tv_usec;
-  }
-  else
-  {
-	  diffPrev = (curTime.tv_usec + 1000000) - prevTimeI2C.tv_usec;
-	  t = 1;
-
-  prevTimeI2C = curTime;
-
-  hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-  minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-	printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] DD Low\n",
-		  hours,										// hours
-		  minutes,										// minutes
-		  (curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-		  curTime.tv_usec,
-		  curTime.tv_sec - prevTimeI2C.tv_sec - t,
-		  diffPrev);
+	if (__DEBUG_TIME_ACTIVE == TRUE)
+	{
+		time_printf_always_localized(" DD Low\n", NULL, NULL, &prevTime);
+	}
 #endif //__STRESS_TEST__
 
   debug_printf("[GPIO]==>dd change to : %c  (%c) \n", dd, dd);
@@ -2292,30 +2235,10 @@ int HalGpioWaitDDSet()
 	ufds[0].events = POLLIN | POLLPRI;
 
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
-	long int diffPrev;
-	int t = 0;
-	if (curTime.tv_usec >= prevTime.tv_usec)
+	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+		time_printf_always_localized(" DD: wait to go high\n", NULL, NULL, &prevTime);
 	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-		t = 1;
-	}
-
-	prevTime = curTime;
-
-	int hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-	int minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		debug_printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] DD: wait to go High\n",
-			hours,											// hours
-			minutes,										// minutes
-			(int)(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-			curTime.tv_usec,
-			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev);
 #endif //(defined __DEBUG_TIME__)
 
 	while( (dd == '0') )
@@ -2355,31 +2278,12 @@ int HalGpioWaitDDSet()
 	}
 
 #ifdef __DEBUG_TIME__
-	gettimeofday(&curTime, NULL);
-	t = 0;
-	if (curTime.tv_usec >= prevTime.tv_usec)
+	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		diffPrev = curTime.tv_usec - prevTime.tv_usec;
+		char tmpStr[512];
+		snprintf(tmpStr, sizeof(tmpStr), " DD: %c  (%c)\n", dd, dd);
+		time_printf_always_localized(tmpStr, NULL, NULL, &prevTime);
 	}
-	else
-	{
-		diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
-		t = 1;
-	}
-
-	prevTime = curTime;
-
-	hours = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 3600))/3600;
-	minutes = ((curTime.tv_sec - startTime.tv_sec) - ((curTime.tv_sec - startTime.tv_sec) % 60))/60;
-		printf("[%.3d:%.2d:%.2d.%.6ld (+%ld.%6ld)] DD: %c  (%c)\n",
-			hours,											// hours
-			minutes,										// minutes
-			(int)(curTime.tv_sec - startTime.tv_sec) % 60,		// seconds
-			curTime.tv_usec,
-			curTime.tv_sec - prevTime.tv_sec - t,
-			diffPrev,
-			dd,
-			dd);
 #endif //__DEBUG_TIME__
 
 	debug_printf("[GPIO]==>DD change to : %c  (%c) \n", dd, dd);
