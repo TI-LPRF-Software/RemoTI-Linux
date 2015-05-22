@@ -394,6 +394,7 @@ void halDelay(uint8 msecs, uint8 sleep)
 	{
 		//    usleep(msecs * 1000);
 	}
+	((void)msecs);
 }
 
 void writeToNpiLnxLog(const char* str)
@@ -1239,8 +1240,7 @@ int main(int argc, char ** argv)
 	}
 
 	fd_set activeConnectionsFDsSafeCopy;
-	int justConnected;
-   int c;
+	int justConnected, c;
 
 	// Connection main loop. Cannot get here with ret != SUCCESS
 
@@ -1646,7 +1646,7 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 	n = recv(connection, npi_ipc_buf[INDEX_RECV], RPC_FRAME_HDR_SZ, 0);
 	if (n <= 0)
 	{
-   	fprintf(stderr, "%s(): ERROR! Receive message (fail)...\n", __FUNCTION__);
+	   	fprintf(stderr, "%s(): ERROR! Receive message (fail)...\n", __FUNCTION__);
 		if (n < 0)
 		{
 			perror("recv");
@@ -1742,7 +1742,6 @@ int NPI_LNX_IPC_ConnectionHandle(int connection)
 
 			time_print_npi_ipc_buf("<--", (npiMsgData_t const *)npi_ipc_buf[INDEX_RECV], &gStartTime, &currentTime, &prevTimeRec);
 		}
-
 #endif //__DEBUG_TIME__
 
 

@@ -106,11 +106,10 @@ static void *timerThreadFunc(void *ptr)
 	long int diffPrev, decrementValue = 0, minimumTimeout = 0, waitMargin = 2000, active = FALSE;
 	int t = 0, res;
 
-	struct timeval curTime, startTime, prevTime;
-	struct timespec waitToTime, remWaitTime;
+	struct timespec curMonotonicTime, prevMonotonicTime;
+	struct timespec waitToRealtime, remWaitRealtime;
 
-	gettimeofday(&startTime, NULL);
-	prevTime = startTime;
+	clock_gettime(CLOCK_MONOTONIC, &prevMonotonicTime);
 
 	LOG_DEBUG_TIMER("[TIMER]  Timer Thread Started \n");
 	LOG_DEBUG_TIMER("[TIMER] \t%d threads supported \n", timerNumOfThreads);
@@ -161,20 +160,20 @@ static void *timerThreadFunc(void *ptr)
 		}
 
 		// Get current time to compensate for processing.
-		gettimeofday(&curTime, NULL);
+		clock_gettime(CLOCK_MONOTONIC, &curMonotonicTime);
 
-		if (curTime.tv_usec >= prevTime.tv_usec)
+		if (curMonotonicTime.tv_nsec >= prevMonotonicTime.tv_nsec)
 		{
-			diffPrev = curTime.tv_usec - prevTime.tv_usec;
+			diffPrev = (curMonotonicTime.tv_nsec - prevMonotonicTime.tv_nsec)/1000; // Want microseconds
 			t = 0;
 		}
 		else
 		{
-			diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+			diffPrev = ((curMonotonicTime.tv_nsec + 1000000000) - prevMonotonicTime.tv_nsec) / 1000; // Want microseconds
 			t = 1;
 		}
 
-		decrementValue = diffPrev  + 1000000 * (curTime.tv_sec - prevTime.tv_sec - t);
+		decrementValue = diffPrev  + 1000000 * (curMonotonicTime.tv_sec - prevMonotonicTime.tv_sec - t); 
 
 		// minimumTimeout is the value we expected to wait. If the timer indicates active
 		// it means that decrementValue should equal minimumTimeout. The difference is the
@@ -209,18 +208,18 @@ static void *timerThreadFunc(void *ptr)
 			{
 				// Wait the remainder with more accurate means if it's less than the margin.
 				// Use nanosleep to wait the remainder
-				waitToTime.tv_sec = 0;
-				waitToTime.tv_nsec = 1000;
+				waitToRealtime.tv_sec = 0;
+				waitToRealtime.tv_nsec = 1000;
 
 				while (timeWaitedDifference < 0)
 				{
-					waitRes = nanosleep(&waitToTime, &remWaitTime);
+					waitRes = nanosleep(&waitToRealtime, &remWaitRealtime);
 					while (waitRes != 0)
 					{
 						if (errno == EINTR)
 						{
 							// Restart timer with the remainder
-							waitRes = nanosleep(&remWaitTime, &remWaitTime);
+							waitRes = nanosleep(&remWaitRealtime, &remWaitRealtime);
 						}
 						else
 						{
@@ -231,20 +230,20 @@ static void *timerThreadFunc(void *ptr)
 					// Update decrement value
 
 					// Get current time to compensate for processing.
-					gettimeofday(&curTime, NULL);
+					clock_gettime(CLOCK_MONOTONIC, &curMonotonicTime);
 
-					if (curTime.tv_usec >= prevTime.tv_usec)
+					if (curMonotonicTime.tv_nsec >= prevMonotonicTime.tv_nsec)
 					{
-						diffPrev = curTime.tv_usec - prevTime.tv_usec;
+						diffPrev = (curMonotonicTime.tv_nsec - prevMonotonicTime.tv_nsec) / 1000; // Want microseconds
 						t = 0;
 					}
 					else
 					{
-						diffPrev = (curTime.tv_usec + 1000000) - prevTime.tv_usec;
+						diffPrev = ((curMonotonicTime.tv_nsec + 1000000) - prevMonotonicTime.tv_nsec) / 1000; // Want microseconds
 						t = 1;
 					}
 
-					decrementValue = diffPrev  + 1000000 * (curTime.tv_sec - prevTime.tv_sec - t);
+					decrementValue = diffPrev  + 1000000 * (curMonotonicTime.tv_sec - prevMonotonicTime.tv_sec - t);
 					timeWaitedDifference = (decrementValue - minimumTimeout);
 				}
 				LOG_DEBUG_TIMER("[TIMER] Updated decrementing value %dus\n", (int)decrementValue);
@@ -296,10 +295,8 @@ static void *timerThreadFunc(void *ptr)
 			}
 		}
 
-		gettimeofday(&prevTime, NULL);
-
-		waitToTime.tv_sec = prevTime.tv_sec;
-		waitToTime.tv_nsec = prevTime.tv_usec * 1000;
+		clock_gettime(CLOCK_MONOTONIC, &prevMonotonicTime);
+		clock_gettime(CLOCK_REALTIME, &waitToRealtime);
 
 		// We need to adjust for the inaccuracy of pthread_cond_timedwait
 		LOG_DEBUG_TIMER("[TIMER] wait margin %dus, minimumTimeout %dus\n", (int)waitMargin, (int)minimumTimeout);
@@ -313,15 +310,15 @@ static void *timerThreadFunc(void *ptr)
 			if (minimumTimeout > 1000000)
 			{
 				// Adjust seconds
-				waitToTime.tv_sec += (minimumTimeout / 1000000);
+				waitToRealtime.tv_sec += (minimumTimeout / 1000000);
 			}
 			// Adjust nanoseconds to comply with the timespec struct
-			waitToTime.tv_nsec += ((minimumTimeout % 1000000) * 1000);
-			if (waitToTime.tv_nsec >= 1000000000 )
+			waitToRealtime.tv_nsec += ((minimumTimeout % 1000000) * 1000);
+			if (waitToRealtime.tv_nsec >= 1000000000 )
 			{
 				// Fix overflow
-				waitToTime.tv_nsec -= 1000000000;
-				waitToTime.tv_sec += 1;
+				waitToRealtime.tv_nsec -= 1000000000;
+				waitToRealtime.tv_sec += 1;
 			}
 
 			// Conditional wait for a call to TimerSet()
@@ -331,20 +328,20 @@ static void *timerThreadFunc(void *ptr)
 				res = pthread_cond_wait(&timerSetCond, &timerMutex);
 
 				// Since we have waited an unknown period we set previous time here.
-				gettimeofday(&prevTime, NULL);
+				clock_gettime(CLOCK_MONOTONIC, &prevMonotonicTime);
 			}
 			else
 			{
 				LOG_DEBUG_TIMER("[TIMER][MUTEX] Wait %dus (%ds:%dns) for TIMER Set Cond (Handle) signal... effectively releasing lock\n",
 						(int)minimumTimeout, (int)(minimumTimeout / 1000000), (int)((minimumTimeout % 1000000) * 1000));
-				res = pthread_cond_timedwait(&timerSetCond, &timerMutex, &waitToTime);
+				res = pthread_cond_timedwait(&timerSetCond, &timerMutex, &waitToRealtime);
 				if ( (res != ETIMEDOUT) && (res != 0) )
 				{
 					LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER conditional wait returned with %d\n", res);
 					if (res == EINVAL)
 					{
 						LOG_DEBUG_TIMER("[TIMER][MUTEX] Wait until %lds:%ldns\n",
-							waitToTime.tv_sec, waitToTime.tv_nsec);
+							waitToRealtime.tv_sec, waitToRealtime.tv_nsec);
 						// Terminate thread
 						timerThreadTerminate = 1;
 					}
@@ -457,7 +454,7 @@ uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 
 uint8 timer_set_event(uint8 threadId, uint32 event)
 {
-	LOG_DEBUG("[TIMER] Setting event 0x%.2X\n", event);
+	LOG_DEBUG("[TIMER] Setting event 0x%.2X, for thread %d\n", event, threadId);
 
 	//Mutex needs to be used in order to provide access to set/clear event to several thread...
 	// Set event in table

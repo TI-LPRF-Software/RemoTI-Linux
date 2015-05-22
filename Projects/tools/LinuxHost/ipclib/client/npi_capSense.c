@@ -108,6 +108,14 @@ int CAP_AsynchMsgCback( npiMsgData_t *pMsg )
 					*(uint16*)(&pMsg->pData[6]));
 			break;
 		}
+		case RPC_CMD_ID_CAPSENSE_BUTTON_STATS_32:
+		{
+			CapSenseRawDataInd32(pMsg->pData[1],
+					*(int32*)(&pMsg->pData[2]),
+					*(int32*)(&pMsg->pData[6]),
+					*(int32*)(&pMsg->pData[10]));
+			break;
+		}
 		default:
 			break;
 		}
@@ -162,6 +170,36 @@ void  HalCapSenseSetThresholds(uint8 length, uint8 *thresholds)
 	pMsg.subSys = RPC_SYS_PERIPHERALS | RPC_CMD_AREQ;
 	pMsg.cmdId = RPC_CMD_ID_CAPSENSE_SUB_SUBSYSTEM_ID;
 	pMsg.pData[0] = RPC_CMD_ID_CAPSENSE_SET_THRESHOLDS;
+	pMsg.pData[1] = length;
+	memcpy(&pMsg.pData[2], thresholds, length);
+
+	// send Program Buffer request to NP RTIS asynchronously as a confirm is due back
+	NPI_SendAsynchData( &pMsg );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          HalCapSenseSetStuckKeyDetectionThresholds
+ *
+ * @brief       This API is used to set CapSense Stuck Key Detection thresholds
+ *
+ *				For each key set the number of samples to count above the statistics threshold
+ *				before suspecting that the key is stuck.
+ *
+ * input parameters
+ *
+ * @param    thresholds		pointer to buffer containing new thresholds
+ *
+ * @return   Status
+ *
+ **************************************************************************************************/
+void  HalCapSenseSetStuckKeyDetectionThresholds(uint8 length, uint8 *thresholds)
+{
+	npiMsgData_t pMsg;
+	pMsg.len = 2 + length;
+	pMsg.subSys = RPC_SYS_PERIPHERALS | RPC_CMD_AREQ;
+	pMsg.cmdId = RPC_CMD_ID_CAPSENSE_SUB_SUBSYSTEM_ID;
+	pMsg.pData[0] = RPC_CMD_ID_CAPSENSE_SET_STUCK_KEY_DETECTION;
 	pMsg.pData[1] = length;
 	memcpy(&pMsg.pData[2], thresholds, length);
 

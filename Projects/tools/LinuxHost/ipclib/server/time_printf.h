@@ -87,12 +87,9 @@ extern void time_printf_always_localized(char const *str, struct timespec const 
 #ifdef __DEBUG_TIME__
    /**************************************************************************************************
     * @fn      time_printf_start
-    * @brief   Forces global stsartTime variable used by time_printf and time_printf_always to current time
-    *				Only avaialbe if __DEBUG__TIME__ is defined.
-    *
-    * input parameters
-    *
-    * @param *str - String to print.  If pointer is null, prints "<null>".
+    * @brief   Forces global start time variable used by all other functions to the current time and 
+    *          prints a message indicating that it's being done.
+    *				Only available if __DEBUG__TIME__ is defined.
     *
     * @return  NONE
     **************************************************************************************************

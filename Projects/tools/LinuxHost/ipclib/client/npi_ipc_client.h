@@ -73,6 +73,8 @@ extern "C"
 
   void NPI_SetWorkaroundReq( uint8 workaroundID, uint8 *pStatus );
 
+  extern uint8 __DEBUG_CLIENT_ACTIVE;
+
   /**************************************************************************************************
    * TYPEDEFS
    **************************************************************************************************/
@@ -209,7 +211,7 @@ extern "C"
   #define RTIS_CMD_ID_RTI_READ_ITEM_EX           0x21
   #define RTIS_CMD_ID_RTI_WRITE_ITEM_EX          0x22
 
-#ifdef ZRC20_PROFILE
+#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
   #define RTIS_CMD_ID_RTI_BIND_REQ                     0x30
   #define RTIS_CMD_ID_RTI_ALLOW_BIND_REQ               0x31
   #define RTIS_CMD_ID_RTI_GET_VALIDATION_STATUS_RSP    0x32
@@ -228,7 +230,7 @@ extern "C"
   #define RTIS_CMD_ID_RTI_UNBIND_REQ                   0x3f
   #define RTIS_CMD_ID_RTI_BIND_ABORT_REQ               0x40
   #define RTIS_CMD_ID_RTI_ALLOW_BIND_ABORT_REQ         0x41
-#endif //ZRC20_PROFILE
+#endif //FEATURE_ZRC20
 
 #if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
   #define RTIS_CMD_ID_RTI_BIND_PARAMS_REQ        0x0E
@@ -254,7 +256,7 @@ extern "C"
   #define RTIS_CMD_ID_RTI_RESET_IND              0x0D
   #define RTIS_CMD_ID_RTI_IR_IND				 0xA0
 
-#ifdef ZRC20_PROFILE
+#if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
   #define RTIS_CMD_ID_RTI_BIND_CNF                     0x30
   #define RTIS_CMD_ID_RTI_SEND_PROFILE_CMD_CNF         0x31
   #define RTIS_CMD_ID_RTI_BIND_IND                     0x32
@@ -275,7 +277,7 @@ extern "C"
   #define RTIS_CMD_ID_RTI_UNBIND_CNF                   0x41
   #define RTIS_CMD_ID_RTI_UNBIND_IND                   0x42
   #define RTIS_CMD_ID_RTI_BIND_ABORT_CNF               0x43
-#endif //ZRC20_PROFILE
+#endif //FEATURE_ZRC20
 
 #if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
   //MSO Profile Command

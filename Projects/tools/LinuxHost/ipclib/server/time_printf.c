@@ -39,9 +39,18 @@
 
 #include <sys/time.h>
 #include <stdio.h>
+#include <pthread.h>
 #include "time_printf.h"
 
-static struct timespec gStartTimePrint = {0,0}, gPrevTimePrint = {0,0};
+#define NSECS_PER_SEC         1000000000L
+#define NSECS_PER_USEC        1000L
+#define NSECS_PER_HALF_USEC   (NSECS_PER_USEC/2)
+#define SECS_PER_MINUTE       60
+#define SECS_PER_HOUR         (60*SECS_PER_MINUTE)
+
+static struct timespec  gStartTimePrint = {0,0};
+static struct timespec  gPrevTimePrint = {0,0};
+static pthread_mutex_t  timePrintMutex = PTHREAD_MUTEX_INITIALIZER; // WARNING: Non-recursive b/c there is no portable recursive initializer.
 
 #ifdef __DEBUG_TIME__
 
@@ -49,19 +58,23 @@ int __DEBUG_TIME_ACTIVE = 0;
 
 /**************************************************************************************************
  * @fn      time_printf_start
- * @brief   Forces global stsartTime variable used by time_printf and time_printf_always to current time
- *				Only avaialbe if __DEBUG__TIME__ is defined.
- *
- * input parameters
- *
- * @param *str - String to print.  If pointer is null, prints "<null>".
+ * @brief   Forces global start time variable used by all other functions to the current time and 
+ *          prints a message indicating that it's being done.
+ *				Only available if __DEBUG__TIME__ is defined.
  *
  * @return  NONE
  **************************************************************************************************
  */
 void time_printf_start(void)
 {
-	clock_gettime(CLOCK_MONOTONIC, &gStartTimePrint);
+	pthread_mutex_lock(&timePrintMutex);
+	// Just set to zero.  It will get (re)initialized when the log message is printed.
+	gStartTimePrint.tv_sec = gStartTimePrint.tv_nsec = 0;
+	// Unfortunately, statically initialized mutex isn't recursive, so we
+	// must release it before printing so print function can acquire it.
+	pthread_mutex_unlock(&timePrintMutex); 
+
+	time_printf_always_localized("(Re-)Initialized time_printf start time.\n", NULL, NULL, NULL);
 }
 
 
@@ -80,7 +93,7 @@ void time_printf_start(void)
 void time_printf(char const *str)
 {
 	if (__DEBUG_TIME_ACTIVE == 1)
-		time_printf_always(str);
+		time_printf_always_localized(str, NULL, NULL, NULL);
 }
 
 #endif //__DEBUG_TIME__
@@ -99,13 +112,7 @@ void time_printf(char const *str)
  */
 void time_printf_always(char const *str)
 {
-	struct timespec curTimePrint;
-	clock_gettime(CLOCK_MONOTONIC, &curTimePrint);
-
-	if (gStartTimePrint.tv_sec == 0 && gStartTimePrint.tv_nsec == 0)
-		gStartTimePrint = curTimePrint;
-
-	time_printf_always_localized(str, &gStartTimePrint, &curTimePrint, &gPrevTimePrint);
+	time_printf_always_localized(str, NULL, NULL, NULL);
 }
 
 /**************************************************************************************************
@@ -131,12 +138,12 @@ void time_printf_always(char const *str)
  */
 void time_printf_always_localized(char const *str, struct timespec const *callersStartTime, struct timespec const *callersCurrentTime, struct timespec *callersPrevTime)
 {
-	long diffPrevFraction;
+	long diffPrevNanos;
 	long diffPrevSecs;
+	long elapsedNanos;
 	long elapsedSeconds;
 	int  elapsedMinutes;
 	int  elapsedHours;
-	int  t;
 	struct timespec curTimePrint;
 
 	if (!callersCurrentTime)
@@ -144,43 +151,55 @@ void time_printf_always_localized(char const *str, struct timespec const *caller
 		clock_gettime(CLOCK_MONOTONIC, &curTimePrint);
 		callersCurrentTime = &curTimePrint;
 	}
-	if (!callersStartTime)
-	{
-		if (gStartTimePrint.tv_sec == 0 && gStartTimePrint.tv_nsec == 0)
-			gStartTimePrint = *callersCurrentTime;
-		callersStartTime = &gStartTimePrint;
-	}
 
 	if (!callersPrevTime)
 		callersPrevTime = &gPrevTimePrint;
 
-	if (callersCurrentTime->tv_nsec >= callersPrevTime->tv_nsec)
-	{
-		diffPrevFraction = callersCurrentTime->tv_nsec - callersPrevTime->tv_nsec;
-		t = 0;
-	}
-	else
-	{
-		diffPrevFraction = (callersCurrentTime->tv_nsec + 1000000000) - callersPrevTime->tv_nsec;
-		t = 1;
-	}
-	diffPrevSecs = (callersCurrentTime->tv_sec - callersPrevTime->tv_sec - t),
+	// Acquire mutex before working with VALUES of any global variables.
+	pthread_mutex_lock(&timePrintMutex);
 
+	if (!callersStartTime) // If passed in, believe it - only set/initialize it if using our static one.
+	{
+		if (gStartTimePrint.tv_sec == 0 && gStartTimePrint.tv_nsec == 0)
+			gStartTimePrint = *callersCurrentTime;
+
+		callersStartTime = &gStartTimePrint;
+	}
+
+	diffPrevSecs = (callersCurrentTime->tv_sec - callersPrevTime->tv_sec);
+	diffPrevNanos = (callersCurrentTime->tv_nsec - callersPrevTime->tv_nsec);
+	if (diffPrevNanos < 0)
+	{
+		diffPrevNanos += NSECS_PER_SEC;
+		--diffPrevSecs;
+	}
+	
 	elapsedSeconds = (callersCurrentTime->tv_sec - callersStartTime->tv_sec);
-	elapsedHours = elapsedSeconds/3600;
-	elapsedSeconds -= (elapsedHours * 3600);
-	elapsedMinutes = elapsedSeconds/60;
-	elapsedSeconds -= (elapsedMinutes * 60);
+	elapsedNanos = (callersCurrentTime->tv_nsec - callersStartTime->tv_nsec);
+	// Done using callersPrevTime, so okay to update it now
+	*callersPrevTime = *callersCurrentTime;
 
-	//            debug_
+	// Everything is now local, so okay to unlock mutex so we're blocking for less time
+	pthread_mutex_unlock(&timePrintMutex);
+
+	// Do final calculations with local variables, then print
+
+	if (elapsedNanos < 0)
+	{
+		elapsedNanos += NSECS_PER_SEC;
+		--elapsedSeconds;
+	}
+	elapsedHours = elapsedSeconds/SECS_PER_HOUR;
+	elapsedSeconds -= (elapsedHours * SECS_PER_HOUR);
+	elapsedMinutes = elapsedSeconds/SECS_PER_MINUTE;
+	elapsedSeconds -= (elapsedMinutes * SECS_PER_MINUTE);
+
 	fprintf(stderr, "[%.3d:%02d:%02ld.%06ld (+%ld.%06ld)] %s",
 			elapsedHours,
 			elapsedMinutes,
 			elapsedSeconds,
-			(callersCurrentTime->tv_nsec + 499 )/1000, // Convert to microseconds, rounding up where >500ns = 1us
+			(elapsedNanos + NSECS_PER_HALF_USEC - 1) / NSECS_PER_USEC, // Convert to microseconds, rounding up where >500ns = 1us
 			diffPrevSecs,
-			(diffPrevFraction + 499 )/1000, // Convert to microseconds, rounding up where >500ns = 1us
+			(diffPrevNanos + NSECS_PER_HALF_USEC - 1) / NSECS_PER_USEC, // Convert to microseconds, rounding up where >500ns = 1us
 			str ? str : "<null>");
-
-	*callersPrevTime = *callersCurrentTime;
 }

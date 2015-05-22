@@ -679,11 +679,8 @@ int HalGpioResetSet(uint8 state)
 int HalGpioReset(void)
 {
 #ifdef __DEBUG_TIME__
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		static struct timespec prevTime;
-		time_printf_always_localized("Reset High", NULL, NULL, &prevTime);
-	}
+	static struct timespec prevTime;
+	time_printf_always_localized("Reset High", NULL, NULL, &prevTime);
 #endif //(defined __DEBUG_TIME__)
 	debug_printf("Reset High\n");
 	if(ERROR == write(gpioResetFd, "1", 1))
@@ -694,11 +691,7 @@ int HalGpioReset(void)
 		return NPI_LNX_FAILURE;
 	}
 #ifdef __DEBUG_TIME__
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		static struct timespec prevTime;
-		time_printf_always_localized("Reset Low", NULL, NULL, &prevTime);
-	}
+	time_printf_always_localized("Reset Low", NULL, NULL, &prevTime);
 #endif //(defined __DEBUG_TIME__)
 	debug_printf("[%u][GPIO]Reset low\n", (unsigned int) pthread_self());
 	if(ERROR == write(gpioResetFd, "0", 1))
@@ -713,11 +706,7 @@ int HalGpioReset(void)
 	usleep(500);
 
 #ifdef __DEBUG_TIME__
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		static struct timespec prevTime;
-		time_printf_always_localized("Reset High", NULL, NULL, &prevTime);
-	}
+	time_printf_always_localized("Reset High", NULL, NULL, &prevTime);
 #endif //(defined __DEBUG_TIME__)
 	debug_printf("[%u][GPIO]Reset High\n", (unsigned int) pthread_self());
 	if(ERROR == write(gpioResetFd, "1", 1))
@@ -786,16 +775,15 @@ int HalGpioWaitSrdyClr(void)
 	ufds[0].events = POLLPRI;
 
 #ifdef __DEBUG_TIME__
-	struct timespec curTime;
-	clock_gettime(CLOCK_MONOTONIC, &curTime);
-	if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+	struct timespec previousTime, currentTime;
+	clock_gettime(CLOCK_MONOTONIC, &currentTime);
+	if (__BIG_DEBUG_ACTIVE == TRUE)
 	{
-		static struct timespec prevTime;
-		time_printf_always_localized("SRDY: wait to go Low\n", NULL, NULL, &prevTime);
+		time_printf_always_localized("SRDY: wait to go Low\n", NULL, &currentTime, &previousTime);
 	}
 
-	struct timespec limitPrints = curTime;
-	limitPrints.tv_sec = curTime.tv_sec - 5;
+	struct timespec limitPrints = currentTime;
+	limitPrints.tv_sec = currentTime.tv_sec - 5;
 #endif //(defined __DEBUG_TIME__)
 
 	lseek(gpioSrdyFd,0,SEEK_SET);
@@ -855,28 +843,27 @@ int HalGpioWaitSrdyClr(void)
 					break;
 				}
 #ifdef __DEBUG_TIME__
-				clock_gettime(CLOCK_MONOTONIC, &curTime);
-
-				// Only print every 250ms
-				if ( ((curTime.tv_nsec / 1000) > 250000 ) && ((((curTime.tv_nsec / 1000) - (limitPrints.tv_nsec / 1000)) % 250000) == 0) )
+				if (__BIG_DEBUG_ACTIVE == TRUE)
 				{
-					if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+					clock_gettime(CLOCK_MONOTONIC, &currentTime);
+					// Only print every 250ms
+					if ( ((currentTime.tv_nsec / 1000) > 250000 ) && ((((currentTime.tv_nsec / 1000) - (limitPrints.tv_nsec / 1000)) % 250000) == 0) )
 					{
-						static struct timespec prevTime;
 						char tmpStr[512];
 						snprintf(tmpStr, sizeof(tmpStr), "[0x%.2X , %c (0x%.2X)] ufds[0].revents = 0x%.4X\n", atoi(&srdy), srdy, srdy, ufds[0].revents);
-						time_printf_always_localized(tmpStr, NULL, NULL, &prevTime);
+						time_printf_always_localized(tmpStr, NULL, &currentTime, &previousTime);
+
+						// Start over
+						limitPrints = currentTime;
+						attempts++;
 					}
-					// Start over
-					limitPrints = curTime;
-					attempts++;
-				}
-				// Abort after 1 second
-				if (attempts > 4)
-				{
-					npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT;
-					ret = NPI_LNX_FAILURE;
-					break;
+					// Abort after 1 second
+					if (attempts > 4)
+					{
+						npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT;
+						ret = NPI_LNX_FAILURE;
+						break;
+					}
 				}
 #endif //(defined __DEBUG_TIME__)
 			}
@@ -887,21 +874,19 @@ int HalGpioWaitSrdyClr(void)
 		}
 	}
 #ifdef __DEBUG_TIME__
-	if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+	if ( (__BIG_DEBUG_ACTIVE == TRUE) && (__DEBUG_TIME_ACTIVE == TRUE) )
 	{
-		static struct timespec prevTime;
-		char tmpStr[512];
+		char tmpStr[100] = {0};
 		snprintf(tmpStr, sizeof(tmpStr), "SRDY: %c (%d)\n", srdy, (int)srdy);
-		time_printf_always_localized(tmpStr, NULL, NULL, &prevTime);
+		time_printf_always(tmpStr);
 	}
 #endif //(defined __DEBUG_TIME__)
 
 
 #ifdef __STRESS_TEST__
-	if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+	if (__BIG_DEBUG_ACTIVE == TRUE)
 	{
-		static struct timespec prevTime;
-		time_printf_always_localized(" SRDY low\n", NULL, NULL, &prevTime);
+		time_printf(" SRDY low\n");
 	}
 #endif //__STRESS_TEST__
 
@@ -941,10 +926,9 @@ int HalGpioWaitSrdySet()
 	ufds[0].events = POLLPRI;
 
 #ifdef __DEBUG_TIME__
-	if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+	if (__BIG_DEBUG_ACTIVE == TRUE)
 	{
-		static struct timespec prevTime;
-		time_printf_always_localized("SRDY: wait to go High\n", NULL, NULL, &prevTime);
+		time_printf("SRDY: wait to go High\n");
 	}
 #endif //(defined __DEBUG_TIME__)
 
@@ -1029,12 +1013,11 @@ int HalGpioWaitSrdySet()
 	}
 
 #ifdef __DEBUG_TIME__
-	if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+	if ( (__BIG_DEBUG_ACTIVE == TRUE) && (__DEBUG_TIME_ACTIVE == TRUE) )
 	{
-		static struct timespec prevTime;
 		char tmpStr[512];
 		snprintf(tmpStr, sizeof(tmpStr), "SRDY: %c  (%c)\n", srdy, srdy);
-		time_printf_always_localized(tmpStr, NULL, NULL, &prevTime);
+		time_printf_always(tmpStr);
 	}
 #endif //__DEBUG_TIME__
 

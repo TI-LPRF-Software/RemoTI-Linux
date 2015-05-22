@@ -482,7 +482,7 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 			// a handshake by the RNP.
 			clock_gettime(CLOCK_MONOTONIC, &t2);
 
-			if (earlyMrdyDeAssert)
+			if (earlyMrdyDeAssert == TRUE)
 			{
 				//We Set MRDY here to avoid GPIO latency with the beagle board
 				// if we do here later, the RNP see it low at the end of the transaction and
@@ -495,7 +495,7 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 					ret = mRet;
 			}
 
-			if (detectResetFromSlowSrdyAssert)
+			if (detectResetFromSlowSrdyAssert == TRUE)
 			{
 				// NOTE: Below casting shouldn't be needed, but is protecting in case the structure elements
 				//       are unsigned types.  Converting values such that diffusecs is microseconds
@@ -540,7 +540,7 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 					}
 
 #ifdef __BIG_DEBUG__
-					if (HAL_RNP_SRDY_CLR())
+					if (TRUE == HAL_RNP_SRDY_CLR())
 						printf("SRDY is set\n");
 					else
 						printf("SRDY is clear\n");
@@ -556,7 +556,7 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 		}
 	}
 
-	if (mRdyAsserted)
+	if (mRdyAsserted == TRUE)
 	{
 		int mRet = HAL_RNP_MRDY_SET();
 		if (ret == NPI_LNX_SUCCESS)
@@ -591,10 +591,11 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 {
 	int i, ret = NPI_LNX_SUCCESS, funcID = NPI_LNX_ERROR_FUNC_ID_SEND_SYNCH;
 	int lockRetPoll = 0, lockRetSrdy = 0;
+	bool  mRdyAsserted = FALSE;
 
 	// Do not attempt to send until polling is finished
 
-	if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+	if (__BIG_DEBUG_ACTIVE == TRUE)
 	{
 		time_printf("[SYNCH] Lock POLL mutex");
 	}
@@ -608,12 +609,12 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 	}
 	else
 	{
-		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+		if (__BIG_DEBUG_ACTIVE == TRUE)
 		{
 			time_printf("[SYNCH] POLL mutex locked\n");
 		}
 #ifdef SRDY_INTERRUPT
-		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+		if (__BIG_DEBUG_ACTIVE == TRUE)
 		{
 			time_printf("[SYNCH] Lock SRDY mutex\n");
 		}
@@ -626,7 +627,7 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 		}
 		else
 		{
-			if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+			if (__BIG_DEBUG_ACTIVE == TRUE)
 			{
 				time_printf("[SYNCH] SRDY mutex locked\n");
 			}
@@ -666,6 +667,8 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 
 	if	( NPI_LNX_SUCCESS	==	ret)
 	{
+		mRdyAsserted = TRUE;
+
 		//Wait for SRDY Clear
 		ret = HalGpioWaitSrdyClr();
 
@@ -687,21 +690,21 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 				ret = HalGpioWaitSrdySet();
 				if (ret != NPI_LNX_SUCCESS)
 				{
-					error_printf("[SYNCH] [SREQ], [ERR] ret=0x%x, line %d, errno=0x%x\n", ret, __LINE__, npi_ipc_errno);
-					(void)HAL_RNP_MRDY_SET();
+					error_printf("[SYNCH] [SREQ], [ERR] HalGpioWaitSrdySet() returned 0x%x, line %d, errno=0x%x\n", ret, __LINE__, npi_ipc_errno);
+					if (npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_READ_FAILED)
+					{
+						// This could happen if the RNP resets. Wait 5ms before proceeding.
+						usleep(5000);
+					}
 				}
 				else if (earlyMrdyDeAssert == TRUE)
 				{
 					//We Set MRDY here to avoid GPIO latency with the beagle board
 					// if we do here later, the RNP see it low at the end of the transaction and
 					// therefore think a new transaction is starting and lower its SRDY...
+		 			ret = HAL_RNP_MRDY_SET();
 					if (ret == NPI_LNX_SUCCESS)
-						ret = HAL_RNP_MRDY_SET();
-					else
-					{
-						error_printf("[SYNCH] [SREQ], [ERR] ret=0x%x, line %d, errno=0x%x\n", ret, __LINE__, npi_ipc_errno);
-						(void)HAL_RNP_MRDY_SET();
-					}
+						mRdyAsserted = FALSE;
 				}
 
 				if (ret == NPI_LNX_SUCCESS)
@@ -716,8 +719,7 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 
 					if (ret != NPI_LNX_SUCCESS)
 					{
-						error_printf("[SYNCH] [SREQ], [ERR] ret=0x%x, line %d, errno=0x%x\n", ret, __LINE__, npi_ipc_errno);
-						(void)HAL_RNP_MRDY_SET();
+						error_printf("[SYNCH] [SREQ], [ERR] HalSpiRead() returned 0x%x, line %d, errno=0x%x\n", ret, __LINE__, npi_ipc_errno);
 					}
 					else if (pMsg->len > 0)
 					{
@@ -733,19 +735,6 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 							memset(pMsg->pData, 0, pMsg->len);
 							ret = HalSpiRead( 0, pMsg->pData, pMsg->len);
 
-							if (earlyMrdyDeAssert == FALSE)
-							{
-								//End of transaction
-								if (ret == NPI_LNX_SUCCESS)
-								{
-									ret = HAL_RNP_MRDY_SET();
-								}
-								else
-								{
-									(void)HAL_RNP_MRDY_SET();
-								}
-							}
-
 							debug_printf("[SYNCH] [ret=0x%x] Read %d more bytes ...", ret, pMsg->len);
 							for (i = 0; i < pMsg->len; i++ ) debug_printf(" 0x%.2x", pMsg->pData[i]);
 							debug_printf("\n");
@@ -753,6 +742,14 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 					}
 				}
 			}
+		}
+
+		//End of transaction
+		if (mRdyAsserted)
+		{
+			int mRet = HAL_RNP_MRDY_SET();
+			if (ret == NPI_LNX_SUCCESS)
+				ret = mRet;
 		}
 	}
 #ifdef __BIG_DEBUG__
@@ -820,7 +817,6 @@ int NPI_SPI_ResetSlave( void )
 #else	//(!defined __DEBUG_TIME__)
 	printf("\n\n-------------------- START RESET SLAVE -------------------\n");
 #endif //(defined __DEBUG_TIME__)
-
 
 #ifdef PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 	if (HalGpioSrdyCheck(1) != FALSE) // TRUE, FALSE, or ERROR.  If we're not coming up from a cold boot where SRDY would already be low...
@@ -946,12 +942,12 @@ int NPI_SPI_SynchSlave( void )
 		// At this point we already have npiPollMutex lock
 		int lockRetSrdy = 0;
 #ifdef SRDY_INTERRUPT
-		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+		if (__BIG_DEBUG_ACTIVE == TRUE)
 		{
 			time_printf("[HANDSHAKE] Lock SRDY mutex\n");
 		}
 		lockRetSrdy = pthread_mutex_lock(&npiSrdyLock);
-		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
+		if (__BIG_DEBUG_ACTIVE == TRUE)
 		{
 			time_printf("[HANDSHAKE] SRDY mutex locked\n");
 		}
@@ -974,7 +970,7 @@ int NPI_SPI_SynchSlave( void )
 		}
 
 #ifdef __DEBUG_TIME__
-		time_printf_always("Handshake Lock SRDY... Wait for SRDY to go Low\n");
+		time_printf("Handshake Lock SRDY... Wait for SRDY to go Low\n");
 #else //(!defined __DEBUG_TIME__)
 		printf("Handshake Lock SRDY ...\n");
 #endif // defined __DEBUG_TIME__
@@ -989,7 +985,7 @@ int NPI_SPI_SynchSlave( void )
 #endif //PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 
 #ifdef __DEBUG_TIME__
-		time_printf_always("Set MRDY Low\n");
+		time_printf("Setting MRDY Low\n");
 #endif // defined __DEBUG_TIME__
 
 		// set MRDY to Low
@@ -1009,7 +1005,7 @@ int NPI_SPI_SynchSlave( void )
 		ret = HalGpioWaitSrdySet();
 
 #ifdef __DEBUG_TIME__
-		time_printf_always("Set MRDY High\n");
+		time_printf("Setting MRDY High\n");
 #endif // defined __DEBUG_TIME__
 		// Set MRDY to High
 		if (ret == NPI_LNX_SUCCESS)
@@ -1031,7 +1027,7 @@ int NPI_SPI_SynchSlave( void )
 			debug_printf("[HANDSHAKE] PollLockVar set to %d\n", PollLockVar);
 		}
 
-		printf("[HANDSHAKE] unLock Poll ...\n");
+		printf("[HANDSHAKE] unLock Poll ...");
 		pthread_mutex_unlock(&npiPollLock);
 #endif //PERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 		printf("(Handshake) success \n");
@@ -1137,6 +1133,7 @@ static void *npi_poll_entry(void *ptr)
 	uint8 pollStatus = FALSE;
 #endif //SRDY_INTERRUPT
 
+	((void)ptr);
 	printf("[POLL] Locking Mutex for Poll Thread \n");
 
 	/* lock mutex in order not to lose signal */
@@ -1400,7 +1397,7 @@ static void *npi_event_entry(void *ptr)
 	char tmpStr[512];
 
 	printf("[INT]: Interrupt Event Thread Started \n");
-
+	((void)ptr);
 	/* thread loop */
 	while (!npi_poll_terminate)
 	{

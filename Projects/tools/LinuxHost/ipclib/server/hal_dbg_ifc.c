@@ -182,14 +182,14 @@ static halGpioCfg_t ddGpioCfg;
 static halGpioCfg_t dcGpioCfg;
 
 #if defined __DEBUG_TIME__
-struct timespec curTime, prevTime;
+struct timespec currentTime={0,0}, previousTime={0,0};
 #endif //__DEBUG_TIME__
 
 /******************************************************************************
 * VARIABLES
 */
 //! DUP DMA descriptor
-uint8 dma_desc_0[8] =
+static uint8 dma_desc_0[8] =
 {
     // Debug Interface -> Buffer
     HIBYTE(DUP_DBGDATA),            // src[15:8]
@@ -202,7 +202,7 @@ uint8 dma_desc_0[8] =
     0x11                            // increment destination
 };
 //! DUP DMA descriptor
-uint8 dma_desc_1[8] =
+static uint8 dma_desc_1[8] =
 {
     // Buffer -> Flash controller
     HIBYTE(ADDR_BUF0),              // src[15:8]
@@ -216,14 +216,14 @@ uint8 dma_desc_1[8] =
 };
 
 //! Configuration struct
-struct
+static struct
 {
 	uint32 size;
 	uint32 startAddress;		// 18 bit address. 16 MSB is used (word addressing)
 	uint32 numOfBytesWritten;
 } bufferCfg;
 
-uint8 *flashBuffer = NULL;
+static uint8 *flashBuffer = NULL;
 
 /**************************************************************************************************
  *                                          FUNCTIONS - API
@@ -888,7 +888,7 @@ int Hal_program_bufferReq()
 				for (; address < bufferCfg.size; address += DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE)
 				{
 //					debug_
-					printf("[DEBUG INTERFACE] Write page %d: \t", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
+					printf("[DEBUG INTERFACE] Write page %u: \t", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
 					uint32 tmpAdd = address;
 					for (; tmpAdd < (address + 32); tmpAdd++)
 					{
@@ -914,7 +914,7 @@ int Hal_program_bufferReq()
 			for (; address < (bufferCfg.size + bufferCfg.startAddress); address += DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE)
 			{
 				// Erase page before writing it.
-				debug_printf("[DEBUG INTERFACE] Erase page %d\n", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
+				debug_printf("[DEBUG INTERFACE] Erase page %u\n", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
 
 				if ( ret == NPI_LNX_SUCCESS )
 				{
@@ -962,7 +962,7 @@ int Hal_program_bufferReq()
 		    		break;
 		    	}
 
-			    debug_printf("[DEBUG INTERFACE] Write page %d: \t", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
+			    debug_printf("[DEBUG INTERFACE] Write page %u: \t", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
 				uint32 tmpAdd = address;
 				for (; tmpAdd < (address + 32); tmpAdd++)
 				{
@@ -1125,7 +1125,7 @@ int Hal_write_buffer_memory_block(uint32 address, uint32 *values, uint16 num_byt
 	memcpy((uint8 *)&flashBuffer[address], (uint8 *)values, num_bytes);
 	bufferCfg.numOfBytesWritten += num_bytes;
 
-	debug_printf("[DEBUG INTERFACE] Write buffer block %d: \t", address/num_bytes);
+	debug_printf("[DEBUG INTERFACE] Write buffer block %u: \t", address/num_bytes);
 	uint32 tmpAdd = 0;
 	for (; tmpAdd < num_bytes; tmpAdd++)
 	{
@@ -2139,10 +2139,7 @@ int HalGpioWaitDDClr(void)
 //	ufds[0].events = POLLPRI;
 
 #ifdef __DEBUG_TIME__
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		time_printf_always_localized(" DD: wait to go low\n", NULL, NULL, &prevTime);
-	}
+	time_printf("DD: wait to go Low\n");
 #endif //(defined __DEBUG_TIME__)
 
 	while(dd == '1')
@@ -2174,7 +2171,7 @@ int HalGpioWaitDDClr(void)
 					npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DD_CLEAR_READ_FAILED;
 					return NPI_LNX_FAILURE;
 				}
-				debug_printf("[0x%.2X , %c(0x%.2X)]", atoi(&dd), dd, dd);
+				debug_printf("[0x%.2X , %c(0x%.2X)]", atoi(&dd), dd, (unsigned int)dd);
 			}
 			else
 			{
@@ -2183,23 +2180,17 @@ int HalGpioWaitDDClr(void)
 		}
 	}
 #ifdef __DEBUG_TIME__
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		char tmpStr[512];
-		snprintf(tmpStr, sizeof(tmpStr), " dd: %c  (%c)\n", dd, dd);
-		time_printf_always_localized(tmpStr, NULL, NULL, &prevTime);
-	}
+	char tmpStr[100];
+	snprintf(tmpStr, sizeof(tmpStr), "dd: %c  (0x%02X)\n", dd, (unsigned int)dd);
+	time_printf(tmpStr);
 #endif //(defined __DEBUG_TIME__)
 
 
 #ifdef __STRESS_TEST__
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		time_printf_always_localized(" DD Low\n", NULL, NULL, &prevTime);
-	}
+	time_printf("DD Low\n");
 #endif //__STRESS_TEST__
 
-  debug_printf("[GPIO]==>dd change to : %c  (%c) \n", dd, dd);
+  debug_printf("[GPIO]==>dd change to : %c  (0x%02X)\n", dd, (unsigned int)dd);
 
   return ret;
 }
@@ -2235,10 +2226,7 @@ int HalGpioWaitDDSet()
 	ufds[0].events = POLLIN | POLLPRI;
 
 #ifdef __DEBUG_TIME__
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		time_printf_always_localized(" DD: wait to go high\n", NULL, NULL, &prevTime);
-	}
+	time_printf("DD: wait to go High\n");
 #endif //(defined __DEBUG_TIME__)
 
 	while( (dd == '0') )
@@ -2278,15 +2266,12 @@ int HalGpioWaitDDSet()
 	}
 
 #ifdef __DEBUG_TIME__
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		char tmpStr[512];
-		snprintf(tmpStr, sizeof(tmpStr), " DD: %c  (%c)\n", dd, dd);
-		time_printf_always_localized(tmpStr, NULL, NULL, &prevTime);
-	}
+	char tmpStr[100];
+	snprintf(tmpStr, sizeof(tmpStr), "DD: %c  (0x%02X)\n", dd, (unsigned int)dd);
+	time_printf(tmpStr);
 #endif //__DEBUG_TIME__
 
-	debug_printf("[GPIO]==>DD change to : %c  (%c) \n", dd, dd);
+	debug_printf("[GPIO]==>DD change to : %c  (0x%02X) \n", dd, (unsigned int)dd);
 
 	return ret;
 }

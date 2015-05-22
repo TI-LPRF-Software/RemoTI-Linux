@@ -76,7 +76,7 @@
 #ifdef __BIG_DEBUG__
 #define debug_printf(fmt, ...) fprintf( stderr, fmt, ##__VA_ARGS__); fflush(stdout);
 #else
-#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) fprintf(stderr, fmt, ##__VA_ARGS__);)
+#define debug_printf(fmt) st (if (__BIG_DEBUG_ACTIVE == TRUE) time_printf(fmt);)
 #endif
 
 // -- Constants --
@@ -270,7 +270,9 @@ int NPI_UART_OpenDevice(const char *portName, void *pCfg)
 	}
 
 	// Open UART port
-	debug_printf("[UART] Opening device %s\n", portName);
+	char tmpStr[256];
+	snprintf(tmpStr, sizeof(tmpStr), "[UART] Opening device %s\n", portName);
+	debug_printf(tmpStr);
 	if (npi_opentty(portName)) {
 		// device open failed
 		npi_termasync();
@@ -381,7 +383,7 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 {
 	int result, ret = NPI_LNX_SUCCESS;
 	struct timespec expirytime;
-	struct timespec curtime;
+	struct timeval currentTime;
 
 	pthread_mutex_lock(&npiSyncRespLock);
 	pNpiSyncData = pMsg;
@@ -391,24 +393,24 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 
 	if (ret == NPI_LNX_SUCCESS)
 	{
-		clock_gettime(CLOCK_MONOTONIC, &curtime);
-		expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
-		expirytime.tv_nsec = curtime.tv_nsec * 1000000;
+		gettimeofday(&currentTime, NULL);
+		expirytime.tv_sec = currentTime.tv_sec + NPI_RNP_TIMEOUT;
+		expirytime.tv_nsec = currentTime.tv_usec * 1000;
 #ifdef __DEBUG_TIME__
-		if (__DEBUG_TIME_ACTIVE == TRUE)
-		{
-			static struct timespec prevTime;
-			char tmpStr[512];
-			snprintf(tmpStr, sizeof(tmpStr), "[UART] (synch data) Conditional wait %d\n", NPI_RNP_TIMEOUT);
-			time_printf_always_localized(tmpStr, NULL, NULL, &prevTime);
-		}
+		char tmpStr[512];
+		snprintf(tmpStr, sizeof(tmpStr), "[UART] (synch data) Conditional wait %d.%ld\n",
+				(int)(expirytime.tv_sec - currentTime.tv_sec),
+				expirytime.tv_nsec - (currentTime.tv_usec * 1000));
+		debug_printf(tmpStr);
 #endif //__DEBUG_TIME__
 		// Response may have already come in. This may be the case for Serial Bootloader which is really fast.
 		if ( ((pMsg->subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP) ||
 			 ((pMsg->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT) )
 		{
-			printf("[UART] Synchronous Response received early, subSys 0x%.2X, cmdId 0x%.2X, pData[0] 0x%.2X\n",
+			snprintf(tmpStr, sizeof(tmpStr),
+					"[UART] Synchronous Response received early, subSys 0x%.2X, cmdId 0x%.2X, pData[0] 0x%.2X\n",
 					pMsg->subSys, pMsg->cmdId, pMsg->pData[0]);
+			time_printf(tmpStr);
 		}
 		else
 		{
@@ -477,7 +479,7 @@ void npiUartDisableSleep( void )
 	// The timeout is handy for the PC host application to move on when RNP goes wrong.
 	clock_gettime(CLOCK_MONOTONIC, &curtime);
 	expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
-	expirytime.tv_nsec = curtime.tv_nsec * 1000000;
+	expirytime.tv_nsec = curtime.tv_nsec;
 	pthread_cond_timedwait(&npiUartWakeupCond, &npiUartWakeupLock, &expirytime);
 
 	pthread_mutex_unlock(&npiUartWakeupLock);
@@ -534,7 +536,7 @@ static void *npiAsyncCbackProc(void *ptr)
 {
 	npiAsyncDataHdr_t *pElement;
 	int ret = NPI_LNX_SUCCESS;
-
+	((void)ptr);
 	pthread_mutex_lock(&npiAsyncLock);
 	for (;;)
 	{
@@ -654,12 +656,14 @@ static void *npi_rx_entry(void *ptr)
 				int waitTime = 10000000;
 				clock_gettime(CLOCK_MONOTONIC, &curtime);
 				expirytime.tv_sec = curtime.tv_sec;
-				expirytime.tv_nsec = (curtime.tv_nsec * 1000000) + waitTime;
+				expirytime.tv_nsec = (curtime.tv_nsec) + waitTime;
 				if (expirytime.tv_nsec >= 1000000000) {
 					expirytime.tv_nsec -= 1000000000;
 					expirytime.tv_sec++;
 				}
-				debug_printf("[UART] (read loop) Conditional wait %d ns\n", waitTime);
+#ifdef BIG_DEBUG_ACTIVE
+				time_printf("[UART] (read loop) Conditional wait %d ns\n", waitTime);
+#endif //BIG_DEBUG_ACTIVE
 				pthread_cond_timedwait(&npi_rx_cond, &npi_rx_mutex, &expirytime);
 			}
 #else
@@ -667,7 +671,9 @@ static void *npi_rx_entry(void *ptr)
 #endif
 		}
 	}
-	debug_printf("[UART] npi_rx_terminate == %d, unlocking mutex\n", npi_rx_terminate);
+	char tmpStr[256];
+	snprintf(tmpStr, sizeof(tmpStr), "[UART] npi_rx_terminate == %d, unlocking mutex\n", npi_rx_terminate);
+	debug_printf(tmpStr);
 	pthread_mutex_unlock(&npi_rx_mutex);
 
 	char *errorMsg;
@@ -756,7 +762,9 @@ static int npi_opentty(const char *devpath)
 		bRate = B115200;
 		break;
 	}
-	debug_printf("[UART] Baud rate set to %d (0x%.6X)\n", uartCfg.speed, bRate);
+	char tmpStr[256];
+	snprintf(tmpStr, sizeof(tmpStr), "[UART] Baud rate set to %d (0x%.6X)\n", uartCfg.speed, bRate);
+	debug_printf(tmpStr);
 	if (uartCfg.flowcontrol == 1)
 	{
 		newtio.c_cflag = bRate | CS8 | CLOCAL | CREAD | CRTSCTS;
@@ -765,7 +773,8 @@ static int npi_opentty(const char *devpath)
 	{
 		newtio.c_cflag = bRate | CS8 | CLOCAL | CREAD;
 	}
-	debug_printf("[UART] c_cflag set to 0x%.6X\n", newtio.c_cflag);
+	snprintf(tmpStr, sizeof(tmpStr), "[UART] c_cflag set to 0x%.6X\n", newtio.c_cflag);
+	debug_printf(tmpStr);
 
 	/* IGNPAR  : ignore bytes with parity errors
 	 * ICRNL   : map CR to NL (not in use)
@@ -805,12 +814,11 @@ static int npi_write(const void *buf, size_t count)
 	int result;
 
 #ifdef __DEBUG_TIME__
-	static struct timespec prevTimeWrite;
 	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
 		char tmpStr[512];
 		snprintf(tmpStr, sizeof(tmpStr), "[UART] write %d bytes to %d\n", (int)count, npi_fd);
-		time_printf_always_localized(tmpStr, NULL, NULL, &prevTimeWrite);
+		debug_printf(tmpStr);
 	}
 #endif //__DEBUG_TIME__
 
@@ -823,7 +831,7 @@ static int npi_write(const void *buf, size_t count)
 	{
 		char tmpStr[512];
 		snprintf(tmpStr, sizeof(tmpStr), "[UART] result: %d\n", (int)result);
-		time_printf_always_localized(tmpStr, NULL, NULL, &prevTimeWrite);
+		debug_printf(tmpStr);
 	}
 #endif //__DEBUG_TIME__
 
@@ -877,6 +885,7 @@ static int npi_parseframe(const unsigned char *buf, int len)
 {
 	int ret = NPI_LNX_SUCCESS;
 	uint8 ch;
+	char tmpStr[256];
 	int  bytesInRxBuffer;
 
 	if (len)
@@ -999,11 +1008,12 @@ static int npi_parseframe(const unsigned char *buf, int len)
 			else
 			{
 				debug_printf("[UART] npi_parseframe: found incomplete frame, destroying the message:\n");
-				debug_printf("[UART] \t \t len: 0x%.2X, cmd0: 0x%.2X, cmd1: 0x%.2X, FCS: 0x%.2X\n",
+				snprintf(tmpStr, sizeof(tmpStr), "[UART] \t \t len: 0x%.2X, cmd0: 0x%.2X, cmd1: 0x%.2X, FCS: 0x%.2X\n",
 						npi_parseinfo.LEN_Token,
 						npi_parseinfo.CMD0_Token,
 						npi_parseinfo.CMD1_Token,
 						npi_parseinfo.FSC_Token);
+				debug_printf(tmpStr);
 				/* deallocate the msg */
 				free ( (uint8 *)npi_parseinfo.pMsg );
 			}
@@ -1027,10 +1037,17 @@ static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
 {
 	int ret = NPI_LNX_SUCCESS;
 	int i;
-	debug_printf("[UART] npi_procframe, subsys: 0x%.2x, Cmd ID: 0x%.2X, length: %d ,Data:  \n", subsystemId, commandId, length);
+	char tmpStr[256];
+	snprintf(tmpStr, sizeof(tmpStr), "[UART] npi_procframe, subsys: 0x%.2x, Cmd ID: 0x%.2X, length: %d ,Data:  \n", subsystemId, commandId, length);
+	debug_printf(tmpStr);
+	int charCount = 0;
 	for (i=0;i<length;i++)
-		debug_printf("0x%.2x, ", pBuf[i]);
-	debug_printf("\n");
+	{
+		snprintf(&tmpStr[charCount], sizeof(tmpStr) - charCount, "0x%.2x, ", pBuf[i]);
+		charCount += 6;
+	}
+	snprintf(&tmpStr[charCount], sizeof(tmpStr) - charCount, "\n");
+	debug_printf(tmpStr);
 		
 	if ( ((subsystemId & RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP) ||
 			((subsystemId & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT))
@@ -1113,12 +1130,12 @@ static void npi_iohandler(int status)
 	// This is a potential reentrant function.
 	// Therefore used semaphore instead of mutex.
 
+	((void)status);
 	/* send wakeup signal */
 #ifdef __DEBUG_TIME__
-	static struct timespec prevTimeSignalhandler;
 	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		time_printf_always_localized("Signal from UART, grabbing mutex\n", NULL, NULL, &prevTimeSignalhandler);
+		debug_printf("Signal from UART, grabbing mutex\n");
 	}
 #endif //__DEBUG_TIME__
 
@@ -1127,7 +1144,7 @@ static void npi_iohandler(int status)
 #ifdef __DEBUG_TIME__
 	if (__DEBUG_TIME_ACTIVE == TRUE)
 	{
-		time_printf_always_localized(" Signal read handle, owning mutex\n", NULL, NULL, &prevTimeSignalhandler);
+		debug_printf(" Signal read handle, owning mutex\n");
 	}
 #endif //__DEBUG_TIME__
 }
