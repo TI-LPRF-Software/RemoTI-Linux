@@ -242,7 +242,7 @@ static void parse_opts(int argc, char *argv[])
 int main(int argc, char **argv) 
 {
 
-	printf("Starting...\n");
+	LOG_INFO("Starting...\n");
 
 	// Return value for main
 	int ret = 0;
@@ -272,17 +272,17 @@ int main(int argc, char **argv)
 	uint8 mode = 0;
 	if (strcmp(debugOption, "debugAll") == 0)
 	{
-		printf("!!! 1\n");
+		LOG_INFO("!!! 1\n");
 		mode = 3;
 	}
 	else if (strcmp(debugOption,"debugBig") == 0)
 	{
-		printf("!!! 2\n");
+		LOG_INFO("!!! 2\n");
 		mode = 2;
 	}
 	else if (strcmp(debugOption,"debugTime") == 0)
 	{
-		printf("!!! 3\n");
+		LOG_INFO("!!! 3\n");
 		mode = 1;
 	}
 	//Start RTI thread, management of RTI command in separate thread.
@@ -291,7 +291,7 @@ int main(int argc, char **argv)
 		return ret;
 	}
 
-	printf("Starting timer thread\n");
+	LOG_INFO("Starting timer thread\n");
 
 	//Start RTI timer thread, management of timer in separate thread.
 	if ((ret = timer_init(RTI_main_threadId_tblSize)) != 0)
@@ -342,12 +342,12 @@ int main(int argc, char **argv)
 					LOG_ERROR("[MAIN] Failed to post semaphore %p\n", &eventSem);
 				}
 			}
-//			printf("Character read: \t%c, int: %d\n", consoleInput.latestCh,
+//			LOG_DEBUG("Character read: \t%c, int: %d\n", consoleInput.latestCh,
 //					consoleInput.latestCh);
-//			printf("String read: \t%s\n", consoleInput.latestStr,
+//			LOG_DEBUG("String read: \t%s\n", consoleInput.latestStr,
 //					consoleInput.latestStr);
 		}
-//		printf("poll returned: %d; console handle: %d\n", pollRet, consoleInput.handle);
+//		LOG_DEBUG("poll returned: %d; console handle: %d\n", pollRet, consoleInput.handle);
 	}
 
 	// Destroy semaphores
@@ -360,29 +360,31 @@ int main(int argc, char **argv)
 
 void DispMenuInit(void) 
 {
-	printf("------------------------------------------------------\n");
-	printf("Init MENU:\n");
-	printf("1- Toggle Target / Controller\n");
-	printf("2- Set Node Capabilities\n");
-	printf("3- Supported Profiles\n");
-	printf("4- Supported Devices \n");
-	printf("5- Supported Target Types \n");
-	printf("i- Initialize without configuration. (Restore from NV).\n");
-	printf("g- Get current configuration from RNP.\n");
-	printf("l- Show configuration. Note! Not Necessarily the One Written To RNP\n");
-	printf("s- Apply Configuration and Move On To Application\n");
-	printf("r- Back To Application, Do Not Apply Changes\n");
-	printf("\nc- Start As Controller (default settings)\n");
-	printf("\nt- Start As Target (default settings)\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Init MENU:\n");
+	LOG_INFO("1- Toggle Target / Controller\n");
+	LOG_INFO("2- Set Node Capabilities\n");
+	LOG_INFO("3- Supported Profiles\n");
+	LOG_INFO("4- Supported Devices \n");
+	LOG_INFO("5- Supported Target Types \n");
+	LOG_INFO("i- Initialize without configuration. (Restore from NV).\n");
+	LOG_INFO("g- Get current configuration from RNP.\n");
+	LOG_INFO("l- Show configuration. Note! Not Necessarily the One Written To RNP\n");
+	LOG_INFO("s- Apply Configuration and Move On To Application\n");
+	LOG_INFO("r- Back To Application, Do Not Apply Changes\n");
+	LOG_INFO("\tc- Start As Controller (default settings)\n");
+	LOG_INFO("\tt- Start As Target (default settings)\n");
 }
 
 void DispCFGCurrentCfg(appDevInfo_t appCfg, uint16 nwkAddr, uint16 panId, uint8 *ieeAddr)
 {
 	int16 i;
 	char* tmpStr[4];
-	printf("------------------------------------------------------\n");
-	printf("- Current Configuration:\n");
-	printf("- \tNode Capabilities: \t \t \t 0x%.2X\n", appCfg.nodeCapabilities);
+	int strLen;
+	char tmpStrLong[512];
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("- Current Configuration:\n");
+	LOG_INFO("- \tNode Capabilities: \t \t \t 0x%.2X\n", appCfg.nodeCapabilities);
 	if (appCfg.nodeCapabilities & RTI_NODE_CAP_NODE_TYPE_BM)
 		tmpStr[0] = "Target";
 	else
@@ -404,319 +406,325 @@ void DispCFGCurrentCfg(appDevInfo_t appCfg, uint16 nwkAddr, uint16 panId, uint8 
 		tmpStr[3] = "-";
 
 	for (i = 0; i < 4; i++)
-		printf("- \t \t%s\n", tmpStr[i]);
+		LOG_INFO("- \t \t%s\n", tmpStr[i]);
 
 
-	printf("- \tApplication Capabilities: \t \t 0x%.2X\n", appCfg.appCapabilities);
-	printf("- \t \t Number of supported profiles:\t 0x%.2X\n",
+	LOG_INFO("- \tApplication Capabilities: \t \t 0x%.2X\n", appCfg.appCapabilities);
+	LOG_INFO("- \t \t Number of supported profiles:\t 0x%.2X\n",
 			RCN_APP_CAPA_GET_NUM_PROFILES(appCfg.appCapabilities));
-	printf("- \t \t Number of supported devices:\t 0x%.2X\n",
+	LOG_INFO("- \t \t Number of supported devices:\t 0x%.2X\n",
 			RCN_APP_CAPA_GET_NUM_DEV_TYPES(appCfg.appCapabilities));
 	if (RCN_APP_CAPA_GET_USER_STRING(appCfg.appCapabilities))
-		printf("- \t \t User String supported:\t%s\n", appCfg.userString);
-	printf("- \tSupported Profiles:\n");
+		LOG_INFO("- \t \t User String supported:\t%s\n", appCfg.userString);
+	LOG_INFO("- \tSupported Profiles:\n");
 	for (i = 0; i < RCN_APP_CAPA_GET_NUM_PROFILES(appCfg.appCapabilities); i++)
 	{
-		printf("- \t \t \t \t %s\n", rtiProfileId_list[appCfg.profileIdList[i]]);
+		LOG_INFO("- \t \t \t \t %s\n", rtiProfileId_list[appCfg.profileIdList[i]]);
 	}
 	if (appCfg.vendorId <= RTI_VENDOR_TEXAS_INSTRUMENTS)
 	{
-		printf("- \tVendor ID: \t \t \t \t 0x%.2X (%s)\n", appCfg.vendorId, rtiVendorId_list[appCfg.vendorId]);
+		LOG_INFO("- \tVendor ID: \t \t 0x%.2X (%s)\n", appCfg.vendorId, rtiVendorId_list[appCfg.vendorId]);
 	}
 	else
 	{
-		printf("- \tVendor ID: \t \t \t \t 0x%.2X (Unknown)\n", appCfg.vendorId);
+		LOG_INFO("- \tVendor ID: \t \t 0x%.2X (Unknown)\n", appCfg.vendorId);
 	}
 
-	printf("- \tDevice Types:\n");
+	LOG_INFO("- \tDevice Types:\n");
 	for (i = 0; i < RTI_MAX_NUM_DEV_TYPES; i++)
 	{
 		if (appCfg.devTypeList[i] <= RTI_DEVICE_TARGET_TYPE_END)
 		{
-			printf("- \t \t \t \t 0x%.2X (%s)\n", appCfg.devTypeList[i], rtiDevType_list[appCfg.devTypeList[i]]);
+			LOG_INFO("- \t \t \t \t 0x%.2X (%s)\n", appCfg.devTypeList[i], rtiDevType_list[appCfg.devTypeList[i]]);
 		}
 		else
 		{
-			printf("- \t \t \t \t 0x%.2X (Unknown)\n", appCfg.devTypeList[i]);
+			LOG_INFO("- \t \t \t \t 0x%.2X (Unknown)\n", appCfg.devTypeList[i]);
 		}
 	}
 
-	printf("- \tTarget Device Types:\n");
+	LOG_INFO("- \tTarget Device Types:\n");
 	for (i = 0; i < RTI_MAX_NUM_SUPPORTED_TGT_TYPES; i++)
 	{
 		if (appCfg.tgtTypeList[i] <= RTI_DEVICE_TARGET_TYPE_END)
 		{
-			printf("- \t \t \t \t 0x%.2X (%s)\n", appCfg.tgtTypeList[i], rtiDevType_list[appCfg.tgtTypeList[i]]);
+			LOG_INFO("- \t \t \t \t 0x%.2X (%s)\n", appCfg.tgtTypeList[i], rtiDevType_list[appCfg.tgtTypeList[i]]);
 		}
 		else
 		{
-			printf("- \t \t \t \t 0x%.2X (Unknown)\n", appCfg.tgtTypeList[i]);
+			LOG_INFO("- \t \t \t \t 0x%.2X (Unknown)\n", appCfg.tgtTypeList[i]);
 		}
 	}
-	printf("- \tNWK Address: \t \t \t 0x%.4X\n", nwkAddr);
-	printf("- \tPAN ID: \t \t \t 0x%.4X\n", panId);
-	printf("- \tIEEE Address: \t \t \t %.2X", ieeAddr[7]);
-	for (i = 6; i >= 0; i--)
+	LOG_INFO("- \tNWK Address: \t \t 0x%.4X\n", nwkAddr);
+	LOG_INFO("- \tPAN ID: \t \t 0x%.4X\n", panId);
+	strLen = 0;
+	for (i = (SADDR_EXT_LEN - 2); i >= 0; i--)
 	{
-		printf(":%.2X", ieeAddr[i]);
+		snprintf(tmpStrLong+strLen, sizeof(tmpStrLong)-strLen, ":%.2X", (ieeAddr[i] & 0x00FF));
+		strLen += 3;
 	}
-	printf("\n");
-	printf("------------------------------------------------------\n");
+	LOG_INFO("* IEEE Address:  		 %.2hX%s\n", (ieeAddr[SADDR_EXT_LEN - 1] & 0x00FF), tmpStrLong);
+	LOG_INFO("------------------------------------------------------\n");
 }
 
 void DispCFGNodeCapMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("- Configure Node Capabilites\n");
-	printf("- \tEnter as string of bytes separated by any of \n");
-	printf("- \tthese delimiters: ' ' , ; : - |\n");
-	printf("- Target/Controller, Mains/Battery, Security On/Off, Channel Normalization On/Off\n");
-	printf("- Example:\n");
-	printf("- \t 1, 1, 1, 0 \t yields:\n");
-	printf("- Target , Mains Powered, Security Enabled, Channel Normalization Off\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("- Configure Node Capabilites\n");
+	LOG_INFO("- \tEnter as string of bytes separated by any of \n");
+	LOG_INFO("- \tthese delimiters: ' ' , ; : - |\n");
+	LOG_INFO("- Target/Controller, Mains/Battery, Security On/Off, Channel Normalization On/Off\n");
+	LOG_INFO("- Example:\n");
+	LOG_INFO("- \t 1, 1, 1, 0 \t yields:\n");
+	LOG_INFO("- Target , Mains Powered, Security Enabled, Channel Normalization Off\n");
 }
 
 void DispCFGProfileIDMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("- Configure Supported Profile IDs (Max %d)\n", RCN_MAX_NUM_PROFILE_IDS);
-	printf("- \tEnter as string of bytes separated by any of \n");
-	printf("- \tthese delimiters: ' ' , ; : - |\n");
-	printf("- Available Profiles:\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("- Configure Supported Profile IDs (Max %d)\n", RCN_MAX_NUM_PROFILE_IDS);
+	LOG_INFO("- \tEnter as string of bytes separated by any of \n");
+	LOG_INFO("- \tthese delimiters: ' ' , ; : - |\n");
+	LOG_INFO("- Available Profiles:\n");
 	DispNumberedStringList((char**)rtiProfileId_list, RTI_PROFILE_RTI + 1);
 }
 
 void DispCFGVendorIDMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("- Configure Vendor ID\n");
-	printf("- \tEnter as 16 bit hexadecimal value \n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("- Configure Vendor ID\n");
+	LOG_INFO("- \tEnter as 16 bit hexadecimal value \n");
 }
 
 void DispCFGdevTypesMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("- Configure Supported Device Types (Max %d)\n", RTI_MAX_NUM_DEV_TYPES);
-	printf("- \tEnter as string of bytes separated by any of \n");
-	printf("- \tthese delimiters: ' ' , ; : - |\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("- Configure Supported Device Types (Max %d)\n", RTI_MAX_NUM_DEV_TYPES);
+	LOG_INFO("- \tEnter as string of bytes separated by any of \n");
+	LOG_INFO("- \tthese delimiters: ' ' , ; : - |\n");
 }
 
 void DispCFGtgtTypesMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("- Configure Supported Target Types (Max %d)\n", RTI_MAX_NUM_SUPPORTED_TGT_TYPES);
-	printf("- \tEnter as string of bytes separated by any of \n");
-	printf("- \tthese delimiters: ' ' , ; : - |\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("- Configure Supported Target Types (Max %d)\n", RTI_MAX_NUM_SUPPORTED_TGT_TYPES);
+	LOG_INFO("- \tEnter as string of bytes separated by any of \n");
+	LOG_INFO("- \tthese delimiters: ' ' , ; : - |\n");
 }
 
 void DispNumberedStringList(char** strList, uint16 len)
 {
 	int i;
-	printf("------------------------------------------------------\n");
+	LOG_INFO("------------------------------------------------------\n");
 	for (i = 0; i < len; i++)
 	{
 		if (strList[i] != NULL)
-			printf("- %d \t%s\n", i, strList[i]);
+			LOG_INFO("- %d \t%s\n", i, strList[i]);
 	}
-	printf("------------------------------------------------------\n");
+	LOG_INFO("------------------------------------------------------\n");
 }
 
 void DispStringList(char** strList, uint16 len)
 {
 	int i;
-	printf("------------------------------------------------------\n");
+	LOG_INFO("------------------------------------------------------\n");
 	for (i = 0; i < len; i++)
 	{
 		if (strList[i] != NULL)
-			printf("-\t%s\n", strList[i]);
+			LOG_INFO("-\t%s\n", strList[i]);
 	}
-	printf("------------------------------------------------------\n");
+	LOG_INFO("------------------------------------------------------\n");
 }
 
 void DispMenuReady(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Main MENU:\n");
-	printf("q- exit\n");
-	printf("0- Config \n");
-	printf("1- Pairing\n");
-	printf("2- Unpairing\n");
-	printf("6- Physically Reset RNP (does not work for USB)\n");
-	printf("7- Send Data\n");
-	printf("8- Clear Pairing Table\n");
-	printf("9- Display Pairing Table\n");
-	printf("Set Channel 15 ('h'), 20 ('j') or 25 '(k'). To re-enable FA ('l')\n");
-	printf("t- Toggle __DEBUG_TIME_ACTIVE on Server\n");
-	printf("y- Toggle __BIG_DEBUG on Server\n");
-	printf("c- Toggle simple data display\n");
-	printf("s- Toggle standby mode\n");
-	printf("a- Check States\n");
-	printf("g- Get MAC Channel\n");
-	printf("v- Control Attenuator\n");
-	printf("r- Reset RNP\n");
-	printf("m- Show This Menu\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Main MENU:\n");
+	LOG_INFO("q- exit\n");
+	LOG_INFO("0- Config \n");
+	LOG_INFO("1- Pairing\n");
+	LOG_INFO("2- Unpairing\n");
+	LOG_INFO("6- Physically Reset RNP (does not work for USB)\n");
+	LOG_INFO("7- Send Data\n");
+	LOG_INFO("8- Clear Pairing Table\n");
+	LOG_INFO("9- Display Pairing Table\n");
+	LOG_INFO("Set Channel 15 ('h'), 20 ('j') or 25 '(k'). To re-enable FA ('l')\n");
+	LOG_INFO("t- Toggle __DEBUG_TIME_ACTIVE on Server\n");
+	LOG_INFO("y- Toggle __BIG_DEBUG on Server\n");
+	LOG_INFO("c- Toggle simple data display\n");
+	LOG_INFO("s- Toggle standby mode\n");
+	LOG_INFO("a- Check States\n");
+	LOG_INFO("g- Get MAC Channel\n");
+	LOG_INFO("v- Control Attenuator\n");
+	LOG_INFO("r- Reset RNP\n");
+	LOG_INFO("m- Show This Menu\n");
 }
 
 void DispPhyTestModeMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Physical Test Mode MENU:\n");
-	printf("r- Return to Main Menu\n");
-	printf("1- Tx Raw Carrier\n");
-	printf("2- Tx Modulated Carrier\n");
-	printf("3- Rx Test\n");
-	printf("m- Show This Menu\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Physical Test Mode MENU:\n");
+	LOG_INFO("r- Return to Main Menu\n");
+	LOG_INFO("1- Tx Raw Carrier\n");
+	LOG_INFO("2- Tx Modulated Carrier\n");
+	LOG_INFO("3- Rx Test\n");
+	LOG_INFO("m- Show This Menu\n");
 }
 
 void DispPhyTestModeActiveMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Test Running:\n");
-	printf("s- Stop Test\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Test Running:\n");
+	LOG_INFO("s- Stop Test\n");
 }
 
 void DispPhyTestModeRxMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Physical Test Mode Rx MENU:\n");
-	printf("r- Return to Previous Menu\n");
-	printf("1- Channel 15 (2425MHz)\n");
-	printf("2- Channel 20 (2450MHz)\n");
-	printf("3- Channel 25 (2475MHz)\n");
-	printf("m- Show This Menu\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Physical Test Mode Rx MENU:\n");
+	LOG_INFO("r- Return to Previous Menu\n");
+	LOG_INFO("1- Channel 15 (2425MHz)\n");
+	LOG_INFO("2- Channel 20 (2450MHz)\n");
+	LOG_INFO("3- Channel 25 (2475MHz)\n");
+	LOG_INFO("m- Show This Menu\n");
 }
 
 void DispPhyTestModeTxRawMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Physical Test Mode Tx Raw Carrier MENU:\n");
-	printf("r- Return to Previous Menu\n");
-	printf("1-  +7dBm @2425MHz\n");
-	printf("2-  +7dBm @2450MHz\n");
-	printf("3-  +7dBm @2475MHz\n");
-	printf("4-   0dBm @2425MHz\n");
-	printf("5-   0dBm @2450MHz\n");
-	printf("6-   0dBm @2475MHz\n");
-	printf("7- -20dBm @2425MHz\n");
-	printf("8- -20dBm @2450MHz\n");
-	printf("9- -20dBm @2475MHz\n");
-	printf("m- Show This Menu\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Physical Test Mode Tx Raw Carrier MENU:\n");
+	LOG_INFO("r- Return to Previous Menu\n");
+	LOG_INFO("1-  +7dBm @2425MHz\n");
+	LOG_INFO("2-  +7dBm @2450MHz\n");
+	LOG_INFO("3-  +7dBm @2475MHz\n");
+	LOG_INFO("4-   0dBm @2425MHz\n");
+	LOG_INFO("5-   0dBm @2450MHz\n");
+	LOG_INFO("6-   0dBm @2475MHz\n");
+	LOG_INFO("7- -20dBm @2425MHz\n");
+	LOG_INFO("8- -20dBm @2450MHz\n");
+	LOG_INFO("9- -20dBm @2475MHz\n");
+	LOG_INFO("m- Show This Menu\n");
 }
 
 void DispPhyTestModeTxModulatedMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Physical Test Mode Tx Modulated Carrier MENU:\n");
-	printf("r- Return to Previous Menu\n");
-	printf("1-  +7dBm @2425MHz\n");
-	printf("2-  +7dBm @2450MHz\n");
-	printf("3-  +7dBm @2475MHz\n");
-	printf("4-   0dBm @2425MHz\n");
-	printf("5-   0dBm @2450MHz\n");
-	printf("6-   0dBm @2475MHz\n");
-	printf("7- -20dBm @2425MHz\n");
-	printf("8- -20dBm @2450MHz\n");
-	printf("9- -20dBm @2475MHz\n");
-	printf("m- Show This Menu\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Physical Test Mode Tx Modulated Carrier MENU:\n");
+	LOG_INFO("r- Return to Previous Menu\n");
+	LOG_INFO("1-  +7dBm @2425MHz\n");
+	LOG_INFO("2-  +7dBm @2450MHz\n");
+	LOG_INFO("3-  +7dBm @2475MHz\n");
+	LOG_INFO("4-   0dBm @2425MHz\n");
+	LOG_INFO("5-   0dBm @2450MHz\n");
+	LOG_INFO("6-   0dBm @2475MHz\n");
+	LOG_INFO("7- -20dBm @2425MHz\n");
+	LOG_INFO("8- -20dBm @2450MHz\n");
+	LOG_INFO("9- -20dBm @2475MHz\n");
+	LOG_INFO("m- Show This Menu\n");
 }
 
 void DispControlAttenuatorMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Control Attenuator MENU:\n");
-	printf("r- Return to Main Menu\n");
-	printf("Attenuator 1, Attenuator 2\n");
-	printf("m- Show This Menu\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Control Attenuator MENU:\n");
+	LOG_INFO("r- Return to Main Menu\n");
+	LOG_INFO("Attenuator 1, Attenuator 2\n");
+	LOG_INFO("m- Show This Menu\n");
 }
 
 void DispSendDataMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Send Data MENU:\n");
-	printf("r- Return to Main Menu\n");
-	printf("s- Send Data\n");
-	printf("1- Set Destination Index\n");
-	printf("2- Set Payload\n");
-	printf("3- Set Tx Options\n");
-	printf("4- Set Profile ID\n");
-	printf("l- List current configuration\n");
-	printf("m- Show This Menu\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Send Data MENU:\n");
+	LOG_INFO("r- Return to Main Menu\n");
+	LOG_INFO("s- Send Data\n");
+	LOG_INFO("1- Set Destination Index\n");
+	LOG_INFO("2- Set Payload\n");
+	LOG_INFO("3- Set Tx Options\n");
+	LOG_INFO("4- Set Profile ID\n");
+	LOG_INFO("l- List current configuration\n");
+	LOG_INFO("m- Show This Menu\n");
 }
 
 void DispSendDataDestIndexMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Send Data - Set Destination Index\n");
-	printf("- \tEnter destination index as integer (max 255) \n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Send Data - Set Destination Index\n");
+	LOG_INFO("- \tEnter destination index as integer (max 255) \n");
 }
 
 void DispSendDataTxOptionsMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Send Data - Set Tx Options\n");
-	printf("  TODO: add atoh() equivalent function \n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Send Data - Set Tx Options\n");
+	LOG_INFO("  TODO: add atoh() equivalent function \n");
 }
 
 void DispSendDataProfileIDMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Choose Profile ID\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Choose Profile ID\n");
 }
 
 void DispSendDataCurrentCfg(appSendData_t appSendData_s)
 {
 	uint8 i;
-	printf("------------------------------------------------------\n");
-	printf("Current Send Data Configuration\n");
-	printf("- \t Destination Index: \t 0x%.2X \n", appSendData_s.dstIndex);
-	printf("- \t Profile: \t \t %s [0x%.2X] \n", rtiProfileId_list[appSendData_s.profileId], appSendData_s.profileId);
-	printf("- \t Tx Options: \t 0x%.2X \n", appSendData_s.txOptions);
-	printf("- \t Payload: \n");
-	printf("- \t \t 0x%.2X", appSendData_s.pData[0]);
+	int strLen;
+	char tmpStr[512];
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Current Send Data Configuration\n");
+	LOG_INFO("- \t Destination Index: \t 0x%.2X \n", appSendData_s.dstIndex);
+	LOG_INFO("- \t Profile: \t \t %s [0x%.2X] \n", rtiProfileId_list[appSendData_s.profileId], appSendData_s.profileId);
+	LOG_INFO("- \t Tx Options: \t 0x%.2X \n", appSendData_s.txOptions);
+	LOG_INFO("- \t Payload: \n");
 	for (i = 1; i < appSendData_s.len; i++)
 	{
-		printf(", 0x%.2X", appSendData_s.pData[i]);
+		snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, ", 0x%.2X", appSendData_s.pData[i]);
+		strLen += 4;
 	}
-	printf("\n");
+	LOG_INFO("- \t \t 0x%.2X%s\n", appSendData_s.pData[0], tmpStr);
 }
 
 void DispSendDataPayloadMenu(void)
 {
-	printf("------------------------------------------------------\n");
-	printf("Send Data - Set Payload\n");
-	printf("- \tEnter payload as a succession of bytes given  \n");
-	printf("- \twith radix 16. Example:\n");
-	printf("- \t \t 12 34 56 78 AB CD\n");
+	LOG_INFO("------------------------------------------------------\n");
+	LOG_INFO("Send Data - Set Payload\n");
+	LOG_INFO("- \tEnter payload as a succession of bytes given  \n");
+	LOG_INFO("- \twith radix 16. Example:\n");
+	LOG_INFO("- \t \t 12 34 56 78 AB CD\n");
 }
 
 void DisplayPairingTable(rcnNwkPairingEntry_t *pEntry)
 {
 	int8 j;
-	printf("*************************************\n");
-	printf("* Pairing Index: \t 	0x%.2X\n", pEntry->pairingRef);
-	printf("* SRC NWK Address: \t 	0x%.4hX\n", pEntry->srcNwkAddress);
-	printf("* Logical Channel: \t 	0x%.2hX\n", pEntry->logicalChannel); //((pEntry->logicalChannel >> 8) & 0x00FF));
-	printf("* IEEE Address:  		%.2hX", (pEntry->ieeeAddress[SADDR_EXT_LEN - 1] & 0x00FF));
+	int strLen;
+	char tmpStr[512];
+	LOG_INFO("*************************************\n");
+	LOG_INFO("* Pairing Index: \t 	0x%.2X\n", pEntry->pairingRef);
+	LOG_INFO("* SRC NWK Address: \t 	0x%.4hX\n", pEntry->srcNwkAddress);
+	LOG_INFO("* Logical Channel: \t 	0x%.2hX\n", pEntry->logicalChannel); //((pEntry->logicalChannel >> 8) & 0x00FF));
+	strLen = 0;
 	for (j = (SADDR_EXT_LEN - 2); j >= 0; j--)
 	{
-		printf(":%.2X", (pEntry->ieeeAddress[j] & 0x00FF));
+		snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, ":%.2X", (pEntry->ieeeAddress[j] & 0x00FF));
+		strLen += 3;
 	}
-	printf("\n");
-	printf("* PAN Id: \t \t \t0x%.4X\n", pEntry->panId);
-	printf("* NWK Address: \t \t 	0x%.4hX\n", pEntry->nwkAddress);
-	printf("* Rec Capabilities: \t 	0x%.2hX\n",
+	LOG_INFO("* IEEE Address:  		%.2hX%s\n", (pEntry->ieeeAddress[SADDR_EXT_LEN - 1] & 0x00FF), tmpStr);
+	LOG_INFO("* PAN Id: \t \t \t0x%.4X\n", pEntry->panId);
+	LOG_INFO("* NWK Address: \t 	0x%.4hX\n", pEntry->nwkAddress);
+	LOG_INFO("* Rec Capabilities: \t 	0x%.2hX\n",
 			(pEntry->recCapabilities & 0x00FF));
-	printf("* Security Key Valid: \t \t0x%.2hX\n",
+	LOG_INFO("* Security Key Valid: \t0x%.2hX\n",
 			(pEntry->securityKeyValid & 0x00FF));
-	printf("* Vendor Identifier: \t \t0x%.4hX\n",
+	LOG_INFO("* Vendor Identifier: \t \t0x%.4hX\n",
 			pEntry->vendorIdentifier);
-	printf("* Device Type List: \t 	[0x%.2hX, 0x%.2hX, 0x%.2hX]\n",
+	LOG_INFO("* Device Type List: \t 	[0x%.2hX, 0x%.2hX, 0x%.2hX]\n",
 			(pEntry->devTypeList[0] & 0x00FF),
 			(pEntry->devTypeList[1] & 0x00FF),
 			(pEntry->devTypeList[2] & 0x00FF));
-	printf("* Received Frame Counter: \t0x%.8X (%u)\n",
+	LOG_INFO("* Received Frame Counter: \t0x%.8X (%u)\n",
 			pEntry->recFrameCounter, pEntry->recFrameCounter);
-	printf("* Profiles Discovered: \t 	0x%.4X\n",
+	LOG_INFO("* Profiles Discovered:  	0x%.4X\n",
 			pEntry->profileDiscs[0]);
 }
 
