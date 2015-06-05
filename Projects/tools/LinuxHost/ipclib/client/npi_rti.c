@@ -297,7 +297,7 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 			break;
 #endif //ZRC20_PROFILE
 		default:
-			// nothing can be done here!
+			printf("Unhandled API (0x%.2X)!\n", pMsg->cmdId);
 			break;
 		}
 	}

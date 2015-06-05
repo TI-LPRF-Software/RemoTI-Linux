@@ -60,6 +60,9 @@
 #include "hal_rpc.h"
 #include "npi_lnx_ipc_rpc.h"
 
+// HalAttenuator support
+#include "npi_attenuator.h"
+
 #define SB_DST_ADDR_DIV                    4
 
 // macros
@@ -279,6 +282,7 @@ static void appSetCFGParamOnRNP(void);
 static void appGetCFGParamFromRNP(void);
 static void appInitConfigParam( char tgtSelection );
 static void appConfigParamProcessKey(char* strIn);
+static void appAttenuatorControlProcessKey(char* strIn);
 static void appInitSyncRes(void);
 void appDisplayPairingTable(void);
 void appClearPairingTable(void);
@@ -446,6 +450,11 @@ static void *appThreadFunc(void *ptr)
 			{
 				// Pass key onto physical test mode processing
 				appPhysicalTestModeProcessKey(str);
+			}
+			else if (appState == AP_STATE_CONTROL_ATTENUATOR)
+			{
+				// Pass key onto attenuator control
+				appAttenuatorControlProcessKey(str);
 			}
 			// Other states
 			else if (ch == '0')
@@ -629,6 +638,21 @@ static void *appThreadFunc(void *ptr)
 			{
 				// Read out and display all pairing entries
 				appDisplayPairingTable();
+			}
+			else if (ch == 'v')
+			{
+				if (appState == AP_STATE_READY)
+				{
+					// Go to AP_STATE_CONTROL_ATTENUATOR
+					appState = AP_STATE_CONTROL_ATTENUATOR;
+					DispControlAttenuatorMenu();
+				}
+				else
+				{
+					LOG_ERROR("Cannot control attenuator in this state: %s [0x%.2X]\nRNP Power State: \t %s [0x%.2X]\n",
+							AppState_list[appState], appState,
+							RNPpowerState_list[appRNPpowerState], appRNPpowerState);
+				}
 			}
 			else if (ch == 't')
 			{
@@ -2302,6 +2326,65 @@ void appPhysicalTestModeProcessKey (char* strIn)
 			DispPhyTestModeRxMenu();
 			return;
 		}
+	}
+}
+
+/**************************************************************************************************
+ * @fn          appAttenuatorControlProcessKey
+ *
+ * @brief       This function allows user to control the attenuators
+ *
+ * input parameters
+ *
+ * @param strIn - string from console to be processed
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      None.
+ **************************************************************************************************
+ */
+void appAttenuatorControlProcessKey (char* strIn)
+{
+
+//	printf("------------------------------------------------------\n");
+//	printf("Control Attenuator MENU:\n");
+//	printf("r- Return to Main Menu\n");
+//	printf("Attenuator 1, Attenuator 2\n");
+//	printf("m- Show This Menu\n");
+
+	char* pStr;
+	uint8 att0 = 0, att1 = 0, retVal;
+	switch (strIn[0])
+	{
+	case 'r':
+		appState = AP_STATE_READY;
+		// Display menu
+		DispMenuReady();
+		return;
+	case 'm':
+		// Display Test Mode menu
+		DispControlAttenuatorMenu();
+		return;
+	default:
+		// Get first token
+		pStr = strtok (strIn, " ,");
+		// Convert string to int
+		att0 = strtol(pStr, NULL, 16);
+		// Now get next token
+		pStr = strtok (NULL, " ,:;-|");
+		// Convert string to int
+		att1 = strtol(pStr, NULL, 16);
+
+		retVal = HalAttenuatorSetAttenuation(att0, att1);
+		LOG_INFO("Calling HalAttenuatorSetAttenuation(%d, %d), %s (0x%.2X)\n", att0, att1,
+				(retVal == RTI_SUCCESS) ? "SUCCESS" : "FAILURE", retVal);
+
+		appState = AP_STATE_READY;
+		// Display menu
+		DispMenuReady();
+		return;
 	}
 }
 

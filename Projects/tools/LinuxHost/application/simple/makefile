@@ -45,7 +45,7 @@ CC_x86 = gcc
 #predefine
 #DEFINES = -DRNP_HOST -D__BIG_DEBUG__ -D__DEBUG_TIME__
 #DEFINES = -DRNP_HOST -DSRDY_INTERRUPT
-DEFINES = -DRNP_HOST -DNPI_RTI -D__DEBUG_TIME__
+DEFINES = -DRNP_HOST -DNPI_RTI -D__DEBUG_TIME__ -DNPI_PERIPHERALS -DNPI_ATTENUATOR
 
 #compilation Option
 COMPILO_FLAGS_x86 = "-Wall  $(INCLUDES) $(DEFINES) $(GPROF) " 
@@ -58,6 +58,8 @@ MAINAPP_OBJS= \
 	$(OBJS)/$(app)_app.o \
 	$(OBJS)/timer.o \
 	$(OBJS)/npi_rti.o \
+	$(OBJS)/npi_peripherals.o \
+	$(OBJS)/npi_attenuator.o \
 	$(OBJS)/npi_ipc_client.o
 
 #by default, do not use the library.
@@ -146,6 +148,14 @@ $(OBJS)/timer.o: ../common/timer.c
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 
 $(OBJS)/npi_rti.o: ../../ipclib/client/npi_rti.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
+
+$(OBJS)/npi_attenuator.o: ../../ipclib/client/npi_attenuator.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<	
+
+$(OBJS)/npi_peripherals.o: ../../ipclib/client/npi_peripherals.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 

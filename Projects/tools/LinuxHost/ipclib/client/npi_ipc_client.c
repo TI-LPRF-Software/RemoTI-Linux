@@ -88,8 +88,8 @@
 #include "npi_dbg.h"
 #endif
 
-#ifdef NPI_CAPSENSE
-#include "npi_capSense.h"
+#ifdef NPI_PERIPHERALS
+#include "npi_peripherals.h"
 #endif
 
 #ifdef NPI_NFC
@@ -164,8 +164,8 @@ npiProcessMsg_t NpiAsyncMsgCbackParserTable[] =
 #else
 		NULL,
 #endif
-#ifdef NPI_CAPSENSE
-		  CAP_AsynchMsgCback,		// RPC_SYS_PERIPHERALS	  16   // Interface for CapSense control
+#ifdef NPI_PERIPHERALS
+		  PER_AsynchMsgCback,		// RPC_SYS_PERIPHERALS	  16   // Sub system for all peripherals
 #else
 		  NULL,
 #endif

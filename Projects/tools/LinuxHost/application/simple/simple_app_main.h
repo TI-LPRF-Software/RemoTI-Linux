@@ -68,6 +68,8 @@ extern void DispMenuReady( void );
 extern void DispStringList( char** strList, uint16 len );
 extern void DispNumberedStringList( char** strList, uint16 len );
 
+extern void DispControlAttenuatorMenu(void);
+
 extern void DispPhyTestModeMenu(void);
 extern void DispPhyTestModeActiveMenu(void);
 extern void DispPhyTestModeRxMenu(void);

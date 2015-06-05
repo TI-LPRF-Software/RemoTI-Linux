@@ -552,6 +552,7 @@ void DispMenuReady(void)
 	printf("s- Toggle standby mode\n");
 	printf("a- Check States\n");
 	printf("g- Get MAC Channel\n");
+	printf("v- Control Attenuator\n");
 	printf("r- Reset RNP\n");
 	printf("m- Show This Menu\n");
 }
@@ -616,6 +617,15 @@ void DispPhyTestModeTxModulatedMenu(void)
 	printf("7- -20dBm @2425MHz\n");
 	printf("8- -20dBm @2450MHz\n");
 	printf("9- -20dBm @2475MHz\n");
+	printf("m- Show This Menu\n");
+}
+
+void DispControlAttenuatorMenu(void)
+{
+	printf("------------------------------------------------------\n");
+	printf("Control Attenuator MENU:\n");
+	printf("r- Return to Main Menu\n");
+	printf("Attenuator 1, Attenuator 2\n");
 	printf("m- Show This Menu\n");
 }
 
