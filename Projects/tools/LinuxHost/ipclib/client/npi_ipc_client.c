@@ -57,6 +57,7 @@
 #include <poll.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <syscall.h>
 
 #ifndef NPI_UNIX
 #include <netdb.h>
@@ -247,6 +248,7 @@ static void *npi_ipc_handleThreadFunc (void *ptr);
 
 // Mutex to handle synchronous response
 pthread_mutex_t npiLnxClientSREQmutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t npiLnxClientSREQSerializationMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t npiLnxClientAREQmutex = PTHREAD_MUTEX_INITIALIZER;
 // conditional variable to notify Synchronous response
 static pthread_cond_t npiLnxClientSREQcond;
@@ -1078,156 +1080,170 @@ void NPI_ClientClose(void)
 void NPI_SendSynchData (npiMsgData_t *pMsg)
 {
 	int result = 0;
+	int mutexRet = 0;
 	int bytesSent;
 	long remainingMicroseconds;
 	struct timespec expiryTime, monotonicStart;
+	long callingThreadID = syscall(SYS_gettid);
 
 	// Add Proper RPC type to header
 	((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_SREQ;
 
 	int i;
-    char str[256];
-    uint8 charWritten = 0;
-    charWritten = snprintf(str, sizeof(str), "[NPI Client SEND SYNCH] preparing to send %d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData:",
-    						pMsg->len,
-    						pMsg->subSys,
-    						pMsg->cmdId);
-    charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\t");
-    for (i = 0; i < pMsg->len; i++)
-    {
-       charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", pMsg->pData[i]);
-    }
-    charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\n");
-    LOG_DEBUG("%s", str);
-
-	// Lock mutex
-	LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Lock SRSP Mutex");
-	int mutexRet = 0, writeOnce = 0;
-	while ( (mutexRet = pthread_mutex_trylock(&npiLnxClientSREQmutex)) == EBUSY)
+	char str[256];
+	uint8 charWritten = 0;
+	charWritten = snprintf(str, sizeof(str), "[NPI Client SEND SYNCH] Thread %ld Preparing to send %d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData:",
+							callingThreadID,
+							pMsg->len,
+							pMsg->subSys,
+							pMsg->cmdId);
+	charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\t");
+	for (i = 0; i < pMsg->len; i++)
 	{
-		if (writeOnce == 0)
-		{
-			LOG_TRACE("\n[NPI Client SEND SYNCH][MUTEX] SRSP Mutex busy");
-			fflush(stdout);
-			writeOnce++;
-		}
-		else
-		{
-			writeOnce++;
-			if ( (writeOnce % 1000) == 0)
-			{
-				LOG_TRACE(".");
-			}
-			if (writeOnce > 0xFFFFFFF0)
-				writeOnce = 1;
-			fflush(stdout);
-		}
+		charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", pMsg->pData[i]);
 	}
-	LOG_TRACE("\n[NPI Client SEND SYNCH][MUTEX] SRSP Lock status: %d\n", mutexRet);
+	charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, "\n");
+	LOG_DEBUG("%s", str);
 
-
-	bytesSent = send(sNPIconnected, (uint8 *)pMsg, pMsg->len + RPC_FRAME_HDR_SZ, 0);
-
-	if (bytesSent == -1)
+	LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Thread %ld: Locking npiLnxClientSREQSerializationMutex\n", callingThreadID);
+	if ((mutexRet = pthread_mutex_lock(&npiLnxClientSREQSerializationMutex)) != 0)
 	{
-		LOG_FATAL("[NPI Client] send");
-		exit(1);
-	}
-	else if (bytesSent != (pMsg->len + RPC_FRAME_HDR_SZ))
-	{
-		LOG_ERROR("[NPI Client] Sent only %d of %d bytes!\n", bytesSent, (pMsg->len + RPC_FRAME_HDR_SZ));
-	}
-
-	LOG_TRACE("[NPI Client SEND SYNCH] Sent %d bytes.  Waiting for synchronous response...\n", bytesSent);
-
-	// Conditional wait for the response handled in the receiving thread,
-	// wait maximum NPI_IPC_CLIENT_SYNCH_TIMEOUT seconds.  Since this is 
-	// vulnerable to clock adjustments and pthread_cond_timedwait requires 
-	// a realtime clock, wrap this in a monotonic clock check and retry if 
-	// timed out before actual timeout in monotonic time was hit.
-	clock_gettime(CLOCK_MONOTONIC, &monotonicStart);
-	clock_gettime(CLOCK_REALTIME, &expiryTime);
-	expiryTime.tv_sec += NPI_IPC_CLIENT_SYNCH_TIMEOUT;
-	LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Wait for SRSP Cond signal...\n");
-	do
-	{
-		result = pthread_cond_timedwait(&npiLnxClientSREQcond, &npiLnxClientSREQmutex, &expiryTime);
-		if (result != ETIMEDOUT)
-			remainingMicroseconds = 0;
-		else
-		{
-			// Check monotonic clock to see if timeout time actually elapsed or clock jumped.
-			struct timespec monotonicCurrent;
-			long elapsedMicroseconds;
-
-			clock_gettime(CLOCK_REALTIME, &monotonicCurrent);
-			elapsedMicroseconds = ((long)((long)(monotonicCurrent.tv_sec) - (long)(monotonicStart.tv_sec)) * 1000000L) + 
-			                      ((long)(((long)(monotonicCurrent.tv_nsec) - (long)(monotonicStart.tv_nsec))/1000L));
-
-			remainingMicroseconds = (NPI_IPC_CLIENT_SYNCH_TIMEOUT * 1000000L) - elapsedMicroseconds;
-			if (remainingMicroseconds > 0)
-			{
-				// Realtime clock must have jumped.  Set expiry time to current time + remaining timeout
-				// and loop back to try again.
-				clock_gettime(CLOCK_REALTIME, &expiryTime);
-				expiryTime.tv_sec += (remainingMicroseconds / 1000000);
-				expiryTime.tv_nsec += ((remainingMicroseconds % 1000000) * 1000);
-
-				if (expiryTime.tv_nsec > 1000000000)
-				{
-					expiryTime.tv_sec += 1;
-					expiryTime.tv_nsec -= 1000000000;
-				}
-			}
-		}
-	} while(remainingMicroseconds > 0);
-
-	if (result == ETIMEDOUT)
-	{
-		// TODO: Indicate synchronous transaction error
-		LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] SRSP Cond Wait timed out!\n");
-		LOG_WARN("[NPI Client SEND SYNCH] SRSP Cond Wait timed out!\n");
-
-		// Clear response buffer before processing
-		memset(npi_ipc_srsp_buf, 0, sizeof(npiMsgData_t));
-		// Set Timeout Error to rsp buffer
-		//pMsg->pData[0]=0xF0;
-	}
-	// Wait for response
-	else if ( numOfReceievedSRSPbytes > 0)
-	{
-        charWritten = snprintf(str, sizeof(str), "[NPI Client] received data:");
-		for (i = 0; i < numOfReceievedSRSPbytes; i++)
-		{
-	        charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", (uint8)npi_ipc_srsp_buf[i]);
-		}
-		LOG_TRACE("%s", str);
-
-		// Sanity check on length
-		if (numOfReceievedSRSPbytes != ( ((npiMsgData_t *)npi_ipc_srsp_buf)->len + RPC_FRAME_HDR_SZ))
-		{
-			LOG_FATAL("[NPI Client SEND SYNCH] Mismatch in read IPC data and the expected length\n. \n\tread bytes = %d \n\tnpiMsgLength(+ 3) = %d \n\t\n",
-					numOfReceievedSRSPbytes,
-					((npiMsgData_t *)npi_ipc_srsp_buf)->len + RPC_FRAME_HDR_SZ);
-			exit(1);
-		}
-
-		// Copy response back in transmission buffer for processing
-		memcpy((uint8*)pMsg, npi_ipc_srsp_buf, numOfReceievedSRSPbytes);
+		// Should be "impossible" to get here, given the nature of the mutex, but handle case anyway.
+		LOG_ERROR("[NPI Client SEND SYNCH][MUTEX] Thread %ld: Error %d waiting for npiLnxClientSREQSerializationMutex! Cannot send!\n", callingThreadID, mutexRet);
+		pMsg->pData[0]=0xF0; // Indicate an error  TORBJORN: Is this legitimate?  Is there a better way to let caller know the transaction didn't happen?
 	}
 	else
 	{
-		if ( numOfReceievedSRSPbytes < 0)
-			LOG_ERROR("[NPI Client] recv");
+		// Got serialization mutex, now
+		// Lock the tx/rx synchronization mutex
+		LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Thread %ld: Got serialization mutex, now Lock SRSP Mutex\n", callingThreadID);
+		int writeOnce = 0;
+		while ( (mutexRet = pthread_mutex_trylock(&npiLnxClientSREQmutex)) == EBUSY)
+		{
+			if (writeOnce == 0)
+			{
+				LOG_TRACE("\n[NPI Client SEND SYNCH][MUTEX] Thread %ld: SRSP Mutex busy\n", callingThreadID);
+				writeOnce++;
+			}
+			else
+			{
+				writeOnce++;
+				if ( (writeOnce % 1000) == 0)
+				{
+					LOG_TRACE(".");
+				}
+				if (writeOnce > 0xFFFFFFF0)
+					writeOnce = 1;
+				fflush(stdout);
+			}
+		}
+		LOG_TRACE("\n[NPI Client SEND SYNCH][MUTEX] Thread %ld: SRSP Lock status: %d\n", callingThreadID, mutexRet);
+
+
+		bytesSent = send(sNPIconnected, (uint8 *)pMsg, pMsg->len + RPC_FRAME_HDR_SZ, 0);
+
+		if (bytesSent == -1)
+		{
+			LOG_FATAL("[NPI Client] send");
+			exit(1);
+		}
+		else if (bytesSent != (pMsg->len + RPC_FRAME_HDR_SZ))
+		{
+			LOG_ERROR("[NPI Client] Sent only %d of %d bytes!\n", bytesSent, (pMsg->len + RPC_FRAME_HDR_SZ));
+		}
+
+		LOG_TRACE("[NPI Client SEND SYNCH] Sent %d bytes.  Waiting for synchronous response...\n", bytesSent);
+
+		// Conditional wait for the response handled in the receiving thread,
+		// wait maximum NPI_IPC_CLIENT_SYNCH_TIMEOUT seconds.  Since this is 
+		// vulnerable to clock adjustments and pthread_cond_timedwait requires 
+		// a realtime clock, wrap this in a monotonic clock check and retry if 
+		// timed out before actual timeout in monotonic time was hit.
+		clock_gettime(CLOCK_MONOTONIC, &monotonicStart);
+		clock_gettime(CLOCK_REALTIME, &expiryTime);
+		expiryTime.tv_sec += NPI_IPC_CLIENT_SYNCH_TIMEOUT;
+		LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Thread %ld: Wait for SRSP Cond signal...\n", callingThreadID);
+		do
+		{
+			result = pthread_cond_timedwait(&npiLnxClientSREQcond, &npiLnxClientSREQmutex, &expiryTime);
+			if (result != ETIMEDOUT)
+				remainingMicroseconds = 0;
+			else
+			{
+				// Check monotonic clock to see if timeout time actually elapsed or clock jumped.
+				struct timespec monotonicCurrent;
+				long elapsedMicroseconds;
+
+				clock_gettime(CLOCK_MONOTONIC, &monotonicCurrent);
+				elapsedMicroseconds = ((long)((long)(monotonicCurrent.tv_sec) - (long)(monotonicStart.tv_sec)) * 1000000L) + 
+				                      ((long)(((long)(monotonicCurrent.tv_nsec) - (long)(monotonicStart.tv_nsec))/1000L));
+
+				remainingMicroseconds = (NPI_IPC_CLIENT_SYNCH_TIMEOUT * 1000000L) - elapsedMicroseconds;
+				if (remainingMicroseconds > 0)
+				{
+					// Realtime clock must have jumped.  Set expiry time to current time + remaining timeout
+					// and loop back to try again.
+					clock_gettime(CLOCK_REALTIME, &expiryTime);
+					expiryTime.tv_sec += (remainingMicroseconds / 1000000);
+					expiryTime.tv_nsec += ((remainingMicroseconds % 1000000) * 1000);
+
+					if (expiryTime.tv_nsec > 1000000000)
+					{
+						expiryTime.tv_sec += 1;
+						expiryTime.tv_nsec -= 1000000000;
+					}
+				}
+			}
+		} while(remainingMicroseconds > 0);
+
+		if (result == ETIMEDOUT)
+		{
+			// TODO: Indicate synchronous transaction error
+			LOG_WARN("[NPI Client SEND SYNCH] Thread %ld: SRSP Cond Wait timed out!\n", callingThreadID);
+
+			// Clear response buffer before processing
+			memset(npi_ipc_srsp_buf, 0, sizeof(npiMsgData_t));
+			// Set Timeout Error to rsp buffer
+//			pMsg->pData[0]=0xFF;
+		}
+		// Wait for response
+		else if ( numOfReceievedSRSPbytes > 0)
+		{
+			charWritten = snprintf(str, sizeof(str), "[NPI Client] Thread %ld received data:", callingThreadID);
+			for (i = 0; i < numOfReceievedSRSPbytes; i++)
+			{
+				charWritten += snprintf(&str[charWritten], sizeof(str) - charWritten, " 0x%.2X", (uint8)npi_ipc_srsp_buf[i]);
+			}
+			LOG_TRACE("%s", str);
+
+			// Sanity check on length
+			if (numOfReceievedSRSPbytes != ( ((npiMsgData_t *)npi_ipc_srsp_buf)->len + RPC_FRAME_HDR_SZ))
+			{
+				LOG_FATAL("[NPI Client SEND SYNCH] Mismatch in read IPC data and the expected length\n. \n\tread bytes = %d \n\tnpiMsgLength(+ 3) = %d \n\t\n",
+						numOfReceievedSRSPbytes,
+						((npiMsgData_t *)npi_ipc_srsp_buf)->len + RPC_FRAME_HDR_SZ);
+				exit(1);
+			}
+
+			// Copy response back in transmission buffer for processing
+			memcpy((uint8*)pMsg, npi_ipc_srsp_buf, numOfReceievedSRSPbytes);
+		}
 		else
-			LOG_WARN("[NPI Client SEND SYNCH] Server closed connection\n");
+		{
+			if ( numOfReceievedSRSPbytes < 0)
+				LOG_ERROR("[NPI Client] recv");
+			else
+				LOG_WARN("[NPI Client SEND SYNCH] Server closed connection\n");
+		}
+
+		numOfReceievedSRSPbytes = 0;
+
+		// Now unlock the mutex before returning
+		LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Thread %ld: Unlock SRSP Mutex\n", callingThreadID);
+		pthread_mutex_unlock(&npiLnxClientSREQmutex);
+		LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Thread %ld: Unlock npiLnxClientSREQSerializationMutex\n", callingThreadID);
+		pthread_mutex_unlock(&npiLnxClientSREQSerializationMutex);
 	}
-
-	numOfReceievedSRSPbytes = 0;
-
-	// Now unlock the mutex before returning
-	LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Unlock SRSP Mutex\n");
-	pthread_mutex_unlock(&npiLnxClientSREQmutex);
 }
 
 
