@@ -773,7 +773,7 @@ static void *npi_poll_entry(void *ptr)
 			// the npiPollLock will prevent us to arrive to this test,
 			// BUT an AREQ can immediately follow  a SREQ: SRDY will stay low for the whole process
 			// In this case, we need to check that the SRDY line is still LOW or is HIGH.
-			if(1)
+			if (HalGpioSrdyCheck(0) == TRUE)
 #endif
 			{
 				//   exit(-1);
