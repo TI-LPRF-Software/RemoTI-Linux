@@ -60,14 +60,8 @@
 //#include  "hal_board.h"
 #include  "hal_types.h"
 #include  "hal_i2c.h"
-
+#include "time_printf.h"
 #include "npi_lnx_error.h"
-
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
-#endif
 
 #if (defined NPI_I2C) && (NPI_I2C == TRUE)
 /**************************************************************************************************
@@ -106,16 +100,25 @@ pthread_mutex_t I2cMutex1 = PTHREAD_MUTEX_INITIALIZER;
  **************************************************************************************************/
 int HalI2cInit(const char *devpath)
 {
+	char tmpStr[128];
 	// If the device is open, attempt to close it first.
 	if (i2cDevFd >= 0)
 	{
 		/* The device is open, attempt to close it first */
-		debug_printf("Closing %s ...\n",devpath);
+		if ( __BIG_DEBUG_ACTIVE == TRUE )
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Closing %s...\n", __FUNCTION__, devpath);
+			time_printf(tmpStr);
+		}
 		close(i2cDevFd);
 	}
 
 	/* open the device */
-	debug_printf("Opening %s ...\n",devpath);
+	if ( __BIG_DEBUG_ACTIVE == TRUE )
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] Opening %s...\n", __FUNCTION__, devpath);
+		time_printf(tmpStr);
+	}
 
 	i2cDevFd = open(devpath, O_RDWR | O_NONBLOCK);
 	if(i2cDevFd<0)
@@ -136,7 +139,11 @@ int HalI2cInit(const char *devpath)
 		return NPI_LNX_FAILURE;
 	}
 
-	debug_printf("Open I2C Driver: %s for Address 0x%.2x ...\n",devpath, RNP_I2C_ADDRESS);
+	if ( __BIG_DEBUG_ACTIVE == TRUE )
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] Open I2C Driver: %s for Address 0x%.2x ...\n", __FUNCTION__, devpath, RNP_I2C_ADDRESS);
+		time_printf(tmpStr);
+	}
 
 	return NPI_LNX_SUCCESS;
 }
@@ -151,7 +158,12 @@ int HalI2cInit(const char *devpath)
  **************************************************************************************************/
 int HalI2cClose(void)
 {
-	debug_printf("Closing I2C file descriptor\n");
+	char tmpStr[128];
+	if ( __BIG_DEBUG_ACTIVE == TRUE )
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] Closing I2C file descriptor\n", __FUNCTION__);
+		time_printf(tmpStr);
+	}
 	if (-1 ==close(i2cDevFd))
 	{
 		fprintf(stderr, "Error: Could not Close I2C device file, reason:  %s,\n", strerror(errno));
@@ -176,60 +188,90 @@ int HalI2cClose(void)
  **************************************************************************************************/
 int HalI2cWrite(uint8 port, uint8 *pBuf, uint8 len)
 {
-  int res, ret = NPI_LNX_SUCCESS;
-  int timeout = I2C_OPEN_100MS_TIMEOUT;
-  int i;
-  debug_printf("I2C Write: \t");
+	int res, ret = NPI_LNX_SUCCESS;
+	int timeout = I2C_OPEN_100MS_TIMEOUT;
+	int i, strIndex = 0;
+	char tmpStr[256];
 
-  for(i=0; i<len; i++)
-	  debug_printf("0x%.2x ", pBuf[i]);
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] I2C Writing: %d bytes\n", __FUNCTION__, len);
+		time_printf(tmpStr);
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] I2C Write: \t", __FUNCTION__);
+		strIndex = strlen(tmpStr);
+		for (i = 0 ; i < len; i++ )
+		{
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, " 0x%.2X", pBuf[i]);
+			strIndex += 5;
+		}
+		snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "\n");
+		time_printf(tmpStr);
+	}
 
-  debug_printf("\n");
+	pthread_mutex_lock(&I2cMutex1);
 
-  pthread_mutex_lock(&I2cMutex1);
+	while( (-1 == (res = write(i2cDevFd,pBuf,len))) && timeout)
+	{
+		timeout--;
+		if ( __BIG_DEBUG_ACTIVE == TRUE )
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] I2C Write timeout %d, %s \n", __FUNCTION__, timeout, strerror(errno));
+			time_printf(tmpStr);
+		}
 
-  while( (-1 == (res = write(i2cDevFd,pBuf,len))) && timeout)
-  {
-    timeout--;
-    debug_printf("I2C Write timeout %d, %s \n", timeout, strerror(errno));
+		if ((errno == ETIMEDOUT) && (timeout < (I2C_OPEN_100MS_TIMEOUT - 2)) )
+		{
+			// When ETIMEDOUT is received the function did not immediately return, so the 100 ms timeout
+			// is not accurate. Hence, cut it short after 3 attempts.
+			timeout = 0;
+		}
+		else
+		{
+			usleep(1000); //Wait 1ms before re-trying
+		}
+	}
 
-    if ((errno == ETIMEDOUT) && (timeout < (I2C_OPEN_100MS_TIMEOUT - 2)) )
-    {
-    	// When ETIMEDOUT is received the function did not immediately return, so the 100 ms timeout
-    	// is not accurate. Hence, cut it short after 3 attempts.
-    	timeout = 0;
-    }
-    else
-    {
-    	usleep(1000); //Wait 1ms before re-trying
-    }
-  }
+	if ( (-1 == res) && !timeout)
+	{
+		/* ERROR HANDLING: i2c transaction failed */
+		if ( __BIG_DEBUG_ACTIVE == TRUE )
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Failed to write to the i2c bus for %d ms. read %d byte(s)...reason: (#%d)%s\n",
+					__FUNCTION__, I2C_OPEN_100MS_TIMEOUT, res, errno, strerror(errno));
+			time_printf(tmpStr);
+		}
+		if (errno == ETIMEDOUT)
+		{
+			// RNP may be hung, report error and perform reset.
+			if ( __BIG_DEBUG_ACTIVE == TRUE )
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] May have to reset RNP...\n", __FUNCTION__);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT_PERFORM_RESET;
+		}
+		else
+		{
+			if ( __BIG_DEBUG_ACTIVE == TRUE )
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] RNP may have reset unexpectedly. Keep going...\n", __FUNCTION__);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT;
+		}
+		ret = NPI_LNX_FAILURE;
+	}
+	else
+	{
+		if ( __BIG_DEBUG_ACTIVE == TRUE )
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] I2C Wrote: %d bytes\n", __FUNCTION__, res);
+			time_printf(tmpStr);
+		}
+	}
 
-  if ( (-1 == res) && !timeout)
-  {
-    /* ERROR HANDLING: i2c transaction failed */
-    printf("Failed to write to the i2c bus for %d ms. read %d byte(s)...reason: (#%d)%s\n", I2C_OPEN_100MS_TIMEOUT, res, errno, strerror(errno));
-    if (errno == ETIMEDOUT)
-    {
-    	// RNP may be hung, report error and perform reset.
-    	printf("May have to reset RNP...\n");
-        npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT_PERFORM_RESET;
-    }
-    else
-    {
-    	printf("RNP may have reset unexpectedly. Keep going...\n");
-        npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_WRITE_TIMEDOUT;
-    }
-    printf("\n\n");
-    ret = NPI_LNX_FAILURE;
-  }
-  else
-  {
-	  debug_printf("I2C Wrote: %d bytes\n", res);
-  }
-
-  pthread_mutex_unlock(&I2cMutex1);
-  return ret;
+	pthread_mutex_unlock(&I2cMutex1);
+	return ret;
 }
 
 /**************************************************************************************************
@@ -245,63 +287,85 @@ int HalI2cWrite(uint8 port, uint8 *pBuf, uint8 len)
  **************************************************************************************************/
 int HalI2cRead(uint8 port, uint8 *pBuf, uint8 len)
 {
-  int timeout = I2C_OPEN_100MS_TIMEOUT, ret = NPI_LNX_SUCCESS;
-  int i;
-  int res = -1;
-  pthread_mutex_lock(&I2cMutex1);
+	int timeout = I2C_OPEN_100MS_TIMEOUT, ret = NPI_LNX_SUCCESS;
+	int i, strIndex = 0;
+	int res = -1;
+	char tmpStr[128];
+	pthread_mutex_lock(&I2cMutex1);
 
-  while( (-1 == (res = read(i2cDevFd,pBuf,len))) && timeout)
-  {
-    timeout--;
-    printf("I2C Read timeout %d, %s \n", timeout, strerror(errno));
+	while( (-1 == (res = read(i2cDevFd,pBuf,len))) && timeout)
+	{
+		timeout--;
+		sprintf(tmpStr, "[%s] I2C Read timeout %d, %s \n",
+				__FUNCTION__, timeout, strerror(errno));
+		time_printf(tmpStr);
 
-    if ((errno == ETIMEDOUT) && (timeout < (I2C_OPEN_100MS_TIMEOUT - 2)) )
-    {
-    	// When ETIMEDOUT is received the function did not immediately return, so the 100 ms timeout
-    	// is not accurate. Hence, cut it short after 3 attempts.
-    	timeout = 0;
-    }
-    else
-    {
-    	usleep(1000); //Wait 1ms before re-trying
-    }
-  }
+		if (timeout == 90)
+		{
+			exit(-1);
+		}
 
-  if ( (-1 == res) && !timeout)
-  {
-    /* ERROR HANDLING: i2c transaction failed */
-    printf("Failed to read to the i2c bus for %d ms. read %d byte(s)...reason: (#%d)%s\n",
-    		I2C_OPEN_100MS_TIMEOUT,
-    		res,
-    		errno,
-    		strerror(errno));
-    if (errno == ETIMEDOUT)
-    {
-    	// RNP may be hung, report error and perform reset.
-    	printf("May have to reset RNP...\n");
-        npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT_PERFORM_RESET;
-    }
-    else
-    {
-    	printf("RNP may have reset unexpectedly. Keep going...\n");
-        npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT;
-    }
-    printf("\n");
-    ret = NPI_LNX_FAILURE;
-  }
-  else
-  {
-	  debug_printf("I2C Read: \t");
+		if ((errno == ETIMEDOUT) && (timeout < (I2C_OPEN_100MS_TIMEOUT - 2)) )
+		{
+			// When ETIMEDOUT is received the function did not immediately return, so the 100 ms timeout
+			// is not accurate. Hence, cut it short after 3 attempts.
+			timeout = 0;
+		}
+		else
+		{
+			usleep(1000); //Wait 1ms before re-trying
+		}
+	}
 
-	  for(i=0; i<len; i++)
-		  debug_printf("0x%.2x ", pBuf[i]);
+	if ( (-1 == res) && !timeout)
+	{
+		/* ERROR HANDLING: i2c transaction failed */
+		if ( __BIG_DEBUG_ACTIVE == TRUE )
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Failed to write to the i2c bus for %d ms. read %d byte(s)...reason: (#%d)%s\n",
+					__FUNCTION__, I2C_OPEN_100MS_TIMEOUT, res, errno, strerror(errno));
+			time_printf(tmpStr);
+		}
+		if (errno == ETIMEDOUT)
+		{
+			// RNP may be hung, report error and perform reset.
+			if ( __BIG_DEBUG_ACTIVE == TRUE )
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] May have to reset RNP...\n", __FUNCTION__);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT_PERFORM_RESET;
+		}
+		else
+		{
+			if ( __BIG_DEBUG_ACTIVE == TRUE )
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] RNP may have reset unexpectedly. Keep going...\n", __FUNCTION__);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_I2C_READ_TIMEDOUT;
+		}
+		ret = NPI_LNX_FAILURE;
+	}
+	else
+	{
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] I2C Read: \t", __FUNCTION__);
+			strIndex = strlen(tmpStr);
+			for (i = 0 ; i < len; i++ )
+			{
+				snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, " 0x%.2X", pBuf[i]);
+				strIndex += 5;
+			}
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "\n");
+			time_printf(tmpStr);
+		}
+	}
 
-	  debug_printf("\n");
-  }
+	pthread_mutex_unlock(&I2cMutex1);
 
-  pthread_mutex_unlock(&I2cMutex1);
-
-  return ret;
+	return ret;
 }
 
 #endif

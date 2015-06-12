@@ -75,15 +75,6 @@
  *                                              MACROS
  **************************************************************************************************/
 
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__); fflush(stdout);
-#else
-#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
-#endif
-
-#ifdef __DEBUG_TIME__
-#define time_printf(fmt, ...) st (if ((__DEBUG_TIME_ACTIVE == TRUE) && (__BIG_DEBUG_ACTIVE == TRUE)) printf( fmt, ##__VA_ARGS__);)
-#endif //__DEBUG_TIME__
 /**************************************************************************************************
  *                                            TYPEDEFS
  **************************************************************************************************/
@@ -158,87 +149,130 @@ void HalGpioResetClose(void)
  **************************************************************************************************/
 int HalGpioSrdyInit(halGpioCfg_t *gpioCfg)
 {
+	char tmpStr[512];
 	memcpy(srdyGpioCfg.gpio.value,
 			gpioCfg->gpio.value,
 			strlen(gpioCfg->gpio.value));
-	debug_printf("[GPIO]resetGpioCfg.gpio.value = '%s'\n", srdyGpioCfg.gpio.value);
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] srdyGpioCfg.gpio.value = '%s'\n", __FUNCTION__, srdyGpioCfg.gpio.value);
+		time_printf(tmpStr);
+	}
 	memcpy(srdyGpioCfg.gpio.direction,
 			gpioCfg->gpio.direction,
 			strlen(gpioCfg->gpio.direction));
-	debug_printf("[GPIO]srdyGpioCfg.gpio.direction = '%s'\n", srdyGpioCfg.gpio.direction);
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] srdyGpioCfg.gpio.direction = '%s'\n", __FUNCTION__, srdyGpioCfg.gpio.direction);
+		time_printf(tmpStr);
+	}
 
 	srdyGpioCfg.gpio.active_high_low = gpioCfg->gpio.active_high_low;
 
 	memcpy(srdyGpioCfg.gpio.edge,
 			gpioCfg->gpio.edge,
 			strlen(gpioCfg->gpio.edge));
-	debug_printf("[GPIO]srdyGpioCfg.gpio.edge = '%s'\n", srdyGpioCfg.gpio.edge);
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] srdyGpioCfg.gpio.edge = '%s'\n", __FUNCTION__, srdyGpioCfg.gpio.edge);
+		time_printf(tmpStr);
+	}
 
 	if ( ( gpioCfg->levelshifter.value) &&
-		 ( gpioCfg->levelshifter.active_high_low) &&
-		 ( gpioCfg->levelshifter.direction))
+			( gpioCfg->levelshifter.active_high_low) &&
+			( gpioCfg->levelshifter.direction))
 	{
+		memcpy(srdyGpioCfg.levelshifter.value,
+				gpioCfg->levelshifter.value,
+				strlen(gpioCfg->levelshifter.value));
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] srdyGpioCfg.levelshifter.value = '%s'\n", __FUNCTION__, srdyGpioCfg.levelshifter.value);
+			time_printf(tmpStr);
+		}
+		memcpy(srdyGpioCfg.levelshifter.direction,
+				gpioCfg->levelshifter.direction,
+				strlen(gpioCfg->levelshifter.direction));
+		srdyGpioCfg.levelshifter.active_high_low = gpioCfg->levelshifter.active_high_low;
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] srdyGpioCfg.levelshifter.direction = '%s'\n", __FUNCTION__, srdyGpioCfg.levelshifter.direction);
+			time_printf(tmpStr);
+		}
 
-	memcpy(srdyGpioCfg.levelshifter.value,
-			gpioCfg->levelshifter.value,
-			strlen(gpioCfg->levelshifter.value));
-		debug_printf("[GPIO]srdyGpioCfg.levelshifter.value = '%s'\n", srdyGpioCfg.levelshifter.value);
-	memcpy(srdyGpioCfg.levelshifter.direction,
-			gpioCfg->levelshifter.direction,
-			strlen(gpioCfg->levelshifter.direction));
-	srdyGpioCfg.levelshifter.active_high_low = gpioCfg->levelshifter.active_high_low;
-		debug_printf("[GPIO]srdyGpioCfg.levelshifter.direction = '%s'\n", srdyGpioCfg.levelshifter.direction);
+		//open the GPIO DIR file for the level shifter direction signal
+		gpioSrdyFd = open(srdyGpioCfg.levelshifter.direction, O_RDWR);
+		if(gpioSrdyFd == 0)
+		{
+			perror(srdyGpioCfg.levelshifter.direction);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, srdyGpioCfg.levelshifter.direction);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_LVLSHFT_DIR_OPEN;
+			return NPI_LNX_FAILURE;
+		}
 
-	//open the GPIO DIR file for the level shifter direction signal
-	gpioSrdyFd = open(srdyGpioCfg.levelshifter.direction, O_RDWR);
-	if(gpioSrdyFd == 0)
-	{
-		perror(srdyGpioCfg.levelshifter.direction);
-		debug_printf("\n[GPIO]%s open failed\n",srdyGpioCfg.levelshifter.direction);
-	    npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_LVLSHFT_DIR_OPEN;
-	    return NPI_LNX_FAILURE;
-	}
+		//Set the direction of the GPIO to output
+		if (ERROR == write(gpioSrdyFd, "out", 3))
+		{
+			perror(srdyGpioCfg.levelshifter.direction);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s \n", __FUNCTION__, srdyGpioCfg.levelshifter.direction);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_LVLSHFT_DIR_WRITE;
+			return NPI_LNX_FAILURE;
+		}
+		//close the DIR file
+		close(gpioSrdyFd);
 
-	//Set the direction of the GPIO to output
-	if (ERROR == write(gpioSrdyFd, "out", 3))
-	{
-		perror(srdyGpioCfg.levelshifter.direction);
-		debug_printf("\n[GPIO]can't write in %s \n",srdyGpioCfg.levelshifter.direction);
-		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_LVLSHFT_DIR_WRITE;
-	    return NPI_LNX_FAILURE;
-	}
-	//close the DIR file
-	close(gpioSrdyFd);
+		//open the GPIO VALUE file for the level shifter direction signal
+		gpioSrdyFd = open(srdyGpioCfg.levelshifter.value, O_RDWR);
+		if(gpioSrdyFd == 0)
+		{
+			perror(srdyGpioCfg.levelshifter.value);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, srdyGpioCfg.levelshifter.value);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_LVLSHFT_VAL_OPEN;
+			return NPI_LNX_FAILURE;
+		}
 
-	//open the GPIO VALUE file for the level shifter direction signal
-	gpioSrdyFd = open(srdyGpioCfg.levelshifter.value, O_RDWR);
-	if(gpioSrdyFd == 0)
-	{
-		perror(srdyGpioCfg.levelshifter.value);
-		debug_printf("[GPIO]%s open failed\n",srdyGpioCfg.levelshifter.value);
-		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_LVLSHFT_VAL_OPEN;
-	    return NPI_LNX_FAILURE;
-	}
+		//Set the value of the GPIO to 0 (level shifter direction from CC2531 to Host)
 
-	//Set the value of the GPIO to 0 (level shifter direction from CC2531 to Host)
-
-	if (ERROR == write(gpioSrdyFd, "0", 1))
-	{
-		perror(srdyGpioCfg.levelshifter.value);
-		debug_printf("\n[GPIO]can't write in %s \n",srdyGpioCfg.levelshifter.value);
-		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_LVLSHFT_VAL_WRITE;
-	    return NPI_LNX_FAILURE;
-	}
-	//close the DIR file
-	close(gpioSrdyFd);
+		if (ERROR == write(gpioSrdyFd, "0", 1))
+		{
+			perror(srdyGpioCfg.levelshifter.value);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s\n", __FUNCTION__, srdyGpioCfg.levelshifter.value);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_LVLSHFT_VAL_WRITE;
+			return NPI_LNX_FAILURE;
+		}
+		//close the DIR file
+		close(gpioSrdyFd);
 	}
 	else
 	{
-		debug_printf("WARNING: Wrong Configuration File, one of the  following Key value are missing for SRDY.Level Shifter definition: '\n");
-		debug_printf("value: %s\n", srdyGpioCfg.gpio.value);
-		debug_printf("direction: %s\n", srdyGpioCfg.gpio.direction);
-		debug_printf("active_high_low: %d\n", srdyGpioCfg.gpio.active_high_low);
-		debug_printf("Level Shifter is optional, please check if you need it or not before continuing...\n");
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Wrong Configuration File, one of the  following Key value are missing for SRDY.Level Shifter definition: '\n", __FUNCTION__);
+			int strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "value: \t\t%s\n", srdyGpioCfg.gpio.value);
+			strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "direction: \t%s\n", srdyGpioCfg.gpio.direction);
+			strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "active_high_low: %d\n", srdyGpioCfg.gpio.active_high_low);
+			strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "Level Shifter is optional, please check if you need it or not before continuing...\n");
+		}
 	}
 	//TODO: Lock the shift register GPIO.
 
@@ -247,18 +281,26 @@ int HalGpioSrdyInit(halGpioCfg_t *gpioCfg)
 	if(gpioSrdyFd == 0)
 	{
 		perror(srdyGpioCfg.gpio.direction);
-		debug_printf("[GPIO]%s open failed\n",srdyGpioCfg.gpio.direction);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, srdyGpioCfg.gpio.direction);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_GPIO_DIR_OPEN;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 
 	//Set SRDY GPIO as input
 	if(ERROR == write(gpioSrdyFd, "in", 2))
 	{
 		perror(srdyGpioCfg.levelshifter.direction);
-		debug_printf("\n[GPIO]can't write in %s \n",srdyGpioCfg.gpio.direction);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s\n", __FUNCTION__, srdyGpioCfg.gpio.direction);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_GPIO_DIR_WRITE;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 	//close SRDY DIR file
 	close(gpioSrdyFd);
@@ -268,18 +310,26 @@ int HalGpioSrdyInit(halGpioCfg_t *gpioCfg)
 	if(gpioSrdyFd == 0)
 	{
 		perror(srdyGpioCfg.gpio.edge);
-		debug_printf("[GPIO]%s open failed\n",srdyGpioCfg.gpio.edge);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, srdyGpioCfg.gpio.edge);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_GPIO_EDGE_OPEN;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 
 	//Set SRDY GPIO edge detection for both rising and falling
 	if(ERROR == write(gpioSrdyFd, "both", 4))
 	{
 		perror(srdyGpioCfg.levelshifter.edge);
-		debug_printf("\n[GPIO]can't write in %s \n",srdyGpioCfg.gpio.edge);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s\n", __FUNCTION__, srdyGpioCfg.gpio.edge);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_GPIO_EDGE_WRITE;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 	//close SRDY edge file
 	close(gpioSrdyFd);
@@ -289,12 +339,14 @@ int HalGpioSrdyInit(halGpioCfg_t *gpioCfg)
 	if(gpioSrdyFd == 0)
 	{
 		perror(srdyGpioCfg.gpio.value);
-		debug_printf("%s open failed\n",srdyGpioCfg.gpio.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, srdyGpioCfg.gpio.value);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_GPIO_VAL_OPEN;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
-
-
 
 	return(gpioSrdyFd);
 }
@@ -310,81 +362,119 @@ int HalGpioSrdyInit(halGpioCfg_t *gpioCfg)
  **************************************************************************************************/
 int HalGpioMrdyInit(halGpioCfg_t *gpioCfg)
 {
+	char tmpStr[512];
 	memcpy(mrdyGpioCfg.gpio.value,
 			gpioCfg->gpio.value,
 			strlen(gpioCfg->gpio.value));
-	debug_printf("[GPIO]resetGpioCfg.gpio.value = '%s'\n", mrdyGpioCfg.gpio.value);
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] mrdyGpioCfg.gpio.value = '%s'\n", __FUNCTION__, mrdyGpioCfg.gpio.value);
+		time_printf(tmpStr);
+	}
 	memcpy(mrdyGpioCfg.gpio.direction,
 			gpioCfg->gpio.direction,
 			strlen(gpioCfg->gpio.direction));
-	debug_printf("[GPIO]mrdyGpioCfg.gpio.direction = '%s'\n", mrdyGpioCfg.gpio.direction);
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] mrdyGpioCfg.gpio.direction = '%s'\n", __FUNCTION__, mrdyGpioCfg.gpio.direction);
+		time_printf(tmpStr);
+	}
 	mrdyGpioCfg.gpio.active_high_low = gpioCfg->gpio.active_high_low;
 
 	if ( ( gpioCfg->levelshifter.value) &&
-		 ( gpioCfg->levelshifter.active_high_low) &&
-		 ( gpioCfg->levelshifter.direction))
+			( gpioCfg->levelshifter.active_high_low) &&
+			( gpioCfg->levelshifter.direction))
 	{
+		memcpy(mrdyGpioCfg.levelshifter.value,
+				gpioCfg->levelshifter.value,
+				strlen(gpioCfg->levelshifter.value));
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] mrdyGpioCfg.levelshifter.value = '%s'\n", __FUNCTION__, mrdyGpioCfg.levelshifter.value);
+			time_printf(tmpStr);
+		}
+		memcpy(mrdyGpioCfg.levelshifter.direction,
+				gpioCfg->levelshifter.direction,
+				strlen(gpioCfg->levelshifter.direction));
+		mrdyGpioCfg.levelshifter.active_high_low = gpioCfg->levelshifter.active_high_low;
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] mrdyGpioCfg.levelshifter.direction = '%s'\n", __FUNCTION__, mrdyGpioCfg.levelshifter.direction);
+			time_printf(tmpStr);
+		}
 
+		//open the GPIO DIR file for the level shifter direction signal
+		gpioMrdyFd = open(mrdyGpioCfg.levelshifter.direction, O_RDWR);
+		if(gpioMrdyFd == 0)
+		{
+			perror(mrdyGpioCfg.levelshifter.direction);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, mrdyGpioCfg.levelshifter.direction);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_LVLSHFT_DIR_OPEN;
+			return NPI_LNX_FAILURE;
+		}
 
-	memcpy(mrdyGpioCfg.levelshifter.value,
-			gpioCfg->levelshifter.value,
-			strlen(gpioCfg->levelshifter.value));
-	debug_printf("[GPIO]mrdyGpioCfg.levelshifter.value = '%s'\n", mrdyGpioCfg.levelshifter.value);
-	memcpy(mrdyGpioCfg.levelshifter.direction,
-			gpioCfg->levelshifter.direction,
-			strlen(gpioCfg->levelshifter.direction));
-	mrdyGpioCfg.levelshifter.active_high_low = gpioCfg->levelshifter.active_high_low;
-	debug_printf("[GPIO]mrdyGpioCfg.levelshifter.direction = '%s'\n", mrdyGpioCfg.levelshifter.direction);
+		//Set the direction of the GPIO to output
+		if(ERROR == write(gpioMrdyFd, "out", 3))
+		{
+			perror(mrdyGpioCfg.levelshifter.direction);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s \n", __FUNCTION__, mrdyGpioCfg.levelshifter.direction);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_LVLSHFT_DIR_WRITE;
+			return NPI_LNX_FAILURE;
+		}
+		//close the DIR file
+		close(gpioMrdyFd);
 
-	//open the GPIO DIR file for the level shifter direction signal
-	gpioMrdyFd = open(mrdyGpioCfg.levelshifter.direction, O_RDWR);
-	if(gpioMrdyFd == 0)
-	{
-		perror(mrdyGpioCfg.levelshifter.direction);
-		debug_printf("[GPIO]%s open failed\n",mrdyGpioCfg.levelshifter.direction);
-		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_LVLSHFT_DIR_OPEN;
-	    return NPI_LNX_FAILURE;
-	}
+		//open the GPIO VALUE file for the level shifter direction signal
+		gpioMrdyFd = open(mrdyGpioCfg.levelshifter.value, O_RDWR);
+		if(gpioMrdyFd == 0)
+		{
+			perror(mrdyGpioCfg.levelshifter.value);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, mrdyGpioCfg.levelshifter.value);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_LVLSHFT_VAL_OPEN;
+			return NPI_LNX_FAILURE;
+		}
 
-	//Set the direction of the GPIO to output
-	if(ERROR == write(gpioMrdyFd, "out", 3))
-	{
-		perror(mrdyGpioCfg.levelshifter.direction);
-		debug_printf("\n[GPIO]can't write in %s \n",mrdyGpioCfg.levelshifter.direction);
-		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_LVLSHFT_DIR_WRITE;
-	    return NPI_LNX_FAILURE;
-	}
-	//close the DIR file
-	close(gpioMrdyFd);
-
-	//open the GPIO VALUE file for the level shifter direction signal
-	gpioMrdyFd = open(mrdyGpioCfg.levelshifter.value, O_RDWR);
-	if(gpioMrdyFd == 0)
-	{
-		perror(mrdyGpioCfg.levelshifter.value);
-		debug_printf("[GPIO]%s open failed\n",mrdyGpioCfg.levelshifter.value);
-		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_LVLSHFT_VAL_OPEN;
-	    return NPI_LNX_FAILURE;
-	}
-
-	//Set the value of the GPIO to 0 (level shifter direction from Host to CC2531)
-	if(ERROR == write(gpioMrdyFd, "1", 1))
-	{
-		perror(mrdyGpioCfg.levelshifter.value);
-		debug_printf("\n[GPIO]can't write in %s \n",mrdyGpioCfg.levelshifter.value);
-		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_LVLSHFT_VAL_WRITE;
-	    return NPI_LNX_FAILURE;
-	}
-	//close the DIR file
-	close(gpioMrdyFd);
+		//Set the value of the GPIO to 0 (level shifter direction from Host to CC2531)
+		if(ERROR == write(gpioMrdyFd, "1", 1))
+		{
+			perror(mrdyGpioCfg.levelshifter.value);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s\n", __FUNCTION__, mrdyGpioCfg.levelshifter.value);
+				time_printf(tmpStr);
+			}
+			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_LVLSHFT_VAL_WRITE;
+			return NPI_LNX_FAILURE;
+		}
+		//close the DIR file
+		close(gpioMrdyFd);
 	}
 	else
 	{
-		debug_printf("WARNING: Wrong Configuration File, one of the  following Key value are missing for MRDY.Level Shifter definition: '\n");
-		debug_printf("value: %s\n", srdyGpioCfg.gpio.value);
-		debug_printf("direction: %s\n", srdyGpioCfg.gpio.direction);
-		debug_printf("active_high_low: %d\n", srdyGpioCfg.gpio.active_high_low);
-		debug_printf("Level Shifter is optional, please check if you need it or not before continuing...\n");
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Wrong Configuration File, one of the  following Key value are missing for MRDY.Level Shifter definition: '\n", __FUNCTION__);
+			int strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "value: \t\t%s\n", mrdyGpioCfg.gpio.value);
+			strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "direction: \t%s\n", mrdyGpioCfg.gpio.direction);
+			strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "active_high_low: %d\n", mrdyGpioCfg.gpio.active_high_low);
+			strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "Level Shifter is optional, please check if you need it or not before continuing...\n");
+		}
 	}
 
 	//open the MRDY GPIO DIR file
@@ -392,18 +482,26 @@ int HalGpioMrdyInit(halGpioCfg_t *gpioCfg)
 	if(gpioMrdyFd == 0)
 	{
 		perror(mrdyGpioCfg.gpio.direction);
-		debug_printf("[GPIO]%s open failed\n",mrdyGpioCfg.gpio.direction);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, mrdyGpioCfg.gpio.direction);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_GPIO_DIR_OPEN;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 
 	//Set MRDY GPIO as output
 	if(ERROR == write(gpioMrdyFd, "out", 3))
 	{
 		perror(mrdyGpioCfg.gpio.direction);
-		debug_printf("\n[GPIO]can't write in %s \n",mrdyGpioCfg.gpio.direction);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s\n", __FUNCTION__, mrdyGpioCfg.gpio.direction);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_GPIO_DIR_WRITE;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 	//close MRDY DIR file
 	close(gpioMrdyFd);
@@ -413,9 +511,13 @@ int HalGpioMrdyInit(halGpioCfg_t *gpioCfg)
 	if(gpioMrdyFd == 0)
 	{
 		perror(mrdyGpioCfg.gpio.value);
-		debug_printf("[GPIO]%s open failed\n",mrdyGpioCfg.gpio.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, mrdyGpioCfg.gpio.value);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_GPIO_VAL_OPEN;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 
 	//Set MRDY GPIO to 1 as default
@@ -423,9 +525,13 @@ int HalGpioMrdyInit(halGpioCfg_t *gpioCfg)
 	if (ERROR == write(gpioMrdyFd, "1", 3))
 	{
 		perror(mrdyGpioCfg.gpio.value);
-		debug_printf("\n[GPIO]can't write in %s \n",mrdyGpioCfg.gpio.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s\n", __FUNCTION__, mrdyGpioCfg.gpio.value);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_GPIO_VAL_WRITE;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 
 	return NPI_LNX_SUCCESS;
@@ -443,37 +549,57 @@ int HalGpioMrdyInit(halGpioCfg_t *gpioCfg)
  **************************************************************************************************/
 int HalGpioResetInit(halGpioCfg_t *gpioCfg)
 {
+	char tmpStr[512];
 	memcpy(resetGpioCfg.gpio.value,
 			gpioCfg->gpio.value,
 			strlen(gpioCfg->gpio.value));
-	debug_printf("[GPIO]resetGpioCfg.gpio.value = '%s'\n", resetGpioCfg.gpio.value);
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] resetGpioCfg.gpio.value = '%s'\n", __FUNCTION__, resetGpioCfg.gpio.value);
+		time_printf(tmpStr);
+	}
 	memcpy(resetGpioCfg.gpio.direction,
 			gpioCfg->gpio.direction,
 			strlen(gpioCfg->gpio.direction));
-	debug_printf("[GPIO]resetGpioCfg.gpio.direction = '%s'\n", resetGpioCfg.gpio.direction);
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] resetGpioCfg.gpio.direction = '%s'\n", __FUNCTION__, resetGpioCfg.gpio.direction);
+		time_printf(tmpStr);
+	}
 	resetGpioCfg.gpio.active_high_low = gpioCfg->gpio.active_high_low;
 
 	if ( ( gpioCfg->levelshifter.value) &&
-		 ( gpioCfg->levelshifter.active_high_low) &&
-		 ( gpioCfg->levelshifter.direction))
+			( gpioCfg->levelshifter.active_high_low) &&
+			( gpioCfg->levelshifter.direction))
 	{
 		memcpy(resetGpioCfg.levelshifter.value,
 				gpioCfg->levelshifter.value,
 				strlen(gpioCfg->levelshifter.value));
-		debug_printf("[GPIO]resetGpioCfg.levelshifter.value = '%s'\n", resetGpioCfg.levelshifter.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] resetGpioCfg.levelshifter.value = '%s'\n", __FUNCTION__, resetGpioCfg.levelshifter.value);
+			time_printf(tmpStr);
+		}
 		memcpy(resetGpioCfg.levelshifter.direction,
 				gpioCfg->levelshifter.direction,
 				strlen(gpioCfg->levelshifter.direction));
 		resetGpioCfg.levelshifter.active_high_low = gpioCfg->levelshifter.active_high_low;
-		debug_printf("[GPIO]resetGpioCfg.levelshifter.direction = '%s'\n", resetGpioCfg.levelshifter.direction);
-
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] resetGpioCfg.levelshifter.direction = '%s'\n", __FUNCTION__, resetGpioCfg.levelshifter.direction);
+			time_printf(tmpStr);
+		}
 
 		//open the GPIO DIR file for the level shifter direction signal
 		gpioResetFd = open(resetGpioCfg.levelshifter.direction, O_RDWR);
 		if(gpioResetFd == 0)
 		{
 			perror(resetGpioCfg.levelshifter.direction);
-			debug_printf("[GPIO]%s open failed\n",resetGpioCfg.levelshifter.direction);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, resetGpioCfg.levelshifter.direction);
+				time_printf(tmpStr);
+			}
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_LVLSHFT_DIR_OPEN;
 			return NPI_LNX_FAILURE;
 		}
@@ -482,7 +608,11 @@ int HalGpioResetInit(halGpioCfg_t *gpioCfg)
 		if (ERROR == write(gpioResetFd, "out", 3))
 		{
 			perror(resetGpioCfg.levelshifter.direction);
-			debug_printf("\n[GPIO]can't write in %s \n",resetGpioCfg.levelshifter.direction);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s \n", __FUNCTION__, resetGpioCfg.levelshifter.direction);
+				time_printf(tmpStr);
+			}
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_LVLSHFT_DIR_WRITE;
 			return NPI_LNX_FAILURE;
 		}
@@ -494,7 +624,11 @@ int HalGpioResetInit(halGpioCfg_t *gpioCfg)
 		if(gpioResetFd == 0)
 		{
 			perror(resetGpioCfg.levelshifter.value);
-			debug_printf("[GPIO]%s open failed\n",resetGpioCfg.levelshifter.value);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, resetGpioCfg.levelshifter.value);
+				time_printf(tmpStr);
+			}
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_LVLSHFT_VAL_OPEN;
 			return NPI_LNX_FAILURE;
 		}
@@ -503,7 +637,11 @@ int HalGpioResetInit(halGpioCfg_t *gpioCfg)
 		if(ERROR == write(gpioResetFd, "1", 1))
 		{
 			perror(resetGpioCfg.levelshifter.value);
-			debug_printf("\n[GPIO]can't write in %s \n",resetGpioCfg.levelshifter.value);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s\n", __FUNCTION__, resetGpioCfg.levelshifter.value);
+				time_printf(tmpStr);
+			}
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_LVLSHFT_VAL_WRITE;
 			return NPI_LNX_FAILURE;
 		}
@@ -512,11 +650,18 @@ int HalGpioResetInit(halGpioCfg_t *gpioCfg)
 	}
 	else
 	{
-		debug_printf("WARNING: Wrong Configuration File, one of the  following Key value are missing for RESET.Level Shifter definition: '\n");
-		debug_printf("value: %s\n", resetGpioCfg.gpio.value);
-		debug_printf("direction: %s\n", resetGpioCfg.gpio.direction);
-		debug_printf("active_high_low: %d\n", resetGpioCfg.gpio.active_high_low);
-		debug_printf("Level Shifter is optional, please check if you need it or not before continuing...\n");
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Wrong Configuration File, one of the  following Key value are missing for MRDY.Level Shifter definition: '\n", __FUNCTION__);
+			int strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "value: \t\t%s\n", resetGpioCfg.gpio.value);
+			strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "direction: \t%s\n", resetGpioCfg.gpio.direction);
+			strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "active_high_low: %d\n", resetGpioCfg.gpio.active_high_low);
+			strIndex = strlen(tmpStr);
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "Level Shifter is optional, please check if you need it or not before continuing...\n");
+		}
 	}
 
 	//open the RESET GPIO DIR file
@@ -524,18 +669,26 @@ int HalGpioResetInit(halGpioCfg_t *gpioCfg)
 	if(gpioResetFd == 0)
 	{
 		perror(resetGpioCfg.gpio.direction);
-		debug_printf("[GPIO]%s open failed\n",resetGpioCfg.gpio.direction);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, resetGpioCfg.gpio.direction);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_DIR_OPEN;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 
 	//Set RESET GPIO as output
 	if(ERROR == write(gpioResetFd, "out", 3))
 	{
 		perror(resetGpioCfg.gpio.direction);
-		debug_printf("\n[GPIO]can't write in %s \n",resetGpioCfg.gpio.direction);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s\n", __FUNCTION__, resetGpioCfg.gpio.direction);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_DIR_WRITE;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 	//close RESET DIR file
 	close(gpioResetFd);
@@ -545,18 +698,26 @@ int HalGpioResetInit(halGpioCfg_t *gpioCfg)
 	if(gpioResetFd == 0)
 	{
 		perror(resetGpioCfg.gpio.value);
-		debug_printf("[GPIO]%s open failed\n",resetGpioCfg.gpio.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] %s open failed\n", __FUNCTION__, resetGpioCfg.gpio.value);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_VAL_OPEN;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 
 	//Set RESET GPIO to 1 as default
 	if(ERROR == write(gpioResetFd, "1", 3))
 	{
 		perror(resetGpioCfg.gpio.value);
-		debug_printf("\n[GPIO]can't write in %s \n",resetGpioCfg.gpio.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s\n", __FUNCTION__, resetGpioCfg.gpio.value);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_VAL_WRITE;
-	    return NPI_LNX_FAILURE;
+		return NPI_LNX_FAILURE;
 	}
 
 	return NPI_LNX_SUCCESS;
@@ -574,24 +735,35 @@ int HalGpioResetInit(halGpioCfg_t *gpioCfg)
  **************************************************************************************************/
 int HalGpioMrdySet(uint8 state)
 {
+	char tmpStr[128];
 	if(state == 0)
 	{
-//		debug_printf("[%u][GPIO] MRDY set to low\n", (unsigned int) pthread_self());
+		//		debug_printf("[%u][GPIO] MRDY set to low\n", (unsigned int) pthread_self());
 		if (ERROR == write(gpioMrdyFd, "0", 1))
 		{
 			perror(mrdyGpioCfg.gpio.value);
-			debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",mrdyGpioCfg.gpio.value);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s, is something already accessing it? abort everything for debug purpose...\n",
+						__FUNCTION__, mrdyGpioCfg.gpio.value);
+				time_printf(tmpStr);
+			}
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_GPIO_VAL_WRITE_SET_LOW;
-		    return NPI_LNX_FAILURE;
+			return NPI_LNX_FAILURE;
 		}
 	}
 	else
 	{
-//		debug_printf("[%u][GPIO] MRDY set to High\n", (unsigned int) pthread_self());
-    	if(ERROR == write(gpioMrdyFd, "1", 1))
+		//		debug_printf("[%u][GPIO] MRDY set to High\n", (unsigned int) pthread_self());
+		if(ERROR == write(gpioMrdyFd, "1", 1))
 		{
 			perror(mrdyGpioCfg.gpio.value);
-			debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",mrdyGpioCfg.gpio.value);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s, is something already accessing it? abort everything for debug purpose...\n",
+						__FUNCTION__, mrdyGpioCfg.gpio.value);
+				time_printf(tmpStr);
+			}
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_GPIO_VAL_WRITE_SET_HIGH;
 			return NPI_LNX_FAILURE;
 		}
@@ -612,17 +784,22 @@ int HalGpioMrdySet(uint8 state)
  **************************************************************************************************/
 int HalGpioMrdyCheck(uint8 state)
 {
-	char mrdy=2;
+	char mrdy=2, tmpStr[128];
 	lseek(gpioMrdyFd,0,SEEK_SET);
 	if(ERROR == read(gpioMrdyFd,&mrdy, 1))
 	{
 		perror(mrdyGpioCfg.gpio.value);
-		debug_printf("\ncan't read in %s , is something already accessing it? abort everything for debug purpose...\n",mrdyGpioCfg.gpio.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s, is something already accessing it? abort everything for debug purpose...\n",
+					__FUNCTION__, mrdyGpioCfg.gpio.value);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_MRDY_GPIO_VAL_READ;
 		return NPI_LNX_FAILURE;
 	}
 
-//	debug_printf("[%u][GPIO]===>check MRDY: %c  (%c) \n", (unsigned int) pthread_self(), mrdy, mrdy);
+	//	debug_printf("[%u][GPIO]===>check MRDY: %c  (%c) \n", (unsigned int) pthread_self(), mrdy, mrdy);
 
 	return (state == ((mrdy == '1') ? 1 : 0));
 }
@@ -639,29 +816,52 @@ int HalGpioMrdyCheck(uint8 state)
  **************************************************************************************************/
 int HalGpioResetSet(uint8 state)
 {
+	char tmpStr[128];
 	if(state == 0)
 	{
-		debug_printf("[%u][GPIO]RESET set to low\n", (unsigned int) pthread_self());
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Reset set low. [Thread %u]\n", __FUNCTION__, (unsigned int) pthread_self());
+			time_printf(tmpStr);
+		}
 		if (ERROR == write(gpioResetFd, "0", 1))
 		{
 			perror(resetGpioCfg.gpio.value);
-			debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",resetGpioCfg.gpio.value);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s, is something already accessing it? abort everything for debug purpose...\n",
+						__FUNCTION__, resetGpioCfg.gpio.value);
+				time_printf(tmpStr);
+			}
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_VAL_WRITE_SET_LOW;
-		    return NPI_LNX_FAILURE;
+			return NPI_LNX_FAILURE;
 		}
 	}
 	else
 	{
-		debug_printf("[%u][GPIO]RESET set to High\n", (unsigned int) pthread_self());
-    	if(ERROR == write(gpioResetFd, "1", 1))
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Reset set high. [Thread %u]\n", __FUNCTION__, (unsigned int) pthread_self());
+			time_printf(tmpStr);
+		}
+		if(ERROR == write(gpioResetFd, "1", 1))
 		{
 			perror(resetGpioCfg.gpio.value);
-			debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",resetGpioCfg.gpio.value);
+			if (__BIG_DEBUG_ACTIVE == TRUE)
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s, is something already accessing it? abort everything for debug purpose...\n",
+						__FUNCTION__, resetGpioCfg.gpio.value);
+				time_printf(tmpStr);
+			}
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_VAL_WRITE_SET_HIGH;
 			return NPI_LNX_FAILURE;
 		}
 	}
-	debug_printf("[GPIO] Reset called with state = %d\n", state);
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] Reset called with state = %d\n", __FUNCTION__, state);
+		time_printf(tmpStr);
+	}
 
 	return NPI_LNX_SUCCESS;
 
@@ -678,26 +878,38 @@ int HalGpioResetSet(uint8 state)
  **************************************************************************************************/
 int HalGpioReset(void)
 {
-#ifdef __DEBUG_TIME__
-	static struct timespec prevTime;
-	time_printf_always_localized("Reset High", NULL, NULL, &prevTime);
-#endif //(defined __DEBUG_TIME__)
-	debug_printf("Reset High\n");
+	char tmpStr[128];
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] Reset High\n", __FUNCTION__);
+		time_printf(tmpStr);
+	}
 	if(ERROR == write(gpioResetFd, "1", 1))
 	{
 		perror(resetGpioCfg.gpio.value);
-		debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",mrdyGpioCfg.gpio.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s , is something already accessing it? abort everything for debug purpose...\n",
+					__FUNCTION__, resetGpioCfg.gpio.value);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_VAL_WRITE_SET_HIGH;
 		return NPI_LNX_FAILURE;
 	}
-#ifdef __DEBUG_TIME__
-	time_printf_always_localized("Reset Low", NULL, NULL, &prevTime);
-#endif //(defined __DEBUG_TIME__)
-	debug_printf("[%u][GPIO]Reset low\n", (unsigned int) pthread_self());
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] Reset Low, [Thread: %u]\n", __FUNCTION__, (unsigned int) pthread_self());
+		time_printf(tmpStr);
+	}
 	if(ERROR == write(gpioResetFd, "0", 1))
 	{
 		perror(resetGpioCfg.gpio.value);
-		debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",mrdyGpioCfg.gpio.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s , is something already accessing it? abort everything for debug purpose...\n",
+					__FUNCTION__, resetGpioCfg.gpio.value);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_VAL_WRITE_SET_LOW;
 		return NPI_LNX_FAILURE;
 	}
@@ -705,14 +917,20 @@ int HalGpioReset(void)
 	// Reset Should last at least 1us from datasheet, set it to 500us.
 	usleep(500);
 
-#ifdef __DEBUG_TIME__
-	time_printf_always_localized("Reset High", NULL, NULL, &prevTime);
-#endif //(defined __DEBUG_TIME__)
-	debug_printf("[%u][GPIO]Reset High\n", (unsigned int) pthread_self());
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] Reset High, [Thread: %u]\n", __FUNCTION__, (unsigned int) pthread_self());
+		time_printf(tmpStr);
+	}
 	if(ERROR == write(gpioResetFd, "1", 1))
 	{
 		perror(resetGpioCfg.gpio.value);
-		debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",mrdyGpioCfg.gpio.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s , is something already accessing it? abort everything for debug purpose...\n",
+					__FUNCTION__, resetGpioCfg.gpio.value);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_RESET_GPIO_VAL_WRITE_SET_HIGH;
 		return NPI_LNX_FAILURE;
 	}
@@ -731,17 +949,22 @@ int HalGpioReset(void)
  **************************************************************************************************/
 int HalGpioSrdyCheck(uint8 state)
 {
-	char srdy=2;
+	char srdy=2, tmpStr[128];;
 	lseek(gpioSrdyFd,0,SEEK_SET);
 	if(ERROR == read(gpioSrdyFd,&srdy, 1))
 	{
 		perror(srdyGpioCfg.gpio.value);
-		debug_printf("\n[GPIO]can't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s , is something already accessing it? abort everything for debug purpose...\n",
+					__FUNCTION__, srdyGpioCfg.gpio.value);
+			time_printf(tmpStr);
+		}
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_SRDY_GPIO_VAL_READ_FAILED;
 		return NPI_LNX_FAILURE;
 	}
 
-//	debug_printf("[%u][GPIO]===>check SRDY: %c [%d]  (%c) \n", (unsigned int) pthread_self(), srdy, srdy, atoi(&srdy));
+	//	debug_printf("[%u][GPIO]===>check SRDY: %c [%d]  (%c) \n", (unsigned int) pthread_self(), srdy, srdy, atoi(&srdy));
 
 	return (state == ((srdy == '1') ? 1 : 0));
 }
@@ -764,27 +987,19 @@ int HalGpioSrdyCheck(uint8 state)
  */
 int HalGpioWaitSrdyClr(void)
 {
-	char srdy= '1';
-	int ret = NPI_LNX_SUCCESS, attempts = 0, accTimeout = 0;
+	char srdy= '1', tmpStr[128];
+	int ret = NPI_LNX_SUCCESS, accTimeout = 0;
 
-	debug_printf("[%u][GPIO] Wait SRDY Low, \n", (unsigned int) pthread_self());
+	if (__BIG_DEBUG_ACTIVE == TRUE)
+	{
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] Wait for SRDY to go Low. [Thread: %u]\n", __FUNCTION__, (unsigned int) pthread_self());
+		time_printf(tmpStr);
+	}
 
 	struct pollfd ufds[1];
 	int pollRet;
 	ufds[0].fd = gpioSrdyFd;
 	ufds[0].events = POLLPRI;
-
-#ifdef __DEBUG_TIME__
-	struct timespec previousTime, currentTime;
-	clock_gettime(CLOCK_MONOTONIC, &currentTime);
-	if (__BIG_DEBUG_ACTIVE == TRUE)
-	{
-		time_printf_always_localized("SRDY: wait to go Low\n", NULL, &currentTime, &previousTime);
-	}
-
-	struct timespec limitPrints = currentTime;
-	limitPrints.tv_sec = currentTime.tv_sec - 5;
-#endif //(defined __DEBUG_TIME__)
 
 	lseek(gpioSrdyFd,0,SEEK_SET);
 	read(gpioSrdyFd,&srdy, 1);
@@ -808,7 +1023,11 @@ int HalGpioWaitSrdyClr(void)
 			{
 				if (accTimeout >= (HAL_WAIT_SRDY_LOW_TIMEOUT / HAL_WAIT_SRDY_LOW_INTERMEDIATE_TIMEOUT) )
 				{
-					printf("[%u][GPIO][WARNING] Waiting for SRDY to go low timed out.\n", (unsigned int) pthread_self());
+					if (__BIG_DEBUG_ACTIVE == TRUE)
+					{
+						snprintf(tmpStr, sizeof(tmpStr), "[%s] Waiting for SRDY to go low timed out. [Thread: %u]\n", __FUNCTION__, (unsigned int) pthread_self());
+						time_printf(tmpStr);
+					}
 					npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT;
 					ret = NPI_LNX_FAILURE;
 					break;
@@ -816,16 +1035,24 @@ int HalGpioWaitSrdyClr(void)
 				else
 				{
 					// This timeout is expected, and ok. Nothing to report, only for debug.
-					debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go low intermediate timed out, %d\n",
-							(unsigned int) pthread_self(), accTimeout);
+					if (__BIG_DEBUG_ACTIVE == TRUE)
+					{
+						snprintf(tmpStr, sizeof(tmpStr), "[%s] Waiting for SRDY to go low intermediate timed out, %d. [Thread: %u]\n",
+								__FUNCTION__, accTimeout, (unsigned int) pthread_self());
+						time_printf(tmpStr);
+					}
 				}
 			}
 			else
 			{
 				// Missed interrupt waiting for SRDY to go high
 				// This timeout is expected, and ok. Nothing to report, only for debug.
-				debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go low intermediate timed out, %d. However, SRDY is now low\n",
-						(unsigned int) pthread_self(), accTimeout);
+				if (__BIG_DEBUG_ACTIVE == TRUE)
+				{
+					snprintf(tmpStr, sizeof(tmpStr), "[%s] Waiting for SRDY to go low intermediate timed out, %d, but SRDY is now low. [Thread: %u]\n",
+							__FUNCTION__, accTimeout, (unsigned int) pthread_self());
+					time_printf(tmpStr);
+				}
 				break;
 			}
 		}
@@ -837,62 +1064,34 @@ int HalGpioWaitSrdyClr(void)
 				if(ERROR == read(gpioSrdyFd,&srdy, 1))
 				{
 					perror(srdyGpioCfg.gpio.value);
-					debug_printf("\n[GPIO]can't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
+					if (__BIG_DEBUG_ACTIVE == TRUE)
+					{
+						snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s , is something already accessing it? abort everything for debug purpose...\n",
+								__FUNCTION__, srdyGpioCfg.gpio.value);
+						time_printf(tmpStr);
+					}
 					npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_READ_FAILED;
 					ret = NPI_LNX_FAILURE;
 					break;
 				}
-#ifdef __DEBUG_TIME__
-				if (__BIG_DEBUG_ACTIVE == TRUE)
-				{
-					clock_gettime(CLOCK_MONOTONIC, &currentTime);
-					// Only print every 250ms
-					if ( ((currentTime.tv_nsec / 1000) > 250000 ) && ((((currentTime.tv_nsec / 1000) - (limitPrints.tv_nsec / 1000)) % 250000) == 0) )
-					{
-						char tmpStr[512];
-						snprintf(tmpStr, sizeof(tmpStr), "[0x%.2X , %c (0x%.2X)] ufds[0].revents = 0x%.4X\n", atoi(&srdy), srdy, srdy, ufds[0].revents);
-						time_printf_always_localized(tmpStr, NULL, &currentTime, &previousTime);
-
-						// Start over
-						limitPrints = currentTime;
-						attempts++;
-					}
-					// Abort after 1 second
-					if (attempts > 4)
-					{
-						npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT;
-						ret = NPI_LNX_FAILURE;
-						break;
-					}
-				}
-#endif //(defined __DEBUG_TIME__)
 			}
 			else
 			{
-				printf("[%u][GPIO](%d)\n", (unsigned int) pthread_self(), ufds[0].revents);
+				if (__BIG_DEBUG_ACTIVE == TRUE)
+				{
+					snprintf(tmpStr, sizeof(tmpStr), "[%s] ufds[0].revents = 0x%X\n", __FUNCTION__, ufds[0].revents);
+					time_printf(tmpStr);
+				}
 			}
 		}
 	}
-#ifdef __DEBUG_TIME__
-	if ( (__BIG_DEBUG_ACTIVE == TRUE) && (__DEBUG_TIME_ACTIVE == TRUE) )
-	{
-		char tmpStr[100] = {0};
-		snprintf(tmpStr, sizeof(tmpStr), "SRDY: %c (%d)\n", srdy, (int)srdy);
-		time_printf_always(tmpStr);
-	}
-#endif //(defined __DEBUG_TIME__)
-
-
-#ifdef __STRESS_TEST__
 	if (__BIG_DEBUG_ACTIVE == TRUE)
 	{
-		time_printf(" SRDY low\n");
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] SRDY: %c (%d). [Thread: %u]\n", __FUNCTION__, srdy, (int)srdy, (unsigned int) pthread_self());
+		time_printf(tmpStr);
 	}
-#endif //__STRESS_TEST__
 
-  debug_printf("[%u][GPIO]==>SRDY change to : %c  (%d) \n", (unsigned int) pthread_self(), srdy, srdy);
-
-  return ret;
+	return ret;
 }
 
 /**************************************************************************************************
@@ -914,23 +1113,22 @@ int HalGpioWaitSrdyClr(void)
  */
 int HalGpioWaitSrdySet()
 {
-	char srdy= '0', first = 0;
+	char srdy= '0', first = 0, tmpStr[128];
 
 	int ret = NPI_LNX_SUCCESS, accTimeout = 0;
 
-//	debug_printf("[%u][GPIO]Wait SRDY High, \n", (unsigned int) pthread_self());
+	//	debug_printf("[%u][GPIO]Wait SRDY High, \n", (unsigned int) pthread_self());
 
 	struct pollfd ufds[1];
 	int pollRet;
 	ufds[0].fd = gpioSrdyFd;
 	ufds[0].events = POLLPRI;
 
-#ifdef __DEBUG_TIME__
 	if (__BIG_DEBUG_ACTIVE == TRUE)
 	{
-		time_printf("SRDY: wait to go High\n");
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] Wait for SRDY to go High. [Thread: %u]\n", __FUNCTION__, (unsigned int) pthread_self());
+		time_printf(tmpStr);
 	}
-#endif //(defined __DEBUG_TIME__)
 
 	lseek(gpioSrdyFd,0,SEEK_SET);
 	read(gpioSrdyFd,&srdy, 1);
@@ -971,7 +1169,11 @@ int HalGpioWaitSrdySet()
 			{
 				if (accTimeout >= HAL_WAIT_SRDY_HIGH_TIMEOUT)
 				{
-					printf("[%u][GPIO][WARNING] Waiting for SRDY to go high timed out.\n", (unsigned int) pthread_self());
+					if (__BIG_DEBUG_ACTIVE == TRUE)
+					{
+						snprintf(tmpStr, sizeof(tmpStr), "[%s] Waiting for SRDY to go high timed out. [Thread: %u]\n", __FUNCTION__, (unsigned int) pthread_self());
+						time_printf(tmpStr);
+					}
 					npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_POLL_TIMEDOUT;
 					ret = NPI_LNX_FAILURE;
 					break;
@@ -979,16 +1181,24 @@ int HalGpioWaitSrdySet()
 				else
 				{
 					// This timeout is expected, and ok. Nothing to report, only for debug.
-					debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go high intermediate timed out, %d\n",
-							(unsigned int) pthread_self(), accTimeout);
+					if (__BIG_DEBUG_ACTIVE == TRUE)
+					{
+						snprintf(tmpStr, sizeof(tmpStr), "[%s] Waiting for SRDY to go high intermediate timed out, %d. [Thread: %u]\n",
+								__FUNCTION__, accTimeout, (unsigned int) pthread_self());
+						time_printf(tmpStr);
+					}
 				}
 			}
 			else
 			{
 				// Missed interrupt waiting for SRDY to go high
 				// This timeout is expected, and ok. Nothing to report, only for debug.
-				debug_printf("[%u][GPIO][WARNING] Waiting for SRDY to go high intermediate timed out, %d. However, SRDY is now high\n",
-						(unsigned int) pthread_self(), accTimeout);
+				if (__BIG_DEBUG_ACTIVE == TRUE)
+				{
+					snprintf(tmpStr, sizeof(tmpStr), "[%s] Waiting for SRDY to go high intermediate timed out, %d, but SRDY is now high. [Thread: %u]\n",
+							__FUNCTION__, accTimeout, (unsigned int) pthread_self());
+					time_printf(tmpStr);
+				}
 				break;
 			}
 		}
@@ -1000,28 +1210,28 @@ int HalGpioWaitSrdySet()
 				if(ERROR == read(gpioSrdyFd,&srdy, 1))
 				{
 					perror(srdyGpioCfg.gpio.value);
-					debug_printf("\n[GPIO]can't read in %s , is something already accessing it? abort everything for debug purpose...\n",srdyGpioCfg.gpio.value);
+					if (__BIG_DEBUG_ACTIVE == TRUE)
+					{
+						snprintf(tmpStr, sizeof(tmpStr), "[%s] can't write in %s , is something already accessing it? abort everything for debug purpose...\n",
+								__FUNCTION__, srdyGpioCfg.gpio.value);
+						time_printf(tmpStr);
+					}
 					npi_ipc_errno = NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_READ_FAILED;
 					return NPI_LNX_FAILURE;
 				}
 			}
-			else
+			if (__BIG_DEBUG_ACTIVE == TRUE)
 			{
-				printf("[%u][GPIO](%d)", (unsigned int) pthread_self(), ufds[0].revents);
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] ufds[0].revents = 0x%X\n", __FUNCTION__, ufds[0].revents);
+				time_printf(tmpStr);
 			}
 		}
 	}
-
-#ifdef __DEBUG_TIME__
-	if ( (__BIG_DEBUG_ACTIVE == TRUE) && (__DEBUG_TIME_ACTIVE == TRUE) )
+	if (__BIG_DEBUG_ACTIVE == TRUE)
 	{
-		char tmpStr[512];
-		snprintf(tmpStr, sizeof(tmpStr), "SRDY: %c  (%c)\n", srdy, srdy);
-		time_printf_always(tmpStr);
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] SRDY: %c (%d). [Thread: %u]\n", __FUNCTION__, srdy, (int)srdy, (unsigned int) pthread_self());
+		time_printf(tmpStr);
 	}
-#endif //__DEBUG_TIME__
-
-//	debug_printf("[%u][GPIO]==>SRDY change to : %c  (%d) \n", (unsigned int) pthread_self(), srdy, srdy);
 
 	return ret;
 }
