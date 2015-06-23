@@ -78,8 +78,8 @@ task packages(dependsOn: test) << {
 publishing {
     publications {
         witbePackages(IvyPublication) {
-            artifact(file("${witbeBuilder.artifactPath}/${project.name}-${project.version}-${project.buildNumber}.${witbeBuilder.rpmArch}.rpm")) { extension 'rpm' }
-            artifact(file("${witbeBuilder.artifactPath}/${project.name}-${project.version}-${project.buildNumber}.${witbeBuilder.rpmArch}.tar.gz")) { extension 'tar.gz' }
+            artifact(file("${witbeBuilder.artifactPath}/${project.name}-${project.version}.${witbeBuilder.rpmArch}.rpm")) { extension 'rpm' }
+            artifact(file("${witbeBuilder.artifactPath}/${project.name}-${project.version}.${witbeBuilder.rpmArch}.tar.gz")) { extension 'tar.gz' }
         }
     }
     repositories {
