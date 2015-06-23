@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 2.8)
 project(RemoTI_application_common)
 
 string(TOUPPER ${PROJECT_NAME} PROJECT_UPPER_NAME)

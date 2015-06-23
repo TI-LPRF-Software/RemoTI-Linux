@@ -1,3 +1,7 @@
+//!@ SCAFFOLDER VERSION: 0.1.0
+
+// Build Scripts Plugin Repositories & Dependencies
+
 // Don't forget that in order to access Witbe Artifactory you need to setup
 // your default user/password in your ~/.gradle/gradle.properties file
 // you can also have a copy of the gradle.properties file in the current directory.
@@ -6,7 +10,7 @@
 buildscript {
     repositories {
         maven {
-            url "${artifactory_contextUrl}plugins-release"
+            url "${artifactory_contextUrl}gradle-buildrepo-${releaseType}"
             credentials {
                 username = "${artifactory_user}"
                 password = "${artifactory_password}"
@@ -14,108 +18,83 @@ buildscript {
         }
     }
     dependencies {
-        classpath group: 'net.witbe.qoe', name: 'witbe-builder', version: '0.0.2'
+        classpath group: 'net.witbe.qoe.tools', name: 'witbe-builder', version: '0.1.0'
+        classpath group: 'org.jfrog.buildinfo', name: 'build-info-extractor-gradle', version: '3.0.1'
     }
 }
 
 // Load/Apply Plugins
-apply plugin: 'maven-publish'
 apply plugin: 'net.witbe.qoe.witbe-builder'
 
+// Dependencies
+dependencies {
+}
+witbeBuilder.systemDependencies = []
+
 // Project Settings / Configuration.
-project.group = "net.witbe.qoe.rf4ce"
-project.ext.environment = [
-PATH:         "${System.getenv('PATH')}:${witbeBuilder.nativeDependenciesPath}/bin",
-CPATH:        "${witbeBuilder.nativeDependenciesPath}/include",
-LIBRARY_PATH: "${witbeBuilder.nativeDependenciesPath}/lib",
-DESTDIR:      witbeBuilder.destPath
-]
+project.group = "net.witbe.qoe"
 
-dependencies {}
+// Mandatory Tasks
+task prepare {
+    dependsOn 'extractDependencies' 
+}
 
-    // Mandatory Tasks
-    task prepare {
-        dependsOn 'extractDependencies'
-    }
+task clean(dependsOn: ['cleanDependencies', 'cleanInstall']) {
+}
 
-    task clean(dependsOn: ['cleanDependencies', 'cleanInstall']) {
-        // cmake clean
-    }
-
-    task configure(type: Exec, dependsOn: prepare) {
-        environment project.environment
+task configure(type: Exec, dependsOn: prepare) {
+        environment witbeBuilder.environment
         workingDir buildDir
         executable 'cmake'
         args "..", "-DCMAKE_BUILD_TYPE=RELEASE", "-DVERSION=${version}",
-        "-DCMAKE_INSTALL_PREFIX=${witbeBuilder.installPrefix}",
-        "-DWITBE_NATIVE_DEPENDENCIES_PATH=${witbeBuilder.nativeDependenciesPath}",
-        "-DWITBE_CMAKE_DEPENDENCIES_PATH=${witbeBuilder.cmakeDependenciesPath}"
-    }
+        "-DCMAKE_INSTALL_PREFIX=/",
+        "-DWITBE_WITBE_DEPENDENCIES_PATH=${witbeBuilder.witbeFullDependenciesPath}",
+        "-DWITBE_SYSTEM_DEPENDENCIES_PATH=${witbeBuilder.systemFullDependenciesPath}"
+}
 
-    task build(type: Exec, dependsOn: configure) {
-        environment project.environment
-        workingDir buildDir
-        executable 'make'
-        args
-    }
+task build(type: Exec, dependsOn: configure) {
+    environment witbeBuilder.environment
+    workingDir  buildDir
+    executable 'make'
+    args "-j${nbCore}"
+}
 
-    task install(type: Exec, dependsOn: [build, 'cleanInstall']) {
-        environment project.environment
-        workingDir buildDir
-        executable 'make'
-        args 'install', "-j${nbCore}"
-    }
+task install(type: Exec, dependsOn: [build, 'cleanInstall']) {
+    environment witbeBuilder.environment
+    workingDir  buildDir
+    executable 'make'
+    args 'install'
+}
 
-    task test(dependsOn: install) {
-    }
+task test(dependsOn: install) {
+}
 
-    task packages(type: Exec, dependsOn: test) {
-        environment project.environment
-        workingDir buildDir
-        executable 'make'
-        args 'package'
-    }
+task packages(dependsOn: test) << {
+     project.tasks.generatePackage.execute()
+     project.tasks.generateArchive.execute()
+}
 
-    task artifacts(dependsOn: develArchiveArtifact) {
-    }
-
-    // Publications
-    publishing {
-        repositories {
-            maven {
-                name 'libs-release'
-                url = witbeBuilder.artifactoryContextUrl + "${System.properties['os.name'].toLowerCase()}_libs-release.${project.architecture}"
-                credentials(witbeBuilder.artifactoryCredentials)
-            }
-            maven {
-                name 'yum-release'
-                url = witbeBuilder.artifactoryContextUrl + 'yum-release-local'
-                credentials(witbeBuilder.artifactoryCredentials)
-            }
-        }
-        publications {
-            witbeProject(MavenPublication) {
-                artifact develArchiveArtifact
-                ext.repoName = 'libs-release'
-                ext.dependencyConfiguration = 'natives'
-            }
-            witbeRPMS(MavenPublication) {
-                groupId "7.${System.properties['os.name'].toLowerCase()}.${project.architecture}"
-                artifact(file("${buildDir}/remoti-${project.version}-${project.architecture}-libs.rpm")) { extension 'rpm'; classifier 'libs' }
-                artifact(file("${buildDir}/remoti-${project.version}-${project.architecture}-devel.rpm")) { extension 'rpm'; classifier 'devel' }
-                artifact(file("${buildDir}/remoti-${project.version}-${project.architecture}-server.rpm")) { extension 'rpm'; classifier 'server' }
-                ext.repoName = 'yum-release'
-            }
+// Publications
+publishing {
+    publications {
+        witbePackages(IvyPublication) {
+            artifact(file("${witbeBuilder.artifactPath}/${project.name}-${project.version}-${project.buildNumber}.${witbeBuilder.rpmArch}.rpm")) { extension 'rpm' }
+            artifact(file("${witbeBuilder.artifactPath}/${project.name}-${project.version}-${project.buildNumber}.${witbeBuilder.rpmArch}.tar.gz")) { extension 'tar.gz' }
         }
     }
-
-    // Artifactory Plugin Configuration (custom artifactory DSL)
-    def extRepository = { repoKey = "ext-release-local" } << witbeBuilder.artifactoryRepository
-    artifactory {
-        contextUrl = "${artifactory_contextUrl}"
-        resolve { repository(witbeBuilder.artifactoryRepository) }
-        publish {
-            repository(extRepository)
-            defaults { publications ('witbeProject', 'witbeRPMS'); publishArtifacts = false; }
+    repositories {
+        ivy {
+            url "${artifactory_contextUrl}witbe-test-yum"
         }
     }
+}
+
+// Artifactory Plugin Configuration (custom artifactory DSL)
+artifactory {
+    contextUrl = "${artifactory_contextUrl}"
+    resolve { repository(witbeBuilder.artifactoryRepository) }
+    publish {
+        repository(witbeBuilder.artifactoryRepository)
+        defaults { publications ('witbePackages') }
+    }
+}

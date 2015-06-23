@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 2.8)
 project(RemoTI_client)
 
 string(TOUPPER ${PROJECT_NAME} PROJECT_UPPER_NAME)
@@ -15,5 +15,5 @@ add_dependencies(${PROJECT_NAME} RemoTI_common RemoTI_services RemoTI_applicatio
 
 set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-install(TARGETS ${PROJECT_NAME} DESTINATION lib COMPONENT libs)
-install(FILES npi_ipc_client.h rti_lnx.h rti_lnx_constants.h DESTINATION include/RemoTI COMPONENT devel)
+install(TARGETS ${PROJECT_NAME} DESTINATION lib)
+install(FILES npi_ipc_client.h rti_lnx.h rti_lnx_constants.h DESTINATION include/RemoTI)

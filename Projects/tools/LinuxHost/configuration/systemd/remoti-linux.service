@@ -1,0 +1,11 @@
+[Unit]
+Description=remoti-linux
+After=Network.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c "$WITBEHOME/bin/RemoTI_server /etc/RemoTI/RemoTI_RNP.cfg"
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 2.8)
 project(RemoTI_services)
 
 string(TOUPPER ${PROJECT_NAME} PROJECT_UPPER_NAME)
@@ -7,4 +7,4 @@ message(STATUS "Setting ${PROJECT_NAME} include path")
 
 add_custom_target(${PROJECT_NAME})
 
-install(FILES saddr.h DESTINATION include/RemoTI COMPONENT devel)
+install(FILES saddr.h DESTINATION include/RemoTI)
