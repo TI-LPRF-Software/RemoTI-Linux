@@ -28,7 +28,6 @@ systemctl daemon-reload
 mkdir -p $RPM_BUILD_ROOT/usr/
 
 cp -rf %{_installPath}/etc/ $RPM_BUILD_ROOT/
-cp -rf %{_installPath}/include/ $RPM_BUILD_ROOT/usr/
 cp -rf %{_installPath}/lib/ $RPM_BUILD_ROOT/usr/
 cp -rf %{_installPath}/bin/ $RPM_BUILD_ROOT/usr/
 
@@ -44,7 +43,6 @@ systemctl enable %{_name}.service
 /etc/RemoTI
 /usr/lib/libRemoTI_client.so
 /usr/lib/systemd/system/%{_name}.service
-/usr/include/RemoTI
 /usr/bin/RemoTI_server
 
 %exclude
