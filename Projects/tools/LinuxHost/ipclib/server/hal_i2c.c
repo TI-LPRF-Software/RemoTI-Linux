@@ -191,7 +191,7 @@ int HalI2cWrite(uint8 port, uint8 *pBuf, uint8 len)
 	int res, ret = NPI_LNX_SUCCESS;
 	int timeout = I2C_OPEN_100MS_TIMEOUT;
 	int i, strIndex = 0;
-	char tmpStr[256];
+	char tmpStr[1024];
 
 	if (__BIG_DEBUG_ACTIVE == TRUE)
 	{
@@ -290,7 +290,7 @@ int HalI2cRead(uint8 port, uint8 *pBuf, uint8 len)
 	int timeout = I2C_OPEN_100MS_TIMEOUT, ret = NPI_LNX_SUCCESS;
 	int i, strIndex = 0;
 	int res = -1;
-	char tmpStr[128];
+	char tmpStr[1024];
 	pthread_mutex_lock(&I2cMutex1);
 
 	while( (-1 == (res = read(i2cDevFd,pBuf,len))) && timeout)

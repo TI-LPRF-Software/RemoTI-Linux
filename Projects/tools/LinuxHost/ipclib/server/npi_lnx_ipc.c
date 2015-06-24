@@ -1844,7 +1844,7 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 			else
 			{
 				// Keep status from NPI_SendSynchDataFnArr
-				debug_printf("[ERR] SRSP: npi_ipc_errno 0x%.8X\n", npi_ipc_errno);
+				debug_printf("[ERR] SRSP: ret = 0x%.8X, npi_ipc_errno 0x%.8X\n", ret, npi_ipc_errno);
 			}
 		}
 		else if ((recvBuf->subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ)
@@ -1872,6 +1872,8 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 			}
 			else if ((recvBuf->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
 			{
+				// Print caller ID
+				printf("[NPI Server] AREQ received from %d to control NPI Server\n", connection);
 				//AREQ Command send to this server.
 				ret = npi_ServerCmdHandle(recvBuf);
 			}

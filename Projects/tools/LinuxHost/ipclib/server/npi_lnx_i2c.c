@@ -314,7 +314,7 @@ void NPI_I2C_CloseDevice(void)
 int NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
 {
 	int ret = NPI_LNX_SUCCESS;
-	char tmpStr[256];
+	char tmpStr[1024];
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
 		snprintf(tmpStr, sizeof(tmpStr), "[%s] Locking POLL and SRDY\n", __FUNCTION__);
@@ -443,21 +443,13 @@ int NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
 int npi_i2c_pollData(npiMsgData_t *pMsg)
 {
 	int	ret = NPI_LNX_SUCCESS;
-	char tmpStr[256];
+	char tmpStr[1024];
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
 		snprintf(tmpStr, sizeof(tmpStr), "[%s] -------------------- START POLLING DATA --------------------\n", __FUNCTION__);
 		time_printf(tmpStr);
 	}
 
-#ifdef __BIG_DEBUG__
-	printf("Polling Command ...");
-	int i;
-	for(i = 0 ; i < (RPC_FRAME_HDR_SZ+pMsg->len); i++)
-		printf(" 0x%.2x", ((uint8*)pMsg)[i]);
-
-	printf("\n");
-#endif
 #ifdef SRDY_INTERRUPT
 	pthread_mutex_lock(&npiSrdyLock);
 #endif
@@ -545,7 +537,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 {
 	int i, ret = NPI_LNX_SUCCESS;
 	int lockRetPoll = 0, lockRetSrdy = 0, strIndex = 0;
-	char tmpStr[256];
+	char tmpStr[1024];
 
 	// Do not attempt to send until polling is finished
 
@@ -649,7 +641,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 					snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, " 0x%.2X", ((uint8*)pMsg)[i]);
 					strIndex += 5;
 				}
-				snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "%s \n", tmpStr);
+				snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "\n");
 				time_printf(tmpStr);
 			}
 
@@ -707,7 +699,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 								snprintf(tmpStr, sizeof(tmpStr) - strIndex, " 0x%.2X", pMsg->pData[i]);
 								strIndex += 5;
 							}
-							snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "%s \n", tmpStr);
+							snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "\n");
 							time_printf(tmpStr);
 						}
 					}
@@ -904,7 +896,7 @@ static void *npi_poll_entry(void *ptr)
 {
 	int ret = NPI_LNX_SUCCESS;
 	uint8 readbuf[128];
-	char tmpStr[512];
+	char tmpStr[1024];
 #ifndef SRDY_INTERRUPT
 	uint8 pollStatus = FALSE;
 #endif //SRDY_INTERRUPT
@@ -1119,12 +1111,18 @@ static void *npi_poll_entry(void *ptr)
 		}
 
 #ifdef SRDY_INTERRUPT
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] Unlock POLL mutex by conditional wait (SRDY=%d) \n", __FUNCTION__, global_srdy);
-		time_printf(tmpStr);
+		if ( __BIG_DEBUG_ACTIVE == TRUE )
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Unlock POLL mutex by conditional wait (SRDY=%d) \n", __FUNCTION__, global_srdy);
+			time_printf(tmpStr);
+		}
 		if (TRUE == HAL_RNP_SRDY_SET())
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] Waiting for SRDY to go low\n", __FUNCTION__);
-			time_printf(tmpStr);
+			if ( __BIG_DEBUG_ACTIVE == TRUE )
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] Waiting for SRDY to go low\n", __FUNCTION__);
+				time_printf(tmpStr);
+			}
 			int condWaitRetVal = pthread_cond_wait(&npi_srdy_H2L_poll, &npiPollLock);
 			if (condWaitRetVal)
 			{
@@ -1145,13 +1143,19 @@ static void *npi_poll_entry(void *ptr)
 			{
 				ret = PollLockVarError(__LINE__, PollLockVar);
 			}
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] SRDY found high after poll, poll again\n", __FUNCTION__);
-			time_printf(tmpStr);
+			if ( __BIG_DEBUG_ACTIVE == TRUE )
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] SRDY found high after poll, poll again\n", __FUNCTION__);
+				time_printf(tmpStr);
+			}
 			// After a synchronous request we need to poll RNP again. The RNP will only release SRDY after
 			// replying with 0x00 0x00 0x00 to a poll request.
 		}
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] Locked POLL mutex because condition was met (SRDY=%d) \n", __FUNCTION__, global_srdy);
-		time_printf(tmpStr);
+		if ( __BIG_DEBUG_ACTIVE == TRUE )
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Locked POLL mutex because condition was met (SRDY=%d) \n", __FUNCTION__, global_srdy);
+			time_printf(tmpStr);
+		}
 #else
 		if (!pollStatus) //If previous poll failed, wait 10ms to do another one, else do it right away to empty the RNP queue.
 		{
@@ -1258,7 +1262,7 @@ static void *npi_event_entry(void *ptr)
 	/* Timeout in msec. Drop down to I2C_ISR_POLL_TIMEOUT_MS_MIN if two consecutive interrupts are missed */
 	struct pollfd pollfds[1];
 	int val;
-	char tmpStr[512];
+	char tmpStr[1024];
 
 	snprintf(tmpStr, sizeof(tmpStr), "[%s] Interrupt Event Thread Started \n", __FUNCTION__);
 	time_printf(tmpStr);
@@ -1293,7 +1297,7 @@ static void *npi_event_entry(void *ptr)
 		}
 		else
 		{
-			if ( __BIG_DEBUG_ACTIVE == TRUE && (consecutiveTimeout % 50 == 0) )
+			if ( __BIG_DEBUG_ACTIVE == TRUE && (consecutiveTimeout % 5000 == 0) )
 			{
 				snprintf(tmpStr, sizeof(tmpStr), "[%s] Event thread has SRDY mutex lock, result = %d\n", __FUNCTION__, result);
 				time_printf(tmpStr);
@@ -1535,7 +1539,7 @@ static void *npi_event_entry(void *ptr)
 		{
 			//Unknown Event
 			//Do nothing for now ...
-			if ( __BIG_DEBUG_ACTIVE == TRUE && (consecutiveTimeout % 50 == 0) )
+			if ( __BIG_DEBUG_ACTIVE == TRUE && (consecutiveTimeout % 5000 == 0) )
 			{
 				snprintf(tmpStr, sizeof(tmpStr), "[%s] Event thread is releasing SRDY mutex lock, result = %d, line %d\n", __FUNCTION__, result, __LINE__);
 				time_printf(tmpStr);
