@@ -1,0 +1,3 @@
+//!@ SCAFFOLDER VERSION: 0.1.0
+
+rootProject.name = "remoti-linux"

@@ -1,0 +1,75 @@
+//!@ SCAFFOLDER VERSION: 0.1.0
+
+// Build Scripts Plugin Repositories & Dependencies
+
+// Don't forget that in order to access Witbe Artifactory you need to setup
+// your default user/password in your ~/.gradle/gradle.properties file
+// you can also have a copy of the gradle.properties file in the current directory.
+
+// Build Scripts Plugin Repositories & Dependencies
+buildscript {
+    repositories {
+        maven {
+            url "${artifactory_contextUrl}gradle-buildrepo"
+            credentials {
+                username = "${artifactory_user}"
+                password = "${artifactory_password}"
+            }
+        }
+    }
+    dependencies {
+        classpath group: 'net.witbe.qoe.tools', name: 'witbe-builder', version: '0.1.0'
+        classpath group: 'org.jfrog.buildinfo', name: 'build-info-extractor-gradle', version: '3.0.1'
+    }
+}
+
+// Load/Apply Plugins
+apply plugin: 'net.witbe.qoe.witbe-builder'
+
+// Dependencies
+dependencies {
+}
+witbeBuilder.systemDependencies = []
+
+// Project Settings / Configuration.
+project.group = "net.witbe.qoe"
+
+// Mandatory Tasks
+task prepare {
+    dependsOn 'extractDependencies' 
+}
+
+task clean(dependsOn: ['cleanDependencies', 'cleanInstall']) {
+}
+
+task configure(type: Exec, dependsOn: prepare) {
+        environment witbeBuilder.environment
+        workingDir buildDir
+        executable 'cmake'
+        args "..", "-DCMAKE_BUILD_TYPE=RELEASE", "-DVERSION=${version}",
+        "-DCMAKE_INSTALL_PREFIX=/",
+        "-DWITBE_WITBE_DEPENDENCIES_PATH=${witbeBuilder.witbeFullDependenciesPath}",
+        "-DWITBE_SYSTEM_DEPENDENCIES_PATH=${witbeBuilder.systemFullDependenciesPath}"
+}
+
+task build(type: Exec, dependsOn: configure) {
+    environment witbeBuilder.environment
+    workingDir  buildDir
+    executable 'make'
+    args "-j${nbCore}"
+}
+
+task install(type: Exec, dependsOn: [build, 'cleanInstall']) {
+    environment witbeBuilder.environment
+    workingDir  buildDir
+    executable 'make'
+    args 'install'
+}
+
+task test(dependsOn: install) {
+}
+
+task packages(dependsOn: test) << {
+     project.tasks.generatePackage.execute()
+     project.tasks.generateArchive.execute()
+}

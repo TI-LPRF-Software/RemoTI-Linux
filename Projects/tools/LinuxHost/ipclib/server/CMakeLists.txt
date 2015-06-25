@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 2.8)
 project(RemoTI_server)
 
 string(TOUPPER ${PROJECT_NAME} PROJECT_UPPER_NAME)
@@ -25,18 +25,8 @@ set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRU
 
 set(REMOTI_CONF_PATH "/etc/RemoTI")
 
-# Generate service file
-set(SERVICE_FILE_IN ${CMAKE_SOURCE_DIR}/configuration/systemd/rf4ce.service.in)
-set(SERVICE_FILE ${PROJECT_BINARY_DIR}/rf4ce.service)
-set(WITBE_SYSTEMD_SERVICE_NAME "rf4ce")
-set(WITBE_SYSTEMD_SERVICE_RUN_AFTER "Network.target")
-set(WITBE_SYSTEMD_SERVICE_TYPE "simple")
-set(WITBE_SYSTEMD_SERVICE_COMMAND "${CMAKE_INSTALL_PREFIX}/bin/${PROJECT_NAME}")
-set(WITBE_SYSTEMD_SERVICE_ARGS "${REMOTI_CONF_PATH}/RemoTI_RNP.cfg")
-set(WITBE_SYSTEMD_SERVICE_RESTART "always")
-configure_file(${SERVICE_FILE_IN} ${SERVICE_FILE})
-
 # Install
-install(TARGETS ${PROJECT_NAME} DESTINATION bin COMPONENT server)
-install(FILES ${CMAKE_SOURCE_DIR}/RemoTI_RNP.cfg DESTINATION /etc/RemoTI COMPONENT server)
-install(FILES ${SERVICE_FILE} DESTINATION /etc/systemd/system COMPONENT server)
+install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+install(FILES ${CMAKE_SOURCE_DIR}/RemoTI_RNP.cfg DESTINATION /etc/RemoTI)
+install(FILES ${CMAKE_SOURCE_DIR}/configuration/systemd/remoti-linux.service DESTINATION /lib/systemd/system)
+install(FILES ${SERVICE_FILE} DESTINATION /etc/systemd/system)
