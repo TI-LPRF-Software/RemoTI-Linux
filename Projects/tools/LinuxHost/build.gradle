@@ -10,7 +10,7 @@
 buildscript {
     repositories {
         maven {
-            url "${artifactory_contextUrl}gradle-buildrepo-${releaseType}"
+            url "${artifactory_contextUrl}gradle-buildrepo"
             credentials {
                 username = "${artifactory_user}"
                 password = "${artifactory_password}"
@@ -72,29 +72,4 @@ task test(dependsOn: install) {
 task packages(dependsOn: test) << {
      project.tasks.generatePackage.execute()
      project.tasks.generateArchive.execute()
-}
-
-// Publications
-publishing {
-    publications {
-        witbePackages(IvyPublication) {
-            artifact(file("${witbeBuilder.artifactPath}/${project.name}-${project.version}.${witbeBuilder.rpmArch}.rpm")) { extension 'rpm' }
-            artifact(file("${witbeBuilder.artifactPath}/${project.name}-${project.version}.${witbeBuilder.rpmArch}.tar.gz")) { extension 'tar.gz' }
-        }
-    }
-    repositories {
-        ivy {
-            url "${artifactory_contextUrl}witbe-test-yum"
-        }
-    }
-}
-
-// Artifactory Plugin Configuration (custom artifactory DSL)
-artifactory {
-    contextUrl = "${artifactory_contextUrl}"
-    resolve { repository(witbeBuilder.artifactoryRepository) }
-    publish {
-        repository(witbeBuilder.artifactoryRepository)
-        defaults { publications ('witbePackages') }
-    }
 }
