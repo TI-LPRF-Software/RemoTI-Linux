@@ -885,7 +885,7 @@ static int npi_parseframe(const unsigned char *buf, int len)
 {
 	int ret = NPI_LNX_SUCCESS;
 	uint8 ch;
-	char tmpStr[256];
+	char tmpStr[512];
 	int  bytesInRxBuffer;
 
 	if (len)
@@ -1037,7 +1037,7 @@ static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
 {
 	int ret = NPI_LNX_SUCCESS;
 	int i;
-	char tmpStr[256];
+	char tmpStr[512];
 	snprintf(tmpStr, sizeof(tmpStr), "[UART] npi_procframe, subsys: 0x%.2x, Cmd ID: 0x%.2X, length: %d ,Data:  \n", subsystemId, commandId, length);
 	debug_printf(tmpStr);
 	int charCount = 0;
