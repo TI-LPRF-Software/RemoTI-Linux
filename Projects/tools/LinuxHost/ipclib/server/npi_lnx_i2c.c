@@ -88,7 +88,7 @@
 # define FALSE (0)
 #endif
 
-#define error_printf(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#define error_printf(fmt, ...) fprintf(stdout, fmt, ##__VA_ARGS__)
 
 // -- Constants --
 
