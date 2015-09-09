@@ -150,37 +150,6 @@ const char * const rtiDevType_list[RTI_DEVICE_TARGET_TYPE_END] =
         NAME_ELEMENT(RTI_DEVICE_MONITOR)					//0x0F
 };
 
-const char * const testMode_txPower_list[28] =
-{ " \0407\tdBm",
-		" \0407\tdBm",
-		" \0407\tdBm",
-		" \0404.5\tdBm",
-		" \0403\tdBm",
-		" \0403\tdBm",
-		" \0401.7\tdBm",
-		" \0400.3\tdBm",
-		" -1\tdBm",
-		" -1\tdBm",
-		" -2.8\tdBm",
-		" -2.8\tdBm",
-		" -4.1\tdBm",
-		" -5.9\tdBm",
-		" -5.9\tdBm",
-		" -7.7\tdBm",
-		" -7.7\tdBm",
-		" -9.9\tdBm",
-		" -9.9\tdBm",
-		" -9.9\tdBm",
-		"-12.8\tdBm",
-		"-12.8\tdBm",
-		"-14.9\tdBm",
-		"-14.9\tdBm",
-		"-16.6\tdBm",
-		"-16.6\tdBm",
-		"-18.7\tdBm",
-		"-18.7\tdBm"
-};
-
 // Pairing reference
 uint8 destIdx;
 

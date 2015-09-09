@@ -51,8 +51,16 @@
 #include "timer.h"
 #include "lprfLogging.h"
 
+#ifndef RTI_TESTMODE
+#define RTI_TESTMODE
+#endif //RTI_TESTMODE
+
 #include "simple_app_main.h"
 #include "simple_app.h"
+
+#ifdef RTI_TESTMODE
+#include "RTI_Testapp.h"
+#endif //RTI_TESTMODE
 
 // Linux surrogate interface, including both RTIS and NPI
 #include "npi_ipc_client.h"
@@ -277,6 +285,7 @@ appSendData_t appSendData_s;
 uint8 appSendDataState;
 void appSendDataProcessKey (char* strIn);
 
+static void appReturnFromSubmodule(void);
 static void getAndPrintExtendedSoftwareVersion(uint8 timePrint);
 static void appSetCFGParamOnRNP(void);
 static void appGetCFGParamFromRNP(void);
@@ -366,6 +375,10 @@ int SimpleAppInit(int mode, char threadId)
 	appSendData_s.pData[0] = RTI_CERC_USER_CONTROL_PRESSED;
 	appSendData_s.pData[1] = RTI_CERC_NUM_0;
 
+#ifdef RTI_TESTMODE
+	RTI_TestModeInit(appReturnFromSubmodule);
+#endif //RTI_TESTMODE
+
 	// TODO: it is ideal to make this thread higher priority
 	// but linux does not allow realtime of FIFO scheduling policy for
 	// non-priviledged threads.
@@ -451,6 +464,12 @@ static void *appThreadFunc(void *ptr)
 				// Pass key onto physical test mode processing
 				appPhysicalTestModeProcessKey(str);
 			}
+#ifdef RTI_TESTMODE
+			else if (appState == AP_STATE_LATENCY_TEST_MODE)
+			{
+				appTestModeProcessKey(str);
+			}
+#endif //RTI_TESTMODE
 			else if (appState == AP_STATE_CONTROL_ATTENUATOR)
 			{
 				// Pass key onto attenuator control
@@ -842,7 +861,7 @@ static void appProcessEvents(uint32 events)
 			retVal = RTI_WriteItem(RTI_CP_ITEM_STARTUP_CTRL, 1, &startupFlg);
 			if (retVal != RTI_SUCCESS)
 			{
-				LOG_INFO("Could no set Cold Start flag\n");
+				LOG_WARN("Could not set Cold Start flag\n");
 			}
 			else
 			{
@@ -1143,6 +1162,12 @@ void RTI_SendDataCnf(rStatus_t status)
 		// Return to Send Data Prepare state
 		appState = AP_STATE_NDATA_PREPARE;
 	}
+#ifdef RTI_TESTMODE
+	else if (appState == AP_STATE_LATENCY_TEST_MODE)
+	{
+		RTI_TestModeSendDataCnf(status);
+	}
+#endif //RTI_TESTMODE
 }
 
 /**************************************************************************************************
@@ -1243,6 +1268,20 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 
 		if (RTI_PROFILE_ZRC == profileId)
 		{
+#ifdef RTI_TESTMODE
+			if (appState == AP_STATE_LATENCY_TEST_MODE)
+			{
+				RTI_TestModeReceiveDataInd(srcIndex, profileId, vendorId, rxLQI, rxFlags, len, pData);
+			}
+			else if (pData[0] == RTI_PROTOCOL_TEST)
+			{
+				appState = AP_STATE_LATENCY_TEST_MODE;
+				RTI_EnterTestMode();
+				// We received test data, enter testmode and let test module handle data
+				RTI_TestModeReceiveDataInd(srcIndex, profileId, vendorId, rxLQI, rxFlags, len, pData);
+			}
+			else
+#endif //RTI_TESTMODE
 			if (error)
 			{
 				LOG_INFO("UNDEFINED PACKET Source Idx: %d, profileId %d , vendorId: %d , rxFlags: 0x%x, rxLQI %d \n",
@@ -2328,6 +2367,14 @@ void appPhysicalTestModeProcessKey (char* strIn)
 		}
 	}
 }
+
+#ifdef RTI_TESTMODE
+static void appReturnFromSubmodule()
+{
+	appState = AP_STATE_READY;
+	DispMenuReady();
+}
+#endif //RTI_TESTMODE
 
 /**************************************************************************************************
  * @fn          appAttenuatorControlProcessKey
