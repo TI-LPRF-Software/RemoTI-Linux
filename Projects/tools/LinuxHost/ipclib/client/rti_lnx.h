@@ -361,6 +361,7 @@ extern "C"
 #define RTI_SA_ITEM_FRAME_COUNTER                        RCN_NIB_NWK_FRAME_COUNTER           // 0x65
 #define RTI_SA_ITEM_ROUTE_DISCOVERY_TO_APP	 			 0x66 // RCN_NIB_NWK_INDICATE_DISCOVERY_REQUESTS
 #define RTI_SA_ITEM_IN_POWER_SAVE                        RCN_NIB_NWK_IN_POWER_SAVE           // 0x67
+#define RTI_SA_ITEM_PAIRING_TABLE_ENTRY                  0x68 // RCN_NIB_NWK_PAIRING_TABLE
 #define RTI_SA_ITEM_MAX_FIRST_ATTEMPT_CSMA_BACKOFFS      RCN_NIB_NWK_MAX_FIRST_ATTEMPT_CSMA_BACKOFFS
 #define RTI_SA_ITEM_MAX_FIRST_ATTEMPT_FRAME_RETRIES      RCN_NIB_NWK_MAX_FIRST_ATTEMPT_FRAME_RETRIES
 #define RTI_SA_ITEM_RESPONSE_WAIT_TIME                   RCN_NIB_NWK_RESPONSE_WAIT_TIME      // 0x6D
@@ -628,6 +629,8 @@ extern RTILIB_API rStatus_t RTI_ReadItemEx(uint8 profileId, uint8 itemId, uint8 
 extern RTILIB_API rStatus_t RTI_WriteItemEx(uint8 profileId, uint8 itemId, uint8 len, uint8 *pValue);
 extern RTILIB_API rStatus_t RTI_ReadItem(uint8 itemId, uint8 len, uint8 *pValue);
 extern RTILIB_API rStatus_t RTI_WriteItem(uint8 itemId, uint8 len, uint8 *pValue);
+extern RTILIB_API rStatus_t RTI_ReadIndexedItem(uint8 profileId, uint8 itemId, uint8 index, uint8 len, uint8 *pValue);
+extern RTILIB_API rStatus_t RTI_WriteIndexedItem(uint8 profileId, uint8 itemId, uint8 index, uint8 len, uint8 *pValue);
 
 // Application Profile Interface
 // Used to access RF4CE application profile
@@ -657,10 +660,10 @@ extern RTILIB_API void RTI_SetBindingParamsReq(uint32 bindingParams);
 /*0x34 */ extern RTILIB_API void RTI_IdentificationConfigReq( uint8 dstIndex );
 /*0x35 */ extern RTILIB_API void RTI_PollReq( uint8 dstIndex, uint8 trigger, uint8 timeout );
 /*0x36 */ extern RTILIB_API void RTI_KeyExchangeReq( uint8 dstIndex, uint16 keyExchangeFlags );
-/*0x37 */ extern RTILIB_API void RTI_GetAttributeCnf( rStatus_t status,
+/*0x37 */ extern RTILIB_API void RTI_GetAttributeCnf( uint8 dstIndex, rStatus_t status,
                                             uint8 len,
                                             uint8 *pData );
-/*0x38 */ extern RTILIB_API void RTI_SetAttributeCnf( rStatus_t status );
+/*0x38 */ extern RTILIB_API void RTI_SetAttributeCnf( uint8 dstIndex, rStatus_t status );
 /*0x39 */ extern RTILIB_API void RTI_SendIrdbVendorSupportReq( uint8 dstIndex, uint8 len, uint8 *pIrdbVendorSupport );
 /*0x3A */ extern RTILIB_API void RTI_SendMappableActionsReq( uint8 dstIndex,
                                                    uint8 numMappableActions,

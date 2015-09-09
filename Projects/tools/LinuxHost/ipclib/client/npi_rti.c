@@ -420,6 +420,64 @@ rStatus_t RTI_ReadItemEx( uint8 profileId, uint8 itemId, uint8 len, uint8 *pValu
 
 /**************************************************************************************************
  *
+ * @fn          RTI_ReadIndexedItem
+ *
+ * @brief       This API is used to read an indexed item from a Profile's Configuration Interface.
+ *
+ * input parameters
+ *
+ * @param       profileId - The Profile identifier.
+ * @param       itemId - The Configuration Interface item identifier.
+ * @param       index - The Configuration Interface item index identifier.
+ * @param       len - The length in bytes of the item identifier's data.
+ *
+ * output parameters
+ *
+ * @param       *pValue - Pointer to buffer where read data is placed.
+ *
+ * @return      RTI_SUCCESS, RTI_ERROR_NOT_PERMITTED, RTI_ERROR_INVALID_INDEX,
+ *              RTI_ERROR_INVALID_PARAMETER, RTI_ERROR_UNKNOWN_PARAMETER,
+ *              RTI_ERROR_UNSUPPORTED_ATTRIBUTE, RTI_ERROR_OSAL_NV_OPER_FAILED,
+ *              RTI_ERROR_OSAL_NV_ITEM_UNINIT, RTI_ERROR_OSAL_NV_BAD_ITEM_LEN
+ *
+ **************************************************************************************************/
+rStatus_t RTI_ReadIndexedItem( uint8 profileId, uint8 itemId, uint8 index, uint8 len, uint8 *pValue )
+{
+  npiMsgData_t pMsg;
+
+  // prep Read Item request
+  // Note: no need to send pValue over the NPI
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_ITEM_EX;
+  pMsg.len      = 4;
+  pMsg.pData[0] = profileId;
+  pMsg.pData[1] = itemId;
+  pMsg.pData[2] = index;
+  pMsg.pData[3] = len;
+
+  // send Read Item request to NPI socket synchronously
+  NPI_SendSynchData( &pMsg );
+
+
+  // DEBUG
+  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
+  {
+//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
+  }
+
+  // copy the reply data to the client's buffer
+  // Note: the first byte of the payload is reserved for the status
+  msg_memcpy( pValue, &pMsg.pData[1], len );
+
+  // perform endianness change
+  rtiAttribEConv( itemId, len, pValue );
+
+  // return the status, which is stored is the first byte of the payload
+  return( (rStatus_t)pMsg.pData[0] );
+}
+
+/**************************************************************************************************
+ *
  * @fn          RTI_ReadItem
  *
  * @brief       This API is used to read the RTI Configuration Interface item
@@ -513,6 +571,62 @@ rStatus_t RTI_WriteItemEx( uint8 profileId, uint8 itemId, uint8 len, uint8 *pVal
 
   // perform endianness change
   rtiAttribEConv( itemId, len, &pMsg.pData[3] );
+
+  // send Write Item request to NP RTIS synchronously
+  NPI_SendSynchData( &pMsg );
+
+  // DEBUG
+  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
+  {
+//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
+  }
+
+  // return the status, which is stored is the first byte of the payload
+  return( (rStatus_t)pMsg.pData[0] );
+}
+
+/**************************************************************************************************
+ *
+ * @fn          RTI_WriteIndexedItem
+ *
+ * @brief       This API is used to write an indexed item to a Profile's Configuration Interface.
+ *
+ * input parameters
+ *
+ * @param       profileId - The Profile identifier.
+ * @param       itemId - The Configuration Interface item identifier.
+ * @param       index - The Configuration Interface item index identifier.
+ * @param       len - The length in bytes of the item identifier's data.
+ * @param       *pValue - Pointer to buffer where write data is stored.
+ *
+ * input parameters
+ *
+ * None.
+ *
+ * @return      RTI_SUCCESS, RTI_ERROR_NOT_PERMITTED, RTI_ERROR_INVALID_INDEX,
+ *              RTI_ERROR_INVALID_PARAMETER, RTI_ERROR_UNKNOWN_PARAMETER,
+ *              RTI_ERROR_UNSUPPORTED_ATTRIBUTE, RTI_ERROR_OSAL_NV_OPER_FAILED,
+ *              RTI_ERROR_OSAL_NV_ITEM_UNINIT, RTI_ERROR_OSAL_NV_BAD_ITEM_LEN
+ *
+ **************************************************************************************************/
+rStatus_t RTI_WriteIndexedItem( uint8 profileId, uint8 itemId, uint8 index, uint8 len, uint8 *pValue )
+{
+  npiMsgData_t pMsg;
+
+  // prep Write Item request
+  pMsg.subSys   = RPC_SYS_RCAF;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_ITEM_EX;
+  pMsg.len      = 4+len;
+  pMsg.pData[0] = profileId;
+  pMsg.pData[1] = itemId;
+  pMsg.pData[2] = index;
+  pMsg.pData[3] = len;
+
+  // copy the client's data to be sent
+  msg_memcpy( &pMsg.pData[4], pValue, len );
+
+  // perform endianness change
+  rtiAttribEConv( itemId, len, &pMsg.pData[4] );
 
   // send Write Item request to NP RTIS synchronously
   NPI_SendSynchData( &pMsg );
@@ -1386,19 +1500,20 @@ RTILIB_API void RTI_KeyExchangeReq( uint8 dstIndex, uint16 keyExchangeFlags )
  * @return      None.
  *
  **************************************************************************************************/
-RTILIB_API void RTI_GetAttributeCnf( rStatus_t status, uint8 len, uint8 *pData )
+RTILIB_API void RTI_GetAttributeCnf( uint8 dstIndex, rStatus_t status, uint8 len, uint8 *pData )
 {
   npiMsgData_t pMsg;
 
   // serialize the request
   pMsg.subSys   = RPC_SYS_RCAF;
   pMsg.cmdId    = RTIS_CMD_ID_RTI_GET_ATTRIBUTE_CNF;
-  pMsg.len      = 2 + len;
-  pMsg.pData[0] = status;
-  pMsg.pData[1] = len;
+  pMsg.len      = 3 + len;
+  pMsg.pData[0] = dstIndex;
+  pMsg.pData[1] = status;
+  pMsg.pData[2] = len;
 
   // copy the client's data to be sent
-  msg_memcpy( &pMsg.pData[2], pData, len );
+  msg_memcpy( &pMsg.pData[3], pData, len );
 
   // send serialized request to NP RTIS synchronously
   NPI_SendAsynchData( &pMsg );
@@ -1421,15 +1536,16 @@ RTILIB_API void RTI_GetAttributeCnf( rStatus_t status, uint8 len, uint8 *pData )
  * @return      None.
  *
  **************************************************************************************************/
-RTILIB_API void RTI_SetAttributeCnf( rStatus_t status )
+RTILIB_API void RTI_SetAttributeCnf( uint8 dstIndex, rStatus_t status )
 {
   npiMsgData_t pMsg;
 
   // serialize the request
   pMsg.subSys   = RPC_SYS_RCAF;
   pMsg.cmdId    = RTIS_CMD_ID_RTI_SET_ATTRIBUTE_CNF;
-  pMsg.len      = 1;
-  pMsg.pData[0] = status;
+  pMsg.len      = 2;
+  pMsg.pData[0] = dstIndex;
+  pMsg.pData[1] = status;
 
   // send serialized request to NP RTIS synchronously
   NPI_SendAsynchData( &pMsg );
