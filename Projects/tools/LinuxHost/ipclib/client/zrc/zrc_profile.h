@@ -1,11 +1,9 @@
 /**************************************************************************************************
   Filename:       zrc_profile.h
-  Revised:        $Date: 2014-06-20 15:03:36 -0700 (Fri, 20 Jun 2014) $
-  Revision:       $Revision: 39135 $
 
   Description:    This file contains the declarations for the RF4CE ZRC2.0 Profile.
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) 2014-2015 Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without

@@ -1,11 +1,9 @@
 /**************************************************************************************************
   Filename:       gdp_profile.h
-  Revised:        $Date: 2014-06-25 14:42:58 -0700 (Wed, 25 Jun 2014) $
-  Revision:       $Revision: 39205 $
 
   Description:    This file contains the declarations for the RF4CE GDP2.0 Profile.
 
-  Copyright 2014 Texas Instruments Incorporated. All rights reserved.
+  Copyright (C) 2015 Texas Instruments Incorporated. All rights reserved.
 
    Redistribution and use in source and binary forms, with or without
    modification, are permitted provided that the following conditions

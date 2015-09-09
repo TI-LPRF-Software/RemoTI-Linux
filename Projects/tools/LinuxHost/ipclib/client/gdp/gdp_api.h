@@ -1,13 +1,11 @@
 /**************************************************************************************************
   Filename:       gdp_api.h
-  Revised:        $Date: 2014-05-19 15:26:47 -0700 (Mon, 19 May 2014) $
-  Revision:       $Revision: 38588 $
 
   Description:
 
   This file contains the common declarations for the Generic Device Profile (GDP).
 
-  Copyright 2014 Texas Instruments Incorporated. All rights reserved.
+  Copyright (C) 2015 Texas Instruments Incorporated. All rights reserved.
 
    Redistribution and use in source and binary forms, with or without
    modification, are permitted provided that the following conditions
