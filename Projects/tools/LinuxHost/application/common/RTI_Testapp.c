@@ -1433,9 +1433,9 @@ void DispTestModeMenuInit(uint8 destIdx)
 	printf("5- Configure Number of Packets\n");
 	printf("6- Configure Maximum Addition Delay\n");
 	printf("7- Set Number of Automatic Test Runs\n");
-	printf("8- Load Predifine Throughput Test\n");
-	printf("9- Load Predifine Latency Test\n");
-	printf("f- Toggle TEst file save (default off)\n");
+	printf("8- Load Predefined Throughput Test\n");
+	printf("9- Load Predefined Latency Test\n");
+	printf("f- Toggle whether or not to save reports to file (default off)\n");
 	printf("l- List current configuration\n");
 	printf("m- Show This Menu\n");
 }
