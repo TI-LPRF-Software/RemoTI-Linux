@@ -1561,11 +1561,11 @@ static void *npi_event_entry(void *ptr)
 		else
 		{
 //			lockRetSrdy = TRUE;
-			if ( __BIG_DEBUG_ACTIVE == TRUE && (consecutiveTimeout % 50 == 0) )
-			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] Event thread has SRDY mutex lock, result = %d\n", __FUNCTION__, result);
-				time_printf(tmpStr);
-			}
+//			if ( __BIG_DEBUG_ACTIVE == TRUE && (consecutiveTimeout % 5000 == 0) )
+//			{
+//				snprintf(tmpStr, sizeof(tmpStr), "[%s] Event thread has SRDY mutex lock, result = %d\n", __FUNCTION__, result);
+//				time_printf(tmpStr);
+//			}
 			// We got lock, move on
 			switch (result)
 			{
@@ -1805,11 +1805,11 @@ static void *npi_event_entry(void *ptr)
 			//Unlock if, and only if, we have lock
 //			if (lockRetSrdy == TRUE)
 			{
-				if ( __BIG_DEBUG_ACTIVE == TRUE  ) // && (consecutiveTimeout % 50 == 0) )
-				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] Event thread is releasing SRDY mutex lock, result = %d, line %d\n", __FUNCTION__, result, __LINE__);
-					time_printf(tmpStr);
-				}
+//				if ( __BIG_DEBUG_ACTIVE == TRUE  ) // && (consecutiveTimeout % 50 == 0) )
+//				{
+//					snprintf(tmpStr, sizeof(tmpStr), "[%s] Event thread is releasing SRDY mutex lock, result = %d, line %d\n", __FUNCTION__, result, __LINE__);
+//					time_printf(tmpStr);
+//				}
 				pthread_mutex_unlock(&npiSrdyLock);
 //				lockRetSrdy = FALSE;
 			}

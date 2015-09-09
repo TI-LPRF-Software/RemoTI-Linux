@@ -2729,7 +2729,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 				npiSpiCfg_t npiSpiCfg;
 				char* strBuf;
 				strBuf = (char*) malloc(128);
-				npiMsgData_t *resetBuf;
+//				npiMsgData_t *resetBuf;
 
 				if (serialCfgFd != NULL)
 				{
@@ -2844,18 +2844,18 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 				// Do the Hw Handshake
 				(NPI_SynchSlaveFnArr[devIdx])();
 
-				// Since SPI does not indicate reset to host we should notify here
-				// but there's no unified way of doing it for RNP and ZNP...
-				// For RemoTI we can send RTI_ResetInd(). This message should just
-				// be discarded by anything but RNP, so should be safe.
-				
-				// We only need space for the header; there is no payload.
-				resetBuf = malloc(sizeof(*resetBuf) - sizeof(resetBuf->pData));
-				resetBuf->len = 0;
-				resetBuf->subSys = 0x4A;
-				resetBuf->cmdId = 0x0D;
-				NPI_LNX_IPC_SendData(resetBuf, -1);
-				free(resetBuf);
+//				// Since SPI does not indicate reset to host we should notify here
+//				// but there's no unified way of doing it for RNP and ZNP...
+//				// For RemoTI we can send RTI_ResetInd(). This message should just
+//				// be discarded by anything but RNP, so should be safe.
+//
+//				// We only need space for the header; there is no payload.
+//				resetBuf = malloc(sizeof(*resetBuf) - sizeof(resetBuf->pData));
+//				resetBuf->len = 0;
+//				resetBuf->subSys = 0x4A;
+//				resetBuf->cmdId = 0x0D;
+//				NPI_LNX_IPC_SendData(resetBuf, -1);
+//				free(resetBuf);
 			}
 #endif
 			break;
