@@ -53,14 +53,10 @@
 #include "hal_defs.h"
 #include "rti_lnx.h"
 
+#include "lprfLogging.h"
+
 #if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 #include "mso_common.h"
-#endif
-
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-#define debug_printf(fmt, ...)
 #endif
 
 #define msg_memcpy(src, dst, len)	memcpy(src, dst, len)
@@ -297,7 +293,7 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 			break;
 #endif //ZRC20_PROFILE
 		default:
-			printf("Unhandled API (0x%.2X)!\n", pMsg->cmdId);
+			LOG_DEBUG("Unhandled API (0x%.2X)!\n", pMsg->cmdId);
 			break;
 		}
 	}
