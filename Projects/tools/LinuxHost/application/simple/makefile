@@ -60,7 +60,8 @@ MAINAPP_OBJS= \
 	$(OBJS)/npi_rti.o \
 	$(OBJS)/npi_peripherals.o \
 	$(OBJS)/npi_attenuator.o \
-	$(OBJS)/npi_ipc_client.o
+	$(OBJS)/npi_ipc_client.o \
+	$(OBJS)/RTI_Testapp.o
 
 #by default, do not use the library.
 PROJ_OBJS=$(MAINAPP_OBJS)
@@ -160,6 +161,10 @@ $(OBJS)/npi_peripherals.o: ../../ipclib/client/npi_peripherals.c
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 
 $(OBJS)/npi_ipc_client.o: ../../ipclib/client/npi_ipc_client.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
+
+$(OBJS)/RTI_Testapp.o: ../common/RTI_Testapp.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 

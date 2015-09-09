@@ -286,7 +286,7 @@ uint8 appSendDataState;
 void appSendDataProcessKey (char* strIn);
 
 static void appReturnFromSubmodule(void);
-static void getAndPrintExtendedSoftwareVersion(uint8 timePrint);
+static int getAndPrintExtendedSoftwareVersion(uint8 timePrint);
 static void appSetCFGParamOnRNP(void);
 static void appGetCFGParamFromRNP(void);
 static void appInitConfigParam( char tgtSelection );
@@ -346,10 +346,14 @@ int SimpleAppInit(int mode, char threadId)
 
 	if (RTI_SUCCESS != RTI_ReadItem(RTI_CONST_ITEM_SW_VERSION, 1, value))
 	{
-		LOG_ERROR("Failed to read Software Version.\n");
+		uint8 readSoftwareVersionStatus = getAndPrintExtendedSoftwareVersion(FALSE);
+		if (RTI_SUCCESS != readSoftwareVersionStatus)
+		{
+			LOG_ERROR("Failed to read Software Version.\n");
 
-		LOG_ERROR(" Please check connection.\n");
-		exit(-1);
+			LOG_ERROR(" Please check connection.\n");
+			exit(-1);
+		}
 	}
 	else
 	{
@@ -361,6 +365,20 @@ int SimpleAppInit(int mode, char threadId)
 		}
 	}
 	LOG_INFO("[Initialization]-------------------- END SOFTWARE VERSION READING-------------------\n");
+
+	LOG_INFO("[Initialization]------------------- BEGIN IEEE ADDRESS READING------------------\n");
+	uint8 ieeeAddr[SADDR_EXT_LEN], strLen;
+	int j;
+	char tmpStr[128];
+	RTI_ReadItem(RTI_SA_ITEM_IEEE_ADDRESS, SADDR_EXT_LEN, ieeeAddr);
+	strLen = 0;
+	for (j = (SADDR_EXT_LEN - 2); j >= 0; j--)
+	{
+		snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, ":%.2X", (ieeeAddr[j] & 0x00FF));
+		strLen += 3;
+	}
+	LOG_INFO("[Initialization] Our IEEE is: %.2hX%s\n", (ieeeAddr[SADDR_EXT_LEN - 1] & 0x00FF), tmpStr);
+	LOG_INFO("[Initialization]-------------------- END IEEE ADDRESS READING-------------------\n");
 
 
 	// Setup default configuration
@@ -1305,24 +1323,29 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 										"N/A", rxFlags, rxLQI);
 			}
 
-			if ((pData[0] < 0) || (pData[0] > 5))
-				error = TRUE;
-			if ((pData[0] < 0) || (pData[0] > 255))
-				error = TRUE;
-			if (error)
+#ifdef RTI_TESTMODE
+			if (appState != AP_STATE_LATENCY_TEST_MODE)
+#endif //RTI_TESTMODE
 			{
-				strLen = 0;
-				for (i = 0; i < len; i++)
+				if ((pData[0] < 0) || (pData[0] > 5))
+					error = TRUE;
+				if ((pData[0] < 0) || (pData[0] > 255))
+					error = TRUE;
+				if (error)
 				{
-					snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "%.2X ", pData[i]);
-					strLen += 3;
-				}
-				LOG_INFO("Raw ZRC Data: %s (len = %d)\n", tmpStr, len);
-			} else
-				LOG_INFO("ZRC Data: Cmd: %d (%s), Key %d (%s) \n", pData[0],
-						Command_list[pData[0]] ? Command_list[pData[0]] : "?",
-								pData[1],
-								ZRC_Key_list[pData[1]] ? ZRC_Key_list[pData[1]] : "?");
+					strLen = 0;
+					for (i = 0; i < len; i++)
+					{
+						snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "%.2X ", pData[i]);
+						strLen += 3;
+					}
+					LOG_INFO("Raw ZRC Data: %s (len = %d)\n", tmpStr, len);
+				} else
+					LOG_INFO("ZRC Data: Cmd: %d (%s), Key %d (%s) \n", pData[0],
+							Command_list[pData[0]] ? Command_list[pData[0]] : "?",
+									pData[1],
+									ZRC_Key_list[pData[1]] ? ZRC_Key_list[pData[1]] : "?");
+			}
 		}
 		else
 		{
@@ -2596,11 +2619,13 @@ void appSendDataProcessKey (char* strIn)
 	}
 }
 
-static void getAndPrintExtendedSoftwareVersion(uint8 timePrint)
+static int getAndPrintExtendedSoftwareVersion(uint8 timePrint)
 {
+	int retVal = RTI_SUCCESS;
 	char tmpStrForTimePrint[1024];
 	swVerExtended_t swVerExtended = {0};
-	if (RTI_SUCCESS == RTI_ReadItem(RTI_CONST_ITEM_EXTENDED_SW_VERSION, 8, (uint8*)&swVerExtended))
+	retVal = RTI_ReadItem(RTI_CONST_ITEM_EXTENDED_SW_VERSION, 8, (uint8*)&swVerExtended);
+	if (RTI_SUCCESS == retVal)
 	{
 		sprintf(tmpStrForTimePrint, "[Initialization][INFO]- Extended Software Version:\n");
 		sprintf(tmpStrForTimePrint, "%s\tMajor:\t%d\n", tmpStrForTimePrint, swVerExtended.major);
@@ -2665,4 +2690,6 @@ static void getAndPrintExtendedSoftwareVersion(uint8 timePrint)
 	uint16 panId = 0;
 	RTI_ReadItemEx (RTI_PROFILE_RTI, RTI_SA_ITEM_PAN_ID, 2, (uint8*)&panId);
 	LOG_INFO("PAN ID:\t\t 0x%4X\n", panId);
+
+	return retVal;
 }
