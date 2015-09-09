@@ -64,6 +64,7 @@
 #include "npi_lnx_error.h"
 
 #include "lprfLogging.h"
+#include "rf4ceFirmware.h"
 
 // macros
 #define PAUSE() { fflush(stdout); while (getchar()!='\n'); }
@@ -166,16 +167,36 @@ int SBL_Init(const char *imagePath)
 		fread(sblImageBuf, 1, sblImageLen, imageFd);
 		fclose(imageFd);
 	}
-	else if ((int)(&_binary_bin_RNP_bin_size) > 0)
+	else if (rf4ceFirmware_Length > 1)
 	{
-		sblImageLen = (int)(&_binary_bin_RNP_bin_size);
-		sblImageBuf = (uint8 *)&_binary_bin_RNP_bin_start;
-		LOG_INFO("[SBL] RNP firmware image linked in: size %d, location %p\n", sblImageLen, sblImageBuf);
+		sblImageLen = (int)rf4ceFirmware_Length;
+		sblImageBuf = (uint8 *)rf4ceFirmware;
+		LOG_INFO("[SBL] RNP firmware image linked in from source %s: size %d, location %p\n", rf4ceFirmware_Source, sblImageLen, sblImageBuf);
 	}
 	else
 	{
 		LOG_WARN("[SBL] No path provided, and no image linked in\n");
 		retVal = NPI_LNX_FAILURE;
+	}
+
+	if (retVal == NPI_LNX_SUCCESS)
+	{
+		swVerExtended_t newRNPversion;
+		// Find version number in image we want to update to
+		if (sblImageLen < (96 * 1024))
+		{
+			isUSBdevice = FALSE;
+			// CC253xF64 or CC253xF96
+			memcpy((uint8 *)&newRNPversion, &sblImageBuf[SBL_RNP_VERSION_OFFSET], SBL_RNP_EXTENDED_VERSION_LEN);
+		}
+		else
+		{
+			isUSBdevice = TRUE;
+			// CC253xF128 or CC253xF256
+			memcpy((uint8 *)&newRNPversion, &sblImageBuf[SBL_RNP_CC2531_VERSION_OFFSET], SBL_RNP_EXTENDED_VERSION_LEN);
+		}
+		SoftwareVersionToString(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), &newRNPversion);
+		LOG_INFO("New image %s\n", tmpStrForTimePrint);
 	}
 
 	return retVal;
@@ -227,7 +248,6 @@ int SBL_CheckForUpdate(swVerExtended_t *RNPversion)
 			{
 				hardwareOkay = FALSE;
 				LOG_INFO("[SBL] [Update Check] Serial interface in new image does not match current interface. Cannot update.\n");
-				retVal = NPI_LNX_SUCCESS;
 			}
 		}
 		else
@@ -273,7 +293,6 @@ int SBL_CheckForUpdate(swVerExtended_t *RNPversion)
 			if (!versionHigher && !versionLower)
 			{
 				LOG_INFO("[SBL] [Update Check] Specified version matches current version.  Nothing to update.\n");
-				retVal = NPI_LNX_SUCCESS;
 			}
 			else
 			{
@@ -302,18 +321,19 @@ int SBL_CheckForUpdate(swVerExtended_t *RNPversion)
 					else
 #endif
 					{
-						// We can download new firmware!
-						LOG_INFO("[SBL] Updating firmware...\n");
-
-						retVal = SBL_Execute();
-						if (retVal != NPI_LNX_SUCCESS)
-						{
-							LOG_ERROR("[SBL] Firmware update failed!\n");
-						}
-						else
-						{
-							LOG_INFO("[SBL] Firmware update complete.\n");
-						}
+						retVal = NPI_LNX_SUCCESS;
+//						// We can download new firmware!
+//						LOG_INFO("[SBL] Updating firmware...\n");
+//
+//						retVal = SBL_Execute();
+//						if (retVal != NPI_LNX_SUCCESS)
+//						{
+//							LOG_ERROR("[SBL] Firmware update failed!\n");
+//						}
+//						else
+//						{
+//							LOG_INFO("[SBL] Firmware update complete.\n");
+//						}
 					}
 				}
 			}
@@ -418,7 +438,7 @@ int sbExec(uint8 *pBuf, int length)
 	uint8* srcAddr = pBuf;
 
 	// The destination address is shifted down by two, so address & length do not exceed uint16.
-	uint16 dstAddr = 0; // The embedded boot loader on RNP adds any necessary offset.
+	uint16 dstAddr = 0, readAddr = 0; // The embedded boot loader on RNP adds any necessary offset.
 	uint16 blkCnt;
 	uint32 blkTotal;
 
@@ -521,7 +541,10 @@ int sbExec(uint8 *pBuf, int length)
 
 		if (returnVal == SB_SUCCESS)
 		{
+			uint16 dstAddrCopy = dstAddr;
 			returnVal = BOOT_ReadReq(bufr, SB_RW_BUF_LEN, &dstAddr);
+			readAddr = dstAddr;
+			dstAddr = dstAddrCopy;
 
 #ifdef __DEBUG_SERIAL_BOOT_LOADER__
 			size_t strLen = 0;
@@ -575,7 +598,7 @@ int sbExec(uint8 *pBuf, int length)
 				}
 				else
 				{
-					LOG_WARN("[SBL] KO, compare failed (%d)\n", consecutiveFailedReadAttempts++);
+					LOG_WARN("[SBL] Compare failed (%d)\n", consecutiveFailedReadAttempts++);
 
 					if (consecutiveFailedReadAttempts > 10)
 					{
@@ -585,7 +608,7 @@ int sbExec(uint8 *pBuf, int length)
 			}
 			else
 			{
-				LOG_WARN("[SBL] KO, read failed (%d)\n", consecutiveFailedReadAttempts++);
+				LOG_WARN("[SBL] Read failed (%d) -- Returned address 0x%.4X\n", consecutiveFailedReadAttempts++, readAddr);
 
 				if (consecutiveFailedReadAttempts > 10)
 				{
@@ -596,12 +619,22 @@ int sbExec(uint8 *pBuf, int length)
 		}
 		else
 		{
-			LOG_ERROR("[SBL] KO, write failed (%d)\n", consecutiveFailedWriteAttempts++);
+			LOG_ERROR("[SBL] Write failed (%d)\n", consecutiveFailedWriteAttempts++);
 
 			if (consecutiveFailedWriteAttempts > 10)
 			{
 				break;
 			}
+		}
+
+		if ( (consecutiveFailedWriteAttempts > 0) || (consecutiveFailedReadAttempts > 0) )
+		{
+			// We experienced an error, move back to beginning of page
+			uint16 pageOffset = dstAddr % (SBL_FLASH_PAGE_SIZE / SB_DST_ADDR_DIV), previousBlock = blkTotal - blkCnt;
+			dstAddr -= pageOffset;
+			blkCnt += (pageOffset * SB_DST_ADDR_DIV) / SB_RW_BUF_LEN;
+			srcAddr -= pageOffset * SB_DST_ADDR_DIV;
+			LOG_WARN("[SBL] Moving back to page border after error, from block %d to %d\n", previousBlock, blkTotal - blkCnt);
 		}
 	}
 
