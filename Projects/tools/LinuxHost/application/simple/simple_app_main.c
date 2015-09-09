@@ -513,6 +513,7 @@ void DispMenuReady(void)
 	LOG_INFO("0- Config \n");
 	LOG_INFO("1- Pairing\n");
 	LOG_INFO("2- Unpairing\n");
+	LOG_INFO("5- Enter Latency Test Mode\n");
 	LOG_INFO("6- Physically Reset RNP (does not work for USB)\n");
 	LOG_INFO("7- Send Data\n");
 	LOG_INFO("8- Clear Pairing Table\n");

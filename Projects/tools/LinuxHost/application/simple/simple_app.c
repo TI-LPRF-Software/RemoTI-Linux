@@ -605,6 +605,13 @@ static void *appThreadFunc(void *ptr)
 				NPI_SendAsynchData( &pMsg );
 #endif
 			}
+#ifdef RTI_TESTMODE
+			else if (ch == '5')
+			{
+				appState = AP_STATE_LATENCY_TEST_MODE;
+				RTI_EnterTestMode();
+			}
+#endif //RTI_TESTMODE
 			else if (ch == '3')
 			{
 				// Prepare connection request
