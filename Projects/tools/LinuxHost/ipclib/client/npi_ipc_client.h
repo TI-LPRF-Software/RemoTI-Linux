@@ -210,6 +210,8 @@ extern "C"
   //
   #define RTIS_CMD_ID_RTI_READ_ITEM_EX           0x21
   #define RTIS_CMD_ID_RTI_WRITE_ITEM_EX          0x22
+  #define RTIS_CMD_ID_RTI_READ_INDEXED_ITEM_EX   0x23
+  #define RTIS_CMD_ID_RTI_WRITE_INDEXED_ITEM_EX  0x24
 
 #if (defined FEATURE_ZRC20) && (FEATURE_ZRC20 == TRUE)
   #define RTIS_CMD_ID_RTI_BIND_REQ                     0x30

@@ -95,6 +95,10 @@ extern "C"
 # define RCN_FEATURE_EXTRA_PAIR_INFO              TRUE
 #endif
 
+#ifndef RCN_FEATURE_ENHANCED_SECURITY
+# define RCN_FEATURE_ENHANCED_SECURITY			  TRUE
+#endif
+
 #if RCN_FEATURE_EXTRA_PAIR_INFO
 // Discrete bit definitions for rcnNwkPairingEntry_t.profileDiscs[].
 #define RCN_PROFILE_DISC_GT8                      0  // GT8 set would imply one or more >= 8.
@@ -503,6 +507,15 @@ enum
   BINDING_TYPE_PROXY
 };
 
+// Enhanced Security key table entry
+#if defined RCN_FEATURE_ENHANCED_SECURITY && RCN_FEATURE_ENHANCED_SECURITY == TRUE
+PACK_1 typedef struct
+{
+  uint8      valid;
+  uint8      key[RCN_SEC_KEY_LENGTH];
+} rcnNwkEnhancedSecurityEntry_t;
+#endif
+
 // Pairing table entry
 PACK_1 typedef struct ATTR_PACKED
 {
@@ -532,6 +545,10 @@ PACK_1 typedef struct ATTR_PACKED
   uint8 	 profileDiscs[RCN_PROFILE_DISCS_SIZE];
 #endif // RCN_FEATURE_EXTRA_PAIR_INFO
 
+// Enhanced Security key table entry
+#if defined RCN_FEATURE_ENHANCED_SECURITY && RCN_FEATURE_ENHANCED_SECURITY == TRUE
+  rcnNwkEnhancedSecurityEntry_t enhancedSecurityKey;
+#endif
 } rcnNwkPairingEntry_t;
 
 // Controller Node Information

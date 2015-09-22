@@ -448,7 +448,7 @@ rStatus_t RTI_ReadIndexedItem( uint8 profileId, uint8 itemId, uint8 index, uint8
   // prep Read Item request
   // Note: no need to send pValue over the NPI
   pMsg.subSys   = RPC_SYS_RCAF;
-  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_ITEM_EX;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_INDEXED_ITEM_EX;
   pMsg.len      = 4;
   pMsg.pData[0] = profileId;
   pMsg.pData[1] = itemId;
@@ -615,7 +615,7 @@ rStatus_t RTI_WriteIndexedItem( uint8 profileId, uint8 itemId, uint8 index, uint
 
   // prep Write Item request
   pMsg.subSys   = RPC_SYS_RCAF;
-  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_ITEM_EX;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_INDEXED_ITEM_EX;
   pMsg.len      = 4+len;
   pMsg.pData[0] = profileId;
   pMsg.pData[1] = itemId;

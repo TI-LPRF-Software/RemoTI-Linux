@@ -131,9 +131,12 @@ extern "C"
 /*
  * Action Bank "class" definitions - these define bits 5-7 of the action bank
  */
-#define ZRC_ACTION_BANK_CLASS_HDMI_CEC  0
-#define ZRC_ACTION_BANK_CLASS_HID       1
-#define ZRC_ACTION_BANK_CLASS_HA        4
+#define ZRC_ACTION_BANK_CLASS_HDMI_CEC                  (0 << 5)
+#define ZRC_ACTION_BANK_CLASS_HID                       (1 << 5)
+#define ZRC_ACTION_BANK_CLASS_HA                        (4 << 5)
+#define ZRC_ACTION_BANK_CLASS_VENDOR_SPECIFIC_SOURCE    (5 << 5)
+#define ZRC_ACTION_BANK_CLASS_VENDOR_SPECIFIC_RECIPIENT (6 << 5)
+#define ZRC_ACTION_BANK_CLASS_VENDOR_SPECIFIC_EXPLICIT  (7 << 5)
 
 /*
  * HA Action Bank defines
@@ -183,6 +186,16 @@ typedef struct
   uint8 actionCode;
   uint8 actionVendorPayload[];
 } zrcActionRecord_t;
+
+typedef struct
+{
+  uint8 control;
+  uint8 actionPayloadLen;
+  uint8 actionBank;
+  uint8 actionCode;
+  uint16 vendorId;
+  uint8 actionVendorPayload[];
+} zrcVendorActionRecord_t;
 
 // aplMappableActions element
 typedef struct
