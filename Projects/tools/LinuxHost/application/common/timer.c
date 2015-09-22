@@ -239,7 +239,7 @@ static void *timerThreadFunc(void *ptr)
 					}
 					else
 					{
-						diffPrev = ((curMonotonicTime.tv_nsec + 1000000) - prevMonotonicTime.tv_nsec) / 1000; // Want microseconds
+						diffPrev = ((curMonotonicTime.tv_nsec + 1000000000) - prevMonotonicTime.tv_nsec) / 1000; // Want microseconds
 						t = 1;
 					}
 
