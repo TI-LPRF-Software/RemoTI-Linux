@@ -630,8 +630,9 @@ static void *npi_rx_entry(void *ptr)
 			else if (readcount < 0)
 			{
 				// Ignore error EAGAIN; Resource temporarily unavailable.
+				// EINTR; System Call interrupted, try again.
 				// Try again if this was the first attempt after the conditional signal npi_rx_cond.
-				if (errno != EAGAIN)
+				if ((errno != EAGAIN) && (errno != EINTR))
 				{
 					perror("read npi_fd (1)");
 					npi_ipc_errno = NPI_LNX_ERROR_UART_RX_THREAD;
@@ -811,7 +812,7 @@ static void npi_closetty(void)
  */
 static int npi_write(const void *buf, size_t count)
 {
-	int result;
+	int result = -1;
 
 #ifdef __DEBUG_TIME__
 	if (__DEBUG_TIME_ACTIVE == TRUE)
@@ -823,7 +824,11 @@ static int npi_write(const void *buf, size_t count)
 #endif //__DEBUG_TIME__
 
 	pthread_mutex_lock(&npi_write_mutex);
-	result = write(npi_fd, buf, count);
+	do
+	{
+		result = write(npi_fd, buf, count);
+	}
+	while ((errno == EINTR) && (result == -1));
 	pthread_mutex_unlock(&npi_write_mutex);
 
 #ifdef __DEBUG_TIME__
