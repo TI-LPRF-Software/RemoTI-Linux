@@ -27,7 +27,7 @@ GPROF=
 #include path
 INCLUDES= \
 	-I ../common \
-	-I ../$(app)Comcast \
+	-I ../$(app) \
 	-I ../../ipclib/client \
 	-I ../../ipclib/client/gdp \
 	-I ../../ipclib/client/zrc \

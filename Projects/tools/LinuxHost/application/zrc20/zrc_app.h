@@ -198,6 +198,7 @@ typedef struct ATTR_PACKED
 {
 	uint8 destIndex;
 	uint16 vendorId;
+	uint8 profileId;
 	uint8 txOptions;
 	uint8 msgLen;
 	uint8 replyBuf[256];
