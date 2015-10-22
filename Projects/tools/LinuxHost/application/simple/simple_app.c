@@ -58,6 +58,8 @@
 #include "simple_app_main.h"
 #include "simple_app.h"
 
+#include "liveGraph.h"
+
 #ifdef RTI_TESTMODE
 #include "RTI_Testapp.h"
 #endif //RTI_TESTMODE
@@ -88,6 +90,11 @@ uint8 destIdx;
 char ch;
 // string from console
 char str[128];
+
+// Remember whether FA has been disabled
+static uint8 faEnable = TRUE; // Enabled by default
+extern int connectedPort;
+static uint8 currentChannel;
 
 // RNP in Standby
 uint8 appRNPpowerState = SIMPLE_APP_RNP_POWER_STATE_ACTIVE;
@@ -268,6 +275,8 @@ uint8 appCFGstate;
 static uint8 toggleTimerPrintOnServer = FALSE;
 static uint8 toggleBigDebugPrintOnServer = FALSE;
 
+// LiveGraph state
+static uint8 liveGraphRunning = FALSE;
 
 // Physical Test Mode States
 enum {
@@ -311,7 +320,7 @@ int SimpleAppInit(int mode, char threadId)
 	pMsg.subSys = RPC_SYS_SRV_CTRL | RPC_CMD_SREQ;
 	pMsg.cmdId = NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT_REQ;
 
-	if ( (mode == 2) || (mode == 3))
+	if ( (((mode & 0xF0) >> 4) == 2) || (((mode & 0xF0) >> 4) == 3) )
 	{
 		toggleBigDebugPrintOnServer = TRUE;
 	}
@@ -327,7 +336,7 @@ int SimpleAppInit(int mode, char threadId)
 
 	pMsg.cmdId = NPI_LNX_CMD_ID_CTRL_TIME_PRINT_REQ;
 
-	if ( (mode == 1) || (mode == 3))
+	if ( (((mode & 0xF0) >> 4) == 1) || (((mode & 0xF0) >> 4) == 3) )
 	{
 		toggleTimerPrintOnServer = TRUE;
 	}
@@ -380,6 +389,28 @@ int SimpleAppInit(int mode, char threadId)
 	LOG_INFO("[Initialization] Our IEEE is: %.2hX%s\n", (ieeeAddr[SADDR_EXT_LEN - 1] & 0x00FF), tmpStr);
 	LOG_INFO("[Initialization]-------------------- END IEEE ADDRESS READING-------------------\n");
 
+	// Make sure FA is enabled by default
+	faEnable = TRUE;
+	currentChannel = 15;
+	// if a channel is not request
+	if (mode & 0x0F)
+	{
+		currentChannel = (mode & 0x0F) + 11;
+		if ( (currentChannel == 11) || (currentChannel == 15) ||
+								(currentChannel == 20) ||
+								(currentChannel == 25) || (currentChannel == 26) )
+		{
+			// Valid currentChannel requested. Lock this currentChannel
+			faEnable = FALSE;
+		}
+	}
+	uint8 status = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
+	LOG_INFO("Frequency Agility %s (%s)\n", (faEnable == TRUE) ? "enabled" : "disabled", rtiStatus_list[status]);
+	if (faEnable == FALSE)
+	{
+		status = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_CURRENT_CHANNEL, 1, (uint8 *)&currentChannel);
+		LOG_INFO("Set channel %d (%s)\n", currentChannel, rtiStatus_list[status]);
+	}
 
 	// Setup default configuration
 	appInitConfigParam('t');
@@ -564,7 +595,7 @@ static void *appThreadFunc(void *ptr)
 					(ch == 'l'))
 			{
 				// Set channel
-				uint8 channel, faEnable = FALSE, status = RTI_SUCCESS;
+				uint8 status = RTI_SUCCESS;
 				if (ch == 'l')
 				{
 					faEnable = TRUE;
@@ -575,22 +606,22 @@ static void *appThreadFunc(void *ptr)
 				{
 					if (ch == 'h')
 					{
-						channel = 15;
+						currentChannel = 15;
 					}
 					else if (ch == 'j')
 					{
-						channel = 20;
+						currentChannel = 20;
 					}
 					else if (ch == 'k')
 					{
-						channel = 25;
+						currentChannel = 25;
 					}
 					status = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
 					LOG_INFO("Frequency Agility disabled (%s)\n", rtiStatus_list[status]);
 					if (status == RTI_SUCCESS)
 					{
-						RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_CURRENT_CHANNEL, 1, (uint8 *)&channel);
-						LOG_INFO("Channel set to %d\n", channel);
+						RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_CURRENT_CHANNEL, 1, (uint8 *)&currentChannel);
+						LOG_INFO("Channel set to %d\n", currentChannel);
 					}
 				}
 			}
@@ -1280,7 +1311,8 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 		RTI_EnableSleepReq();
 	}
 
-	if ( appState != AP_STATE_SIMPLE_TEST_MODE)
+	if ( (appState != AP_STATE_SIMPLE_TEST_MODE) &&
+		 (appState != AP_STATE_INIT) )
 	{
 		//check Basic Range to avoid Seg Fault
 		if ((profileId < 0) || (profileId > RTI_PROFILE_ID_STD_END))
@@ -1345,6 +1377,34 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 							Command_list[pData[0]] ? Command_list[pData[0]] : "?",
 									pData[1],
 									ZRC_Key_list[pData[1]] ? ZRC_Key_list[pData[1]] : "?");
+			}
+		}
+		else if (profileId == RTI_PROFILE_RTI)
+		{
+			if (len == 100)
+			{
+				// Process RF channel data
+				int numOfChannels = 1;
+				// Convert samples to RSSI in dBm
+				int i = 0;
+				for (i = 0; i < len; i++)
+				{
+					pData[i] = ((char)pData[i] < -97) ? (unsigned char)-97 : pData[i];
+				}
+				if (liveGraphRunning == FALSE)
+				{
+					setGraphSettings(-100,INT_MAX,INT_MIN,INT_MAX);
+					setStartupSettings("test.dat", 500);
+					LOG_INFO("Starting LiveGraph\n");
+					runLiveGraph(numOfChannels, connectedPort, currentChannel, 1000);
+					liveGraphRunning = TRUE;
+					LOG_INFO("Started LiveGraph\n");
+					writeDataToLiveGraph(sizeof(char), numOfChannels, len/numOfChannels, (void *)pData);
+				}
+				else
+				{
+					writeDataToLiveGraph(sizeof(char), numOfChannels, len/numOfChannels, (void *)pData);
+				}
 			}
 		}
 		else

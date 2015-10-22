@@ -156,7 +156,8 @@ uint8 destIdx;
 struct pollfd fds[1];
 
 const char *device = "";
-const char *debugOption = "";
+int connectedPort;
+static uint8 mode = 0;
 
 /* Global variable definitions. Declared as externs in common_app.h */
 sem_t eventSem;
@@ -172,6 +173,7 @@ static void print_usage(const char *prog) {
 	puts(
 			"  -D --device      device to use (default /dev/spidev4.0). For Socket use format IPaddress:port\n"
 			"  -d --debugOption debugAll: both time and big, debugTime: only timestamps, debugBig: verbose debug\n"
+			"  -l --lockChannel Disable FA and lock channel by default\n"
 		);
 	exit(1);
 }
@@ -184,22 +186,45 @@ static void parse_opts(int argc, char *argv[])
 		{
 			{ "device", 1, 0, 'D' },
 			{ "debug", 1, 0, 'd' },
+			{ "lockChannel", 1, 0, 'l' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "D:d:", lopts, NULL);
+		c = getopt_long(argc, argv, "D:d:l:", lopts, NULL);
 
 		if (c == -1)
 			break;
 
+		uint8 channel;
 		switch (c)
 		{
 		case 'D':
 			device = optarg;
 			break;
 		case 'd':
-			debugOption = optarg;
+			if (strcmp(optarg, "debugAll") == 0)
+			{
+				LOG_INFO("!!! 1\n");
+				mode |= (3 << 4);
+			}
+			else if (strcmp(optarg,"debugBig") == 0)
+			{
+				LOG_INFO("!!! 2\n");
+				mode |= (2 << 4);
+			}
+			else if (strcmp(optarg,"debugTime") == 0)
+			{
+				LOG_INFO("!!! 3\n");
+				mode |= (1 << 4);
+			}
+			break;
+		case 'l':
+			channel = strtol(optarg, NULL, 10);
+			if ((channel > 10) && (channel < 27))
+			{
+				mode |= (channel - 11); // Move channel to 0-15 range
+			}
 			break;
 		default:
 			print_usage(argv[0]);
@@ -236,24 +261,13 @@ int main(int argc, char **argv)
 		print_usage(argv[0]);
 		return ret;
 	}
+	// Get port from device
+	char *pDevice = (char *)device;
+	char *tmpStr = strtok(pDevice, ":");
+	tmpStr = strtok(NULL, ":");
+	connectedPort = strtol(tmpStr, NULL, 10);
 
 	// Toggle Timer Print on Server state variable
-	uint8 mode = 0;
-	if (strcmp(debugOption, "debugAll") == 0)
-	{
-		LOG_INFO("!!! 1\n");
-		mode = 3;
-	}
-	else if (strcmp(debugOption,"debugBig") == 0)
-	{
-		LOG_INFO("!!! 2\n");
-		mode = 2;
-	}
-	else if (strcmp(debugOption,"debugTime") == 0)
-	{
-		LOG_INFO("!!! 3\n");
-		mode = 1;
-	}
 	//Start RTI thread, management of RTI command in separate thread.
 	if ((ret = SimpleAppInit(mode, SIMPLE_App_threadId)) != 0)
 	{
