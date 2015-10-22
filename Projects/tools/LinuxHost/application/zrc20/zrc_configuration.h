@@ -123,6 +123,7 @@ void zrcCfgSetTarget(uint8 isTarget);
 uint8 zrcCfgIsTarget(void);
 
 uint8 zrcCfgGetIdentificationClientCapabilities();
+uint8 zrcCfgProcessGDPPushAttributesRequest(uint8 srcIndex, uint8 len, uint8 *pData);
 
 void zrcCfgUpdateLastKeypress(uint8 index, uint8 lastCommand, unsigned long timeStamp, uint8 rxLQI);
 uint8 zrcCfgGetLastKeypressCommand(uint8 index);

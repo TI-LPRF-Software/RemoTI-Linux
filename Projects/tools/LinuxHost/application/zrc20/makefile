@@ -27,7 +27,7 @@ GPROF=
 #include path
 INCLUDES= \
 	-I ../common \
-	-I ../$(app)Comcast \
+	-I ../$(app) \
 	-I ../../ipclib/client \
 	-I ../../ipclib/client/gdp \
 	-I ../../ipclib/client/zrc \
@@ -146,10 +146,6 @@ $(OBJS)/$(app)_app.o: $(app)_app.c
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 	
 $(OBJS)/$(app)_voice.o: $(app)_voice.c
-	@echo "Compiling" $< "..."
-	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
-	
-$(OBJS)/$(app)_deviceImageUpdate.o: $(app)_deviceImageUpdate.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 	

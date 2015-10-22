@@ -167,6 +167,8 @@ uint8 zrcAppSendDataState;
  */
 static void zrcAppProcessZRC20ProfileData(uint8 srcIndex, uint8 len, uint8 *pData, uint8 rxLQI);
 static void zrcAppProcessValidationCommand(uint8 srcIndex, uint8 actionCode);
+static void zrcAppProcessGDPProfileData(uint8 srcIndex, uint8 len, uint8 *pData, uint8 rxLQI);
+static void zrcAppProcessGDPPushAttributes(uint8 srcIndex, uint8 len, uint8 *pData);
 static void zrcAppInitStack();
 static char * zrcGetActionTypeStringBuf( uint8 type );
 void zrcBuildIdentifyClientNotificationCmd( uint8 *pLen, uint8 **ppBuf );
@@ -953,9 +955,9 @@ static void zrcAppProcessEvents(uint32 events)
 
 	if (events & ZRC_APP_EVT_SEND_SET_GET_ATTR_RESPONSE)
 	{
-		LOG_INFO("Sending Get/Set Attribute Response Command: %d\n", responseBuf.destIndex);
+		LOG_INFO("Sending Get/Set Attribute Response Command: %d (ProfileID: 0x%.4X, len: %d)\n", responseBuf.destIndex, responseBuf.profileId, responseBuf.msgLen);
 		zrcAppState = AP_STATE_NDATA;
-		RTI_SendDataReq( responseBuf.destIndex, RTI_PROFILE_ZRC20, responseBuf.vendorId, responseBuf.txOptions, responseBuf.msgLen, responseBuf.replyBuf );
+		RTI_SendDataReq( responseBuf.destIndex, responseBuf.profileId, responseBuf.vendorId, responseBuf.txOptions, responseBuf.msgLen, responseBuf.replyBuf );
 		// Prepare to clear event
 		procEvents |= ZRC_APP_EVT_SEND_SET_GET_ATTR_RESPONSE;
 	}
@@ -1265,7 +1267,11 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 		}
 	}
 
-	if ( (RTI_PROFILE_ZRC20 == profileId) && (error != TRUE) )
+	if ( (RTI_PROFILE_GDP == profileId) && (error != TRUE) )
+	{
+		zrcAppProcessGDPProfileData(srcIndex, len, pData, rxLQI);
+	}
+	else if ( (RTI_PROFILE_ZRC20 == profileId) && (error != TRUE) )
 	{
 		zrcAppProcessZRC20ProfileData(srcIndex, len, pData, rxLQI);
 	}
@@ -1528,6 +1534,74 @@ static void zrcAppProcessZRC20ProfileData(uint8 srcIndex, uint8 len, uint8 *pDat
 		LOG_WARN("[ZRC 2.0][WARNING] Unknown ZRC 2.0 command received = 0x%.2X -- data = 0x%.2X\n", pData[0], pData[4] );
 		break;
 	}
+}
+
+/**************************************************************************************************
+ *
+ * @fn      zrcAppProcessGDPProfileData
+ *
+ * @brief   Local function to handle GDP Profile data
+ *
+ * @param   srcIndex	- pairing table index of Controller sending the command
+ * 			len			- length of incoming data
+ * 			pData		- pointer to data sent by Controller
+ * 			rxLQI		- received link quality
+ *
+ * @return  void
+ */
+static void zrcAppProcessGDPProfileData(uint8 srcIndex, uint8 len, uint8 *pData, uint8 rxLQI)
+{
+	uint8 i;
+	char tmpStr[512];
+	size_t strLen = 0;
+	for (i = 0; i < len; i++)
+	{
+		snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "%.2X ", pData[i]);
+		strLen += 3;
+	}
+	LOG_DEBUG("[GDP] Raw Data: %s (len = %d)\n", tmpStr, len);
+	LOG_DEBUG("[GDP] ZRC Application Validation state: %d \n", zrcAppValidationState);
+
+	uint8 cmd = ((*pData) & GDP_FRM_CNTRL_CMD_CODE_MASK);
+	switch (cmd)
+	{
+	case GDP_CMD_ID_PUSH_ATTRIBUTES:
+		{
+			zrcAppProcessGDPPushAttributes(srcIndex, len, pData);
+			break;
+		}
+	default:
+		LOG_WARN("[GDP] Unknown GDP command received = 0x%.2X -- data = 0x%.2X\n", pData[0], pData[4] );
+		break;
+	}
+}
+
+/**************************************************************************************************
+ *
+ * @fn      zrcAppProcessGDPPushAttributes
+ *
+ * @brief   Local function to handle received GDP Push Attributes command
+ *
+ * @param   srcIndex	- pairing table index of node sending the command
+ * 			len			- length of incoming data
+ * 			pData		- pointer to data sent by node
+ *
+ * @return  void
+ */
+static void zrcAppProcessGDPPushAttributes(uint8 srcIndex, uint8 len, uint8 *pData)
+{
+	gdpGenericRspCmd_t *pRsp = (gdpGenericRspCmd_t *)responseBuf.replyBuf;
+	responseBuf.msgLen = sizeof(gdpGenericRspCmd_t);
+	responseBuf.destIndex = srcIndex;
+	responseBuf.profileId = RTI_PROFILE_GDP;
+	responseBuf.txOptions = RTI_TX_OPTION_ACKNOWLEDGED | RTI_TX_OPTION_SECURITY;
+
+	// - Save Attribute into the RIB inside the RNP.
+	pRsp->rspCode = zrcCfgProcessGDPPushAttributesRequest(srcIndex, len, pData);
+
+	// - Build the Response for later transmission
+	pRsp->hdr = GDP_FRM_CNTRL_GDP_CMD_MASK | GDP_CMD_ID_GENERIC_RESPONSE;
+	timer_start_timerEx(ZRC_App_threadId, ZRC_APP_EVT_SEND_SET_GET_ATTR_RESPONSE, ZRC_APP_SEND_SET_ATTR_RESPONSE_WAIT_TIME);
 }
 
 /**************************************************************************************************

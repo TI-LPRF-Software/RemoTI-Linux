@@ -152,6 +152,20 @@ static uint8 zrcCfgHidConsumerPageSectionAActionCodesSupported[] =
 //  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 //};
 
+static uint8 zrcCfgKeyMappingSelect[] =
+{
+  // mapping flags
+  ZRC_FLAGS_RF_SPECIFIED_MASK,
+
+  // RF descriptor
+  0x41, // Atomic Action with 1 transmission
+  RTI_TX_OPTION_ACKNOWLEDGED | RTI_TX_OPTION_SECURITY,
+  3, // action data length
+  0x00,
+  0x00,
+  0x42
+};
+
 static uint8 zrcCfgKeyMappingUp[] =
 {
   // mapping flags
@@ -225,6 +239,7 @@ static uint8 zrcCfgActionMappingIndexToCmdTable[] =
 {
   0,
   0,
+  0,
   0
 };
 
@@ -234,6 +249,7 @@ static uint8 zrcCfgActionMappingIndexToCmdTable[] =
  */
 static uint8 zrcCfgIdentificationClientCapabilities;
 static gdpPollConfigAttr_t zrcCfgPollConfiguration;
+static bool zrcCfgMappableActionsSelect = FALSE;
 static bool zrcCfgMappableActionsReceivedUp = FALSE;
 static bool zrcCfgMappableActionsReceivedDown = FALSE;
 static bool zrcCfgMappableActionsReceivedLeft = FALSE;
@@ -885,6 +901,18 @@ void RTI_GetAttributeReq( uint8 pairIndex, uint8 attrId, uint16 entryId )
 	    {
 	      switch (zrcCfgActionMappingIndexToCmdTable[entryId])
 	      {
+	        case RTI_CERC_SELECT:
+	        {
+	          if (zrcCfgMappableActionsSelect == TRUE)
+	          {
+	            RTI_GetAttributeCnf( pairIndex, RTI_SUCCESS, sizeof( zrcCfgKeyMappingSelect ), zrcCfgKeyMappingSelect );
+	          }
+	          else
+	          {
+	            RTI_GetAttributeCnf( pairIndex, RTI_ERROR_INVALID_PARAMETER, 0, NULL );
+	          }
+	          break;
+	        }
 	        case RTI_CERC_UP:
 	        {
 	          if (zrcCfgMappableActionsReceivedUp == TRUE)
@@ -995,7 +1023,12 @@ void RTI_SetAttributeReq( uint8 pairIndex, gdpAttrHeader_t *pAttrHdr, uint8 *pAt
 	      LOG_INFO("[Configuration] aplMappableActions received\n");
 	      if ( (pAttrData[1] == (ZRC_ACTION_BANK_CLASS_HDMI_CEC | ZRC_ACTION_BANK_HDMI_CEC)) )
 	      {
-	        if (pAttrData[2] == RTI_CERC_UP)
+	    	if (pAttrData[2] == RTI_CERC_SELECT)
+	    	{
+	    	  zrcCfgMappableActionsSelect = TRUE;
+	    	  zrcCfgActionMappingIndexToCmdTable[pAttrHdr->entryIdLsb] = RTI_CERC_SELECT;
+	    	}
+	        else if (pAttrData[2] == RTI_CERC_UP)
 	        {
 	          zrcCfgMappableActionsReceivedUp = TRUE;
 	          zrcCfgActionMappingIndexToCmdTable[pAttrHdr->entryIdLsb] = RTI_CERC_UP;
@@ -1121,6 +1154,54 @@ void RTI_SetAttributeReq( uint8 pairIndex, gdpAttrHeader_t *pAttrHdr, uint8 *pAt
 	      break;
 	    }
 	  }
+}
+
+uint8 zrcCfgProcessGDPPushAttributesRequest(uint8 srcIndex, uint8 len, uint8 *pData)
+{
+	gdpPushAttrCmd_t *pReq = (gdpPushAttrCmd_t *)pData;
+	uint8 retStatus = GDP_ATTR_RSP_UNSUPPORTED;
+	uint8 *pRec = pReq->attrRecordList;
+	uint8 *pRecEnd = pData + len;
+	uint8 attrId, attrLen;
+//	uint16 attrIndex;
+
+	// Walk through the attribute list
+	while (pRec < pRecEnd)
+	{
+		attrId = *pRec++;
+		if (GDP_ATTR_IS_ATTR_ARRAYED(attrId))
+		{
+			// Get index for indexed attributes
+//			attrIndex = BUILD_UINT16(pRec[0], pRec[1]);
+			pRec += 2;
+		}
+		attrLen = *pRec++;
+		// Process attribute
+		switch (attrId)
+		{
+		case aplPowerStatus:
+			LOG_INFO("[%d] Power Status received: %d\n", srcIndex, *pRec & GDP_POWER_STATUS_POWER_METER_MASK);
+			if (*pRec & GDP_POWER_STATUS_CRITICAL_MASK)
+			{
+				LOG_WARN("[%d] Power level is critical!\n", srcIndex);
+			}
+			if (*pRec & GDP_POWER_STATUS_IMDENDING_DOOM_MASK)
+			{
+				LOG_ERROR("[%d] Device pending doom!\n", srcIndex);
+			}
+			if (*pRec & GDP_POWER_STATUS_CHARGING_MASK)
+			{
+				LOG_INFO("[%d] Device is currently charging!\n", srcIndex);
+			}
+			retStatus = GDP_ATTR_RSP_SUCCESS;
+			break;
+		default:
+			break;
+		}
+		pRec += attrLen;
+	}
+
+	return retStatus;
 }
 
 void zrcCfgPostPairingProcessing(uint8 srcIndex)
