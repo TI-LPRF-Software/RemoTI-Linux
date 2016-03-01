@@ -1,0 +1,7 @@
+#!/bin/sh -
+
+DATE=$(date +%Y-%m-%d)
+
+echo $DATE
+
+/etc/init.d/npi_server /usr/share/LPRF/RemoTI_RNP_SPI_BBB.cfg > /home/root/logs/npi_server_$DATE.log 2>&1

@@ -1,0 +1,9 @@
+[Unit]
+Description=Configure IOs and devices for NPI Server
+
+[Service]
+Type=oneshot
+ExecStart=/etc/init.d/npi_server.conf
+
+[Install]
+WantedBy=multi-user.target
