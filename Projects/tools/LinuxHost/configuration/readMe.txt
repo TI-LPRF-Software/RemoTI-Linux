@@ -16,13 +16,25 @@ serial interface. Two configuration files exist for UART on
 different pins. Two configuration files exist for each of
 SPI and I2C. The difference is the addition of enabling
 debug interface access through GPIOs.
-The BeagleBone Black version supported uses Kernel 3.8
-with DeviceTree. Overlays exist in the folder devicetree
-for each of the configurations. In addition, if the system
-use upstart there is a upstart script in the upstart folder.
-If upstart is not used one must manually execute the 
-commands the upstart configuration file contains. This includes
-enabling device tree overlays, as well as exporting GPIOs.
+
+Overlays exist in the folder devicetree for each of the configurations.
+
+If the system uses systemd there are two scripts for systemd. The following
+steps explain how to enable the startup scripts
+1. Copy the NPI Server executable to /etc/init.d/npi_server, make sure
+root has execution rights.
+2. Copy systemd/npi_server.conf    to /etc/init.d/npi_server.conf
+3. Copy systemd/npi_server.start   to /etc/init.d/npi_server.start
+4. Copy systemd/npi_config.service to /lib/systemd/system/npi_config.service
+5. Copy systemd/npi_server.service to /lib/systemd/system/npi_server.service
+6. Enable both services
+	root@beaglebone:~$ systemctl enable npi_config.service
+	root@beaglebone:~$ systemctl enable npi_server.service
+7. Have changes take effect via a reboot
+	root@beaglebone:~$ reboot
+
+If the system uses Upstart there is an Upstart script in the upstart folder.
+This includes enabling device tree overlays, as well as exporting GPIOs.
 To learn more: 
 	upstart.ubuntu.com/wiki
 	derekmolloy.ie/beaglebone
