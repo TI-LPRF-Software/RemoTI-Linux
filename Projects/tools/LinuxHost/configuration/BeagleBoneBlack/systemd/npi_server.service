@@ -1,0 +1,10 @@
+[Unit]
+Description=Start NPI Server
+After=npi_config.service
+
+[Service]
+Type=idle
+ExecStart=/etc/init.d/npi_server.start
+
+[Install]
+WantedBy=multi-user.target
