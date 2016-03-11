@@ -78,12 +78,24 @@ const char * const rtiStatus_list[256] =
         NAME_ELEMENT(RTI_ERROR_FAILED_TO_DISCOVER),                     //0x21
         NAME_ELEMENT(RTI_ERROR_FAILED_TO_PAIR),                         //0x22
         NAME_ELEMENT(RTI_ERROR_ALLOW_PAIRING_TIMEOUT),                  //0x23
-        NAME_ELEMENT(RTI_ERROR_FAILED_TO_CONFIGURE_ZRC),                //0x41
-        NAME_ELEMENT(RTI_ERROR_FAILED_TO_CONFIGURE_ZID),                //0x42
+        NAME_ELEMENT(RTI_ERROR_FAILED_TO_CONFIGURE_ZRC_OLD),            //0x41
+        NAME_ELEMENT(RTI_ERROR_FAILED_TO_CONFIGURE_ZID_OLD),            //0x42
         NAME_ELEMENT(RTI_ERROR_FAILED_TO_CONFIGURE_Z3D),                //0x43
         NAME_ELEMENT(RTI_ERROR_FAILED_TO_CONFIGURE_INV_MASK),           //(0x40)
   // reserve failure IDs 0x44-0x4A for future profiles
         NAME_ELEMENT(RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT),                //0xFF
+        NAME_ELEMENT(RTI_ERROR_FAILED_TO_CONFIGURE_ZRC),                //0x50
+        NAME_ELEMENT(RTI_ERROR_FAILED_TO_CONFIGURE_ZID),                //0x51
+        NAME_ELEMENT(RTI_ERROR_FAILED_TO_CONFIGURE_ZRC20),              //0x52
+        NAME_ELEMENT(RTI_ERROR_FAILED_TO_CONFIGURE_INV_MASK),           //(0x50)
+        NAME_ELEMENT(RTI_ERROR_VALIDATION_FAILURE),                     //0x53
+        NAME_ELEMENT(RTI_ERROR_BINDING_TIMEOUT),                        //0x54
+        NAME_ELEMENT(RTI_ERROR_NO_POLLING_CONFIG),                      //0x55
+        NAME_ELEMENT(RTI_ERROR_ENHANCED_SECURITY_TIMEOUT),              //0x56
+        NAME_ELEMENT(RTI_ERROR_NO_PROXY_DEVICE),                        //0x57
+        NAME_ELEMENT(RTI_ERROR_ENHANCED_SECURITY_NOT_SUPPORTED),        //0x58
+        NAME_ELEMENT(RTI_ERROR_ATTRIBUTE_REQUEST_BUSY),                 //0x59
+		NAME_ELEMENT(RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT),                //0xFF
 };
 
 const char * const rtiProfileId_list[RTI_PROFILE_RTI + 1] =

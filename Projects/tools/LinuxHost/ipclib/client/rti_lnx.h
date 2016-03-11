@@ -5,7 +5,7 @@
 
   Description:    This file contains the the RemoTI (RTI) API.
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -221,11 +221,22 @@ extern "C"
 #define RTI_ERROR_FAILED_TO_DISCOVER                     0x21
 #define RTI_ERROR_FAILED_TO_PAIR                         0x22
 #define RTI_ERROR_ALLOW_PAIRING_TIMEOUT                  0x23
-#define RTI_ERROR_FAILED_TO_CONFIGURE_ZRC                0x41
-#define RTI_ERROR_FAILED_TO_CONFIGURE_ZID                0x42
+#define RTI_ERROR_FAILED_TO_CONFIGURE_ZRC_OLD            0x41
+#define RTI_ERROR_FAILED_TO_CONFIGURE_ZID_OLD            0x42
 #define RTI_ERROR_FAILED_TO_CONFIGURE_Z3D                0x43
-#define RTI_ERROR_FAILED_TO_CONFIGURE_INV_MASK           (0x40)
+#define RTI_ERROR_FAILED_TO_CONFIGURE_INV_MASK_OLD       (0x40)
   // reserve failure IDs 0x44-0x4A for future profiles
+#define RTI_ERROR_FAILED_TO_CONFIGURE_ZRC                0x50
+#define RTI_ERROR_FAILED_TO_CONFIGURE_ZID                0x51
+#define RTI_ERROR_FAILED_TO_CONFIGURE_ZRC20              0x52
+#define RTI_ERROR_FAILED_TO_CONFIGURE_INV_MASK           (0x50)
+#define RTI_ERROR_VALIDATION_FAILURE                     0x53
+#define RTI_ERROR_BINDING_TIMEOUT                        0x54
+#define RTI_ERROR_NO_POLLING_CONFIG                      0x55
+#define RTI_ERROR_ENHANCED_SECURITY_TIMEOUT              0x56
+#define RTI_ERROR_NO_PROXY_DEVICE                        0x57
+#define RTI_ERROR_ENHANCED_SECURITY_NOT_SUPPORTED        0x58
+#define RTI_ERROR_ATTRIBUTE_REQUEST_BUSY                 0x59
 #define RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT                0xFF
 
 
@@ -550,6 +561,7 @@ PACK_1 typedef struct ATTR_PACKED
   rcnNwkEnhancedSecurityEntry_t enhancedSecurityKey;
 #endif
 } rcnNwkPairingEntry_t;
+
 
 // Controller Node Information
 PACK_1 typedef struct ATTR_PACKED
