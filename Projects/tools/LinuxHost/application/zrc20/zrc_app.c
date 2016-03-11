@@ -1729,7 +1729,7 @@ void RTI_SendProfileCommandCnf( rStatus_t status )
 
 void RTI_BindInd( rStatus_t status, uint8 dstIndex )
 {
-	if (dstIndex == zrcAppValidationSourceIndex)
+	if ((dstIndex == zrcAppValidationSourceIndex) && (dstIndex != RTI_INVALID_PAIRING_REF))
 	{
 		LOG_INFO("Binding completed for %d (Status 0x%.2X)\n", dstIndex, status);
 
@@ -1749,7 +1749,7 @@ void RTI_BindInd( rStatus_t status, uint8 dstIndex )
 	}
 	else
 	{
-		LOG_WARN("Binding completed for unexpected node %d (Status 0x%.2X)\n", dstIndex, status);
+		LOG_WARN("Binding completed for unexpected node %d (Status 0x%.2X - %s)\n", dstIndex, status, rtiStatus_list[status]);
 		zrcAppValidationStatus = GDP_CHECK_VALIDATION_STATUS_FAILURE;
 	}
 	zrcAppState = AP_STATE_READY;
