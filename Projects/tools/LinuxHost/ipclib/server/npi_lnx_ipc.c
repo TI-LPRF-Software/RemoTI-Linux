@@ -474,6 +474,12 @@ int main(int argc, char ** argv)
 	static npiMsgData_t npiIpcRecvBuf;
 	int    ret = NPI_LNX_SUCCESS;
 
+	printf("\n*********************************************************************\n");
+	printf("*\tTexas Instruments\n");
+	printf("*\tNPI Server version %d.%d.%d\n",  NPI_LNX_MAJOR_VERSION, NPI_LNX_MINOR_VERSION, NPI_LNX_REVISION);
+	printf("*\tCopyright 2016\n");
+	printf("*********************************************************************\n\n");
+
 #ifdef NPI_UNIX
    printf("NPI_UNIX\n");
 #else
