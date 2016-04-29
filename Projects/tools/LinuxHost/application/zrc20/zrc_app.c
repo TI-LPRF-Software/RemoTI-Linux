@@ -1729,7 +1729,12 @@ void RTI_SendProfileCommandCnf( rStatus_t status )
 
 void RTI_BindInd( rStatus_t status, uint8 dstIndex )
 {
-	if ((dstIndex == zrcAppValidationSourceIndex) && (dstIndex != RTI_INVALID_PAIRING_REF))
+	if (zrcAppState == AP_STATE_PAIR)
+	{
+		zrcAppState = AP_STATE_READY;
+		LOG_INFO("Binding completed for %d (Status 0x%.2X)\n", dstIndex, status);
+	}
+	else if ((dstIndex == zrcAppValidationSourceIndex) && (dstIndex != RTI_INVALID_PAIRING_REF))
 	{
 		LOG_INFO("Binding completed for %d (Status 0x%.2X)\n", dstIndex, status);
 
