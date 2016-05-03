@@ -6,7 +6,7 @@
   Description:    This file contains Linux platform specific RTI API
                   Surrogate implementation
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2015} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -159,9 +159,9 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 		case RTIS_CMD_ID_RTI_REC_DATA_IND:
 			RTI_ReceiveDataInd( pMsg->pData[0], pMsg->pData[1],
 					pMsg->pData[2] | (pMsg->pData[3] << 8), // vendor Id
-					pMsg->pData[4],
-					pMsg->pData[5],
-					pMsg->pData[6],
+					pMsg->pData[5],	// API not backwards compatible with CC253x
+					pMsg->pData[6], // Length field is not the second last,
+					pMsg->pData[4],	// but the fourth
 					&pMsg->pData[7]);
 			break;
 
@@ -385,37 +385,39 @@ static void rtiAttribEConv( uint8 attrib, uint8 len, uint8 *pValue )
  **************************************************************************************************/
 rStatus_t RTI_ReadItemEx( uint8 profileId, uint8 itemId, uint8 len, uint8 *pValue )
 {
-  npiMsgData_t pMsg;
-
-  // prep Read Item request
-  // Note: no need to send pValue over the NPI
-  pMsg.subSys   = RPC_SYS_RCAF;
-  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_ITEM_EX;
-  pMsg.len      = 3;
-  pMsg.pData[0] = profileId;
-  pMsg.pData[1] = itemId;
-  pMsg.pData[2] = len;
-
-
-  // send Read Item request to NPI socket synchronously
-  NPI_SendSynchData( &pMsg );
-
-
-  // DEBUG
-  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
-  {
-//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
-  }
-
-  // copy the reply data to the client's buffer
-  // Note: the first byte of the payload is reserved for the status
-  msg_memcpy( pValue, &pMsg.pData[1], len );
-
-  // perform endianness change
-  rtiAttribEConv( itemId, len, pValue );
-
-  // return the status, which is stored is the first byte of the payload
-  return( (rStatus_t)pMsg.pData[0] );
+	// API deprecated for CC26xx, use RTI_ReadIndexedItem instead
+	return RTI_ReadIndexedItem(profileId, itemId, 0, len, pValue);
+//  npiMsgData_t pMsg;
+//
+//  // prep Read Item request
+//  // Note: no need to send pValue over the NPI
+//  pMsg.subSys   = RPC_SYS_RCAF;
+//  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_ITEM_EX;
+//  pMsg.len      = 3;
+//  pMsg.pData[0] = profileId;
+//  pMsg.pData[1] = itemId;
+//  pMsg.pData[2] = len;
+//
+//
+//  // send Read Item request to NPI socket synchronously
+//  NPI_SendSynchData( &pMsg );
+//
+//
+//  // DEBUG
+//  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
+//  {
+////    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
+//  }
+//
+//  // copy the reply data to the client's buffer
+//  // Note: the first byte of the payload is reserved for the status
+//  msg_memcpy( pValue, &pMsg.pData[1], len );
+//
+//  // perform endianness change
+//  rtiAttribEConv( itemId, len, pValue );
+//
+//  // return the status, which is stored is the first byte of the payload
+//  return( (rStatus_t)pMsg.pData[0] );
 }
 
 /**************************************************************************************************
@@ -448,11 +450,11 @@ rStatus_t RTI_ReadIndexedItem( uint8 profileId, uint8 itemId, uint8 index, uint8
   // prep Read Item request
   // Note: no need to send pValue over the NPI
   pMsg.subSys   = RPC_SYS_RCAF;
-  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_INDEXED_ITEM_EX;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_ITEM_EX; //RTIS_CMD_ID_RTI_READ_INDEXED_ITEM_EX;
   pMsg.len      = 4;
-  pMsg.pData[0] = profileId;
-  pMsg.pData[1] = itemId;
-  pMsg.pData[2] = index;
+  pMsg.pData[0] = index;
+  pMsg.pData[1] = profileId;
+  pMsg.pData[2] = itemId;
   pMsg.pData[3] = len;
 
   // send Read Item request to NPI socket synchronously
@@ -501,34 +503,37 @@ rStatus_t RTI_ReadIndexedItem( uint8 profileId, uint8 itemId, uint8 index, uint8
  **************************************************************************************************/
 rStatus_t RTI_ReadItem( uint8 itemId, uint8 len, uint8 *pValue )
 {
-  npiMsgData_t pMsg;
+	// API deprecated for CC26xx, use RTI_ReadIndexedItem instead
+	return RTI_ReadIndexedItem(RTI_PROFILE_RTI, itemId, 0, len, pValue);
 
-  // prep Read Item request
-  // Note: no need to send pValue over the NPI
-  pMsg.subSys   = RPC_SYS_RCAF;
-  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_ITEM;
-  pMsg.len      = 2;
-  pMsg.pData[0] = itemId;
-  pMsg.pData[1] = len;
+//  npiMsgData_t pMsg;
 
-  // send Read Item request to NP RTIS synchronously
-  NPI_SendSynchData( &pMsg );
-
-  // DEBUG
-  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
-  {
-//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
-  }
-
-  // copy the reply data to the client's buffer
-  // Note: the first byte of the payload is reserved for the status
-  msg_memcpy( pValue, &pMsg.pData[1], len );
-
-  // perform endianness change
-  rtiAttribEConv( itemId, len, pValue );
-
-  // return the status, which is stored is the first byte of the payload
-  return( (rStatus_t)pMsg.pData[0] );
+//  // prep Read Item request
+//  // Note: no need to send pValue over the NPI
+//  pMsg.subSys   = RPC_SYS_RCAF;
+//  pMsg.cmdId    = RTIS_CMD_ID_RTI_READ_ITEM;
+//  pMsg.len      = 2;
+//  pMsg.pData[0] = itemId;
+//  pMsg.pData[1] = len;
+//
+//  // send Read Item request to NP RTIS synchronously
+//  NPI_SendSynchData( &pMsg );
+//
+//  // DEBUG
+//  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
+//  {
+////    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
+//  }
+//
+//  // copy the reply data to the client's buffer
+//  // Note: the first byte of the payload is reserved for the status
+//  msg_memcpy( pValue, &pMsg.pData[1], len );
+//
+//  // perform endianness change
+//  rtiAttribEConv( itemId, len, pValue );
+//
+//  // return the status, which is stored is the first byte of the payload
+//  return( (rStatus_t)pMsg.pData[0] );
 }
 
 /**************************************************************************************************
@@ -556,33 +561,36 @@ rStatus_t RTI_ReadItem( uint8 itemId, uint8 len, uint8 *pValue )
  **************************************************************************************************/
 rStatus_t RTI_WriteItemEx( uint8 profileId, uint8 itemId, uint8 len, uint8 *pValue )
 {
-  npiMsgData_t pMsg;
+	// API deprecated for CC26xx, use RTI_WriteIndexedItem instead
+	return RTI_WriteIndexedItem(profileId, itemId, 0, len, pValue);
 
-  // prep Write Item request
-  pMsg.subSys   = RPC_SYS_RCAF;
-  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_ITEM_EX;
-  pMsg.len      = 3+len;
-  pMsg.pData[0] = profileId;
-  pMsg.pData[1] = itemId;
-  pMsg.pData[2] = len;
-
-  // copy the client's data to be sent
-  msg_memcpy( &pMsg.pData[3], pValue, len );
-
-  // perform endianness change
-  rtiAttribEConv( itemId, len, &pMsg.pData[3] );
-
-  // send Write Item request to NP RTIS synchronously
-  NPI_SendSynchData( &pMsg );
-
-  // DEBUG
-  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
-  {
-//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
-  }
-
-  // return the status, which is stored is the first byte of the payload
-  return( (rStatus_t)pMsg.pData[0] );
+//  npiMsgData_t pMsg;
+//
+//  // prep Write Item request
+//  pMsg.subSys   = RPC_SYS_RCAF;
+//  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_ITEM_EX;
+//  pMsg.len      = 3+len;
+//  pMsg.pData[0] = profileId;
+//  pMsg.pData[1] = itemId;
+//  pMsg.pData[2] = len;
+//
+//  // copy the client's data to be sent
+//  msg_memcpy( &pMsg.pData[3], pValue, len );
+//
+//  // perform endianness change
+//  rtiAttribEConv( itemId, len, &pMsg.pData[3] );
+//
+//  // send Write Item request to NP RTIS synchronously
+//  NPI_SendSynchData( &pMsg );
+//
+//  // DEBUG
+//  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
+//  {
+////    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
+//  }
+//
+//  // return the status, which is stored is the first byte of the payload
+//  return( (rStatus_t)pMsg.pData[0] );
 }
 
 /**************************************************************************************************
@@ -615,11 +623,11 @@ rStatus_t RTI_WriteIndexedItem( uint8 profileId, uint8 itemId, uint8 index, uint
 
   // prep Write Item request
   pMsg.subSys   = RPC_SYS_RCAF;
-  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_INDEXED_ITEM_EX;
+  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_ITEM_EX; //RTIS_CMD_ID_RTI_WRITE_INDEXED_ITEM_EX;
   pMsg.len      = 4+len;
-  pMsg.pData[0] = profileId;
-  pMsg.pData[1] = itemId;
-  pMsg.pData[2] = index;
+  pMsg.pData[0] = index;
+  pMsg.pData[1] = profileId;
+  pMsg.pData[2] = itemId;
   pMsg.pData[3] = len;
 
   // copy the client's data to be sent
@@ -667,37 +675,40 @@ rStatus_t RTI_WriteIndexedItem( uint8 profileId, uint8 itemId, uint8 index, uint
  **************************************************************************************************/
 rStatus_t RTI_WriteItem( uint8 itemId, uint8 len, uint8 *pValue )
 {
-  npiMsgData_t pMsg;
+	// API deprecated for CC26xx, use RTI_WriteIndexedItem instead
+	return RTI_WriteIndexedItem(RTI_PROFILE_RTI, itemId, 0, len, pValue);
 
-  // prep Write Item request
-  pMsg.subSys   = RPC_SYS_RCAF;
-  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_ITEM;
-  pMsg.len      = 2+len;
-  pMsg.pData[0] = itemId;
-  pMsg.pData[1] = len;
-
-  // copy the client's data to be sent
-  msg_memcpy( &pMsg.pData[2], pValue, len );
-
-  // perform endianness change
-  rtiAttribEConv( itemId, len, &pMsg.pData[2] );
-
-  // send Write Item request to NP RTIS synchronously
-  NPI_SendSynchData( &pMsg );
-
-  // DEBUG
-  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
-  {
-//    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
-  }
-  // DEBUG, test if RNP not lock in boot mode
-  if ( pMsg.subSys == RPC_SYS_BOOT )
-  {
-    return( 1 );
-  }
-
-  // return the status, which is stored is the first byte of the payload
-  return( (rStatus_t)pMsg.pData[0] );
+//  npiMsgData_t pMsg;
+//
+//  // prep Write Item request
+//  pMsg.subSys   = RPC_SYS_RCAF;
+//  pMsg.cmdId    = RTIS_CMD_ID_RTI_WRITE_ITEM;
+//  pMsg.len      = 2+len;
+//  pMsg.pData[0] = itemId;
+//  pMsg.pData[1] = len;
+//
+//  // copy the client's data to be sent
+//  msg_memcpy( &pMsg.pData[2], pValue, len );
+//
+//  // perform endianness change
+//  rtiAttribEConv( itemId, len, &pMsg.pData[2] );
+//
+//  // send Write Item request to NP RTIS synchronously
+//  NPI_SendSynchData( &pMsg );
+//
+//  // DEBUG
+//  if ( pMsg.pData[0] == RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT )
+//  {
+////    rtisFatalError( RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT );
+//  }
+//  // DEBUG, test if RNP not lock in boot mode
+//  if ( pMsg.subSys == RPC_SYS_BOOT )
+//  {
+//    return( 1 );
+//  }
+//
+//  // return the status, which is stored is the first byte of the payload
+//  return( (rStatus_t)pMsg.pData[0] );
 }
 
 /**************************************************************************************************

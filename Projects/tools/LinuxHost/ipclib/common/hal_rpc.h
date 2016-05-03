@@ -69,6 +69,7 @@ extern "C" {
 #define RPC_CMD_RES5        0xA0
 #define RPC_CMD_RES6        0xC0
 #define RPC_CMD_RES7        0xE0
+#define RPC_CMD_MASK		0xE0
 
 // RPC Command Field Subsystem
 #define RPC_SYS_RES0        0
@@ -95,8 +96,8 @@ extern "C" {
 #define RPC_SYS_MAX         18   // Maximum value, must be last
 #define RPC_SYS_SRV_CTRL	31   // Interface to control Server, not required in function table
 
-/* 1st byte is the length of the data field, 2nd/3rd bytes are command field. */
-#define RPC_FRAME_HDR_SZ    3
+/* 1st two bytes containt the length of the data field, 3rd/4th bytes are command field. */
+#define RPC_FRAME_HDR_SZ    4
 
 /* The 3 MSB's of the 1st command field byte are for command type. */
 #define RPC_CMD_TYPE_MASK   0xE0
@@ -106,9 +107,9 @@ extern "C" {
 
 /* position of fields in the general format frame */
 #define RPC_POS_LEN         0
-#define RPC_POS_CMD0        1
-#define RPC_POS_CMD1        2
-#define RPC_POS_DAT0        3
+#define RPC_POS_CMD0        2
+#define RPC_POS_CMD1        3
+#define RPC_POS_DAT0        4
 
 /* Error codes */
 #define RPC_SUCCESS         0     /* success */

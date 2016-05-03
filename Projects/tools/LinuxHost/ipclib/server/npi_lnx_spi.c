@@ -7,7 +7,7 @@
                   module.
 
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2015} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -224,20 +224,20 @@ int NPI_SPI_OpenDevice(const char *portName, void *pCfg)
 	}
 
 	// Set up GPIO properly BEFORE setting up SPI to ensure SPI init doesn't have side-effect on SPI bus.
-	if	( NPI_LNX_FAILURE	==	(ret = HalGpioResetInit(((npiSpiCfg_t *)pCfg)->gpioCfg[2])))
+	if	( NPI_LNX_FAILURE	==	(ret = HalGpioResetInit((halGpioCfg_t *)&((npiSpiCfg_t *)pCfg)->gpioCfg[2])))
 	{
 		error_printf("%s(): ERROR returned from HalGpioResetInit!\n", __FUNCTION__);
 	}
-	else if ( NPI_LNX_FAILURE == (ret = HalGpioMrdyInit(((npiSpiCfg_t	*)pCfg)->gpioCfg[1])))
+	else if ( NPI_LNX_FAILURE == (ret = HalGpioMrdyInit((halGpioCfg_t *)&((npiSpiCfg_t	*)pCfg)->gpioCfg[1])))
 	{
 		error_printf("%s(): ERROR returned from HalGpioMrdyInit!\n", __FUNCTION__);
 	}
-	else if ( NPI_LNX_FAILURE == (GpioSrdyFd = HalGpioSrdyInit(((npiSpiCfg_t *)pCfg)->gpioCfg[0])))
+	else if ( NPI_LNX_FAILURE == (GpioSrdyFd = HalGpioSrdyInit((halGpioCfg_t *)&((npiSpiCfg_t *)pCfg)->gpioCfg[0])))
 	{
 		error_printf("%s(): ERROR returned from HalGpioSrdyInit!\n", __FUNCTION__);
 		ret = GpioSrdyFd;
 	}
-	else if ( NPI_LNX_FAILURE == (ret = HalSpiInit(portName,	((npiSpiCfg_t*)pCfg)->spiCfg)))
+	else if ( NPI_LNX_FAILURE == (ret = HalSpiInit(portName, &((npiSpiCfg_t*)pCfg)->spiCfg)))
 	{
 		error_printf("%s(): ERROR returned from HalSpiInit!\n", __FUNCTION__);
 	}
@@ -579,6 +579,7 @@ int npi_spi_pollData(npiMsgData_t *pMsg)
 
 	if (mRdyAsserted == TRUE)
 	{
+		usleep(50);
 		int mRet = HAL_RNP_MRDY_SET();
 		if (ret == NPI_LNX_SUCCESS)
 			ret = mRet;
@@ -1526,6 +1527,10 @@ static void *npi_event_entry(void *ptr)
 	struct pollfd pollfds[1];
 	int val;
 	char tmpStr[512];
+
+	//This lock wait for Initialization to finish (reset+sync)
+	pthread_mutex_lock(&npiPollLock);
+	pthread_mutex_unlock(&npiPollLock);
 
 	snprintf(tmpStr, sizeof(tmpStr), "[%s] Interrupt Event Thread Started \n", __FUNCTION__);
 	time_printf(tmpStr);

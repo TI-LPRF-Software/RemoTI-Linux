@@ -88,6 +88,7 @@ static uint8 zrcAppRNPpowerState;
 struct timeval curTime, startTime, prevTimeSend, prevTimeRec;
 struct timeval curTime, prevTime;
 
+static uint8 faEnable = TRUE;
 /**********************************************************************************
  * Local type defs and other defines
  */
@@ -562,12 +563,37 @@ static void *zrcAppThreadFunc(void *ptr)
 					(ch == 'l'))
 			{
 				// Set channel
-				uint8 channel, faEnable = FALSE, status = RTI_SUCCESS;
+				uint8 channel, status = RTI_SUCCESS;
 				if (ch == 'l')
 				{
-					faEnable = TRUE;
-					status = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
-					LOG_INFO("Frequency Agility re-enabled (%s)\n", rtiStatus_list[status]);
+					if (faEnable == FALSE)
+					{
+						faEnable = TRUE;
+						status = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
+						if (status == RTI_SUCCESS)
+						{
+							LOG_INFO("Frequency Agility (re)-enabled (%s)\n", rtiStatus_list[status]);
+						}
+						else
+						{
+							LOG_WARN("Failed to (re)-enable Frequency Agility (%s)\n", rtiStatus_list[status]);
+							faEnable = FALSE;
+						}
+					}
+					else
+					{
+						faEnable = FALSE;
+						status = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
+						if (status == RTI_SUCCESS)
+						{
+							LOG_INFO("Frequency Agility disabled (%s)\n", rtiStatus_list[status]);
+						}
+						else
+						{
+							LOG_WARN("Failed to disable Frequency Agility (%s)\n", rtiStatus_list[status]);
+							faEnable = TRUE;
+						}
+					}
 				}
 				else
 				{
@@ -1248,7 +1274,7 @@ void RTI_StandbyCnf(rStatus_t status)
 void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 		uint8 rxLQI, uint8 rxFlags, uint8 len, uint8 *pData)
 {
-	int i, error = TRUE;
+	int i, error = TRUE, result;
 	//	static uint8 lastSource = RTI_INVALID_PAIRING_REF;
 
 	//check Basic Range to avoid Seg Fault
@@ -1321,28 +1347,44 @@ void RTI_ReceiveDataInd(uint8 srcIndex, uint8 profileId, uint16 vendorId,
 		}
 		else if (pData[0] == 0x50)
 		{
-			static uint8 faEnable = TRUE, blocks = 0;
+			static uint8 blocks = 0;
 			// As a minimum; stop FA on reception of Start
-			if (pData[1] == 0x00)
+			if ((pData[1] & 0x03) == 0x01)
 			{
 				if (faEnable != FALSE)
 				{
 					faEnable = FALSE;
-					RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
-					LOG_INFO("Frequency Agility disabled as Voice starts\n");
+					result = RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
+					if (result == NPI_LNX_SUCCESS)
+					{
+						LOG_INFO("Frequency Agility disabled as Voice starts\n");
+					}
+					else
+					{
+						LOG_WARN("Failed to disable Frequency Agility as Voice starts\n");
+						faEnable = TRUE;
+					}
+				}
+				else
+				{
+					LOG_INFO("Frequency Agility already disabled as Voice starts\n");
 				}
 				blocks = 0;
 			}
 			// and re-enable on reception of Stop
-			else if (pData[1] == 0x02)
+			else if ((pData[1] & 0x03) == 0x02)
 			{
 				faEnable = TRUE;
 				RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_AGILITY_ENABLE, 1, (uint8 *)&faEnable);
 				LOG_INFO("Frequency Agility re-enabled as Voice ends\n");
 			}
-			else if (pData[1] == 0x01)
+			else if (pData[1] == 0x00)
 			{
-				LOG_INFO("Voice Data, %d\n", blocks++);
+				blocks++;
+				if ((blocks & 0x000F) == 0)
+				{
+					LOG_INFO("Voice Data, %d\n", blocks);
+				}
 			}
 		}
 	}
@@ -2383,19 +2425,19 @@ void DispMenuReady(void)
 	{
 		LOG_INFO("3- Enter Test Mode\n");
 	}
-	LOG_INFO("4- NP software version\n");
-	LOG_INFO("f- Find Remotes\n");
-	LOG_INFO("8- Clear Pairing Table\n");
-	LOG_INFO("9- Display Pairing Table\n");
-	LOG_INFO("Set Channel 15 ('h'), 20 ('j') or 25 '(k'). To re-enable FA ('l')\n");
-	LOG_INFO("s- Let RNP know host goes to sleep\n");
-	LOG_INFO("p- Acknowledge waking up on GPIO\n");
-	LOG_INFO("d- Ask NPI Server to disconnect from RNP\n");
-	LOG_INFO("c- Ask NPI Server to connect to RNP\n");
-	LOG_INFO("t- Toggle __DEBUG_TIME_ACTIVE on Server\n");
-	LOG_INFO("y- Toggle __BIG_DEBUG on Server\n");
-	LOG_INFO("r- Reset RNP - Cold Start\n");
-	LOG_INFO("m- Show This Menu\n");
+	LOG_INFO("4-\tNP software version\n");
+	LOG_INFO("f-\tFind Remotes\n");
+	LOG_INFO("8-\tClear Pairing Table\n");
+	LOG_INFO("9-\tDisplay Pairing Table\n");
+	LOG_INFO("\tSet Channel 15 ('h'), 20 ('j') or 25 '(k'). To re-enable FA ('l')\n");
+	LOG_INFO("s-\tLet RNP know host goes to sleep\n");
+	LOG_INFO("p-\tAcknowledge waking up on GPIO\n");
+	LOG_INFO("d x\tSet debug level. (INFO: 4, DEBUG: 5, TRACE: 6)\n");
+//	LOG_INFO("c-\tAsk NPI Server to connect to RNP\n");
+	LOG_INFO("t-\tToggle __DEBUG_TIME_ACTIVE on Server\n");
+	LOG_INFO("y-\tToggle __BIG_DEBUG on Server\n");
+	LOG_INFO("r-\tReset RNP - Cold Start\n");
+	LOG_INFO("m-\tShow This Menu\n");
 }
 
 void DispMenuInit(void)

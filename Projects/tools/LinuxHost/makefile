@@ -8,7 +8,7 @@ OBJS = out
 TEMP = temp
 
 #library to use
-LIBS_x86= -lpthread -lrt
+LIBS_x86= -lpthread -lrt -lubsan -lasan
 # -lusb-1.0
 LIBS_armBeagleBoard= -lpthread -lrt
 # -lusb-1.0
@@ -36,13 +36,14 @@ DEFINES = -DMRDY_EARLY_FIX -DRNP_HOST -DNPI_SPI=TRUE -DNPI_UART=TRUE -DNPI_I2C=T
 # -D__DEBUG_TIME__HID -D__DEBUG_MUTEX__ -DNPI_HID=TRUE -DPERFORM_SW_RESET_INSTEAD_OF_HARDWARE_RESET
 
 #compilation Option
-COMPILO_FLAGS_x86 = "-Wall  $(INCLUDES) $(DEFINES)" 
+COMPILO_FLAGS_x86 = "-Wall -g -fsanitize=undefined -fsanitize=address  $(INCLUDES) $(DEFINES)" 
 COMPILO_FLAGS_armBeagleBoard = "-Wall  $(INCLUDES) $(DEFINES) -mcpu=cortex-a8 -march=armv7-a"
 COMPILO_FLAGS_armBeagleBone = "-Wall  $(INCLUDES) $(DEFINES) -mcpu=cortex-a8 -march=armv7-a"
 
 #list of object file to compile for the server
 SERVER_OBJS= \
 	$(OBJS)/npi_lnx_ipc.o \
+	$(OBJS)/npi_lnx_serial_configuration.o \
 	$(OBJS)/npi_lnx_uart.o \
 	$(OBJS)/npi_lnx_spi.o \
 	$(OBJS)/npi_lnx_i2c.o \
@@ -127,6 +128,10 @@ $(OBJS)/NPI_lnx_x86_server: $(SERVER_OBJS)
 	@echo "********************************************************" 
 
 $(OBJS)/npi_lnx_ipc.o: ipclib/server/npi_lnx_ipc.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+
+$(OBJS)/npi_lnx_serial_configuration.o: ipclib/server/npi_lnx_serial_configuration.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 

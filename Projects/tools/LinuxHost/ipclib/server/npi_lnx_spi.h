@@ -7,7 +7,7 @@
                   module.
 
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2015} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -61,8 +61,8 @@ extern "C" {
 
   PACK_1 typedef struct ATTR_PACKED
   {
-	  halSpiCfg_t* spiCfg;
-	  halGpioCfg_t** gpioCfg;
+	  halSpiCfg_t spiCfg;
+	  halGpioCfg_t* gpioCfg;
 	  uint8 earlyMrdyDeAssert;
 	  uint8 detectResetFromSlowSrdyAssert;
 	  uint8 forceRunOnReset;

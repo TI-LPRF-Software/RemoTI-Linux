@@ -60,7 +60,7 @@ extern "C"
  * CONSTANTS
  **************************************************************************************************/
 
-#define AP_MAX_BUF_LEN 255
+#define AP_MAX_BUF_LEN 1024
 
 #define NPI_PORT			"2533"
 
@@ -93,7 +93,7 @@ typedef void (*npi_tracehook_t)(uint8 subsystem, uint8 cmd, uint8 *data, uint8 l
 // NOTE: Fields are position dependent. Do not rearrange!
 typedef struct ATTR_PACKED
 {
-	uint8 len;
+	uint16 len;
 	uint8 subSys;
 	uint8 cmdId;
 	uint8 pData[AP_MAX_BUF_LEN];

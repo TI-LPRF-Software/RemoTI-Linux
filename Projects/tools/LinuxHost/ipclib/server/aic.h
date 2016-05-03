@@ -59,7 +59,7 @@ extern "C" {
 #define AIC_UART_FRAME_OVHD   2
   
 // 1st byte is the length of the data field, 2nd/3rd bytes are command field.
-#define AIC_FRAME_HDR_SZ  3
+#define AIC_FRAME_HDR_SZ  RPC_FRAME_HDR_SZ
 
 // maximum length of data in the general frame format
 #define AIC_DATA_MAX       (256 - AIC_FRAME_HDR_SZ - AIC_UART_FRAME_OVHD)
@@ -71,11 +71,11 @@ extern "C" {
 #define AIC_SUBSYSTEM_MASK 0x1F
 
 // position of fields in the general format frame
-#define AIC_POS_LEN        0
-#define AIC_POS_CMD0       1
-#define AIC_POS_CMD1       2
-#define AIC_POS_DAT0       3
-  
+#define AIC_POS_LEN        RPC_POS_LEN
+#define AIC_POS_CMD0       RPC_POS_CMD0
+#define AIC_POS_CMD1       RPC_POS_CMD1
+#define AIC_POS_DAT0       RPC_POS_DAT0
+
 // Subsystem field values
 #define AIC_SUBSYSTEM_RCN         RPC_SYS_RCN
 #define AIC_SUBSYSTEM_RCN_CLIENT  RPC_SYS_RCN_CLIENT

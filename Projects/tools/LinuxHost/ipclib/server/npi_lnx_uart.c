@@ -7,7 +7,7 @@
                   module.
 
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2015} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -60,6 +60,8 @@
 
 #include "npi_lnx_error.h"
 
+#define NPI_UART	TRUE
+
 #if (defined NPI_UART) && (NPI_UART == TRUE)
 // -- macros --
 
@@ -73,11 +75,11 @@
 
 #define error_printf(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) fprintf( stderr, fmt, ##__VA_ARGS__); fflush(stdout);
-#else
+//#ifdef __BIG_DEBUG__
+//#define debug_printf(fmt, ...) fprintf( stderr, fmt, ##__VA_ARGS__); fflush(stdout);
+//#else
 #define debug_printf(fmt) st (if (__BIG_DEBUG_ACTIVE == TRUE) time_printf(fmt);)
-#endif
+//#endif
 
 // -- Constants --
 
@@ -101,9 +103,22 @@
 #define SOP_STATE      0x00
 #define CMD_STATE1     0x01
 #define CMD_STATE2     0x02
-#define LEN_STATE      0x03
-#define DATA_STATE     0x04
-#define FCS_STATE      0x05
+#define LEN_STATE1     0x03
+#define LEN_STATE2     0x04
+#define DATA_STATE     0x05
+#define FCS_STATE      0x06
+
+#define NAME_ELEMENT(element) [element] = #element
+const char *parseStateStr[FCS_STATE + 1] =
+{
+	NAME_ELEMENT(SOP_STATE),
+	NAME_ELEMENT(CMD_STATE1),
+	NAME_ELEMENT(CMD_STATE2),
+	NAME_ELEMENT(LEN_STATE1),
+	NAME_ELEMENT(LEN_STATE2),
+	NAME_ELEMENT(DATA_STATE),
+	NAME_ELEMENT(FCS_STATE),
+};
 
 
 // -- Typedefs --
@@ -114,11 +129,11 @@ typedef struct _npiAsyncDataHdr_t
 
 typedef struct _npi_parseinfo_str {
 	int state;
-	uint8 LEN_Token;
+	uint16 LEN_Token;
 	uint8 CMD0_Token;
 	uint8 CMD1_Token;
 	uint8 FSC_Token;
-	uint8 tempDataLen;
+	uint16 tempDataLen;
 	uint8 *pMsg;
 } npi_parseinfo_t;
 
@@ -154,7 +169,8 @@ static pthread_mutex_t npiUartWakeupLock;
 // conditional variable to wake up UART receive thread
 static pthread_cond_t npi_rx_cond;
 static pthread_mutex_t npi_rx_mutex;
-static sem_t signal_mutex;
+static pthread_mutex_t npi_rx_signal_mutex;
+//static sem_t signal_mutex;
 // callback thread
 static pthread_t npiAsyncCbackThread;
 
@@ -187,10 +203,10 @@ static void npi_termrx(void);
 static int npi_opentty(const char *devpath);
 static void npi_closetty(void);
 static int npi_write(const void *buf, size_t count);
-static int npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len);
+static int npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint16 len);
 static int npi_parseframe(const unsigned char *buf, int len);
-static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf, uint8 length);
-static uint8 npi_calcfcs(uint8 len, uint8 cmd0, uint8 cmd1, uint8 *data);
+static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf, uint16 length);
+static uint8 npi_calcfcs(uint16 len, uint8 cmd0, uint8 cmd1, uint8 *data);
 static void npi_iohandler(int status);
 static void npi_installsig(void);
 
@@ -356,7 +372,7 @@ void NPI_UART_CloseDevice(void)
  */
 int NPI_UART_SendAsynchData( npiMsgData_t *pMsg )
 {
-	return npi_sendframe(pMsg->subSys | RPC_CMD_AREQ, pMsg->cmdId, pMsg->pData, pMsg->len);
+	return npi_sendframe(pMsg->subSys, pMsg->cmdId, pMsg->pData, pMsg->len);
 }
 
 
@@ -381,6 +397,7 @@ int NPI_UART_SendAsynchData( npiMsgData_t *pMsg )
  */
 int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 {
+	char tmpStr[AP_MAX_BUF_LEN * 3];
 	int result, ret = NPI_LNX_SUCCESS;
 	struct timespec expirytime;
 	struct timeval currentTime;
@@ -396,21 +413,19 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 		gettimeofday(&currentTime, NULL);
 		expirytime.tv_sec = currentTime.tv_sec + NPI_RNP_TIMEOUT;
 		expirytime.tv_nsec = currentTime.tv_usec * 1000;
-#ifdef __DEBUG_TIME__
-		char tmpStr[512];
-		snprintf(tmpStr, sizeof(tmpStr), "[UART] (synch data) Conditional wait %d.%ld\n",
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] Conditional wait %d.%ld\n",
+				__FUNCTION__,
 				(int)(expirytime.tv_sec - currentTime.tv_sec),
 				expirytime.tv_nsec - (currentTime.tv_usec * 1000));
 		debug_printf(tmpStr);
-#endif //__DEBUG_TIME__
 		// Response may have already come in. This may be the case for Serial Bootloader which is really fast.
 		if ( ((pMsg->subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP) ||
 			 ((pMsg->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT) )
 		{
 			snprintf(tmpStr, sizeof(tmpStr),
-					"[UART] Synchronous Response received early, subSys 0x%.2X, cmdId 0x%.2X, pData[0] 0x%.2X\n",
-					pMsg->subSys, pMsg->cmdId, pMsg->pData[0]);
-			time_printf(tmpStr);
+					"[%s] Synchronous Response received early, subSys 0x%.2X, cmdId 0x%.2X, pData[0] 0x%.2X\n",
+					__FUNCTION__, pMsg->subSys, pMsg->cmdId, pMsg->pData[0]);
+			debug_printf(tmpStr);
 		}
 		else
 		{
@@ -421,13 +436,15 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 				// Uncommenting the following line will cause assert when connection is not there
 				// Uncomment it only during debugging.
 				pMsg->pData[0] = 0xff;
-				debug_printf("[UART] Send synch data timed out\n");
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] Send synch data timed out\n", __FUNCTION__);
+				debug_printf(tmpStr);
 				npi_ipc_errno = NPI_LNX_ERROR_UART_SEND_SYNCH_TIMEDOUT;
 				ret = NPI_LNX_FAILURE;
 			}
 			else
 			{
-				debug_printf("[UART] Did not time out\n");
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] Did not time out\n", __FUNCTION__);
+				debug_printf(tmpStr);
 			}
 		}
 		if ( ((pMsg->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT) &&
@@ -496,7 +513,8 @@ static void npi_initsyncres(void)
 	pthread_mutex_init(&npiAsyncLock, NULL);
 	pthread_mutex_init(&npiUartWakeupLock, NULL);
 	pthread_mutex_init(&npi_rx_mutex, NULL);
-	sem_init(&signal_mutex,0,1);
+	pthread_mutex_init(&npi_rx_signal_mutex, NULL);
+//	sem_init(&signal_mutex,0,1);
 
 	// initialize all conditional variables
 	pthread_cond_init(&npiSyncRespCond, NULL);
@@ -523,7 +541,8 @@ static void npi_delsyncres(void)
 	pthread_mutex_destroy(&npiAsyncLock);
 	pthread_mutex_destroy(&npiUartWakeupLock);
 	pthread_mutex_destroy(&npi_rx_mutex);
-	sem_destroy(&signal_mutex);
+	pthread_mutex_destroy(&npi_rx_signal_mutex);
+//	sem_destroy(&signal_mutex);
 
 }
 
@@ -534,7 +553,8 @@ static void npi_delsyncres(void)
 // NPI function.
 static void *npiAsyncCbackProc(void *ptr)
 {
-	npiAsyncDataHdr_t *pElement;
+	char tmpStr[AP_MAX_BUF_LEN * 3];
+	npiAsyncDataHdr_t *pElement = NULL;
 	int ret = NPI_LNX_SUCCESS;
 	((void)ptr);
 	pthread_mutex_lock(&npiAsyncLock);
@@ -544,7 +564,7 @@ static void *npiAsyncCbackProc(void *ptr)
 		{
 			if (npiAsyncTerminate)
 			{
-				// termination was signalled
+				// termination was signaled
 				break;
 			}
 			pElement = pNpiAsyncQueueTail;
@@ -555,6 +575,9 @@ static void *npiAsyncCbackProc(void *ptr)
 				{
 					pNpiAsyncQueueHead = pNpiAsyncQueueTail;
 				}
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] about to call NPI_AsynchMsgCback \n\tpElement @%p\n\tpNpiAsyncQueueHead @%p\n\tpNpiAsyncQueueTail @%p\n",
+						__FUNCTION__, pElement, pNpiAsyncQueueHead, pNpiAsyncQueueTail);
+				debug_printf(tmpStr);
 				// unlock mutex so that UART thread can still signal conditional variable
 				// and does not get blocked till NPI async callback function returns.
 				pthread_mutex_unlock(&npiAsyncLock);
@@ -564,7 +587,11 @@ static void *npiAsyncCbackProc(void *ptr)
 				free(pElement);
 				pElement = NULL;
 
-				// lock the mutext again before checking the terminate condition and queue
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] finished NPI_AsynchMsgCback \n\tpElement @%p\n\tpNpiAsyncQueueHead @%p\n\tpNpiAsyncQueueTail @%p\n",
+						__FUNCTION__, pElement, pNpiAsyncQueueHead, pNpiAsyncQueueTail);
+				debug_printf(tmpStr);
+
+				// lock the mutex again before checking the terminate condition and queue
 				// so that it is OK to miss conditional variable signal while the mutex was
 				// unlocked.
 				pthread_mutex_lock(&npiAsyncLock);
@@ -582,6 +609,9 @@ static void *npiAsyncCbackProc(void *ptr)
 
 		// wait for signal
 		pthread_cond_wait(&npiAsyncCond, &npiAsyncLock);
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] got signal \n\tpNpiAsyncQueueHead @%p\n\tpNpiAsyncQueueTail @%p\n", __FUNCTION__,
+				pNpiAsyncQueueHead, pNpiAsyncQueueTail);
+		debug_printf(tmpStr);
 	}
 
 	// thread is to be terminated
@@ -602,7 +632,8 @@ static void *npiAsyncCbackProc(void *ptr)
 /* UART RX thread entry routine */
 static void *npi_rx_entry(void *ptr)
 {
-	unsigned char readbuf[255];
+	unsigned char readbuf[AP_MAX_BUF_LEN];
+	char tmpStr[AP_MAX_BUF_LEN * 3];
 	int ret = NPI_LNX_SUCCESS;
 
 	/* install signal handler */
@@ -623,12 +654,16 @@ static void *npi_rx_entry(void *ptr)
 			readcount = read(npi_fd, readbuf, sizeof(readbuf));
 			if (readcount > 0)
 			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] Read %d bytes\n", __FUNCTION__, readcount);
+				debug_printf(tmpStr);
 				ret = npi_parseframe(readbuf, readcount);
 				if (ret == NPI_LNX_FAILURE)
 					break;
 			}
 			else if (readcount < 0)
 			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] Errno %d\n", __FUNCTION__, errno);
+				debug_printf(tmpStr);
 				// Ignore error EAGAIN; Resource temporarily unavailable.
 				// EINTR; System Call interrupted, try again.
 				// Try again if this was the first attempt after the conditional signal npi_rx_cond.
@@ -662,18 +697,20 @@ static void *npi_rx_entry(void *ptr)
 					expirytime.tv_nsec -= 1000000000;
 					expirytime.tv_sec++;
 				}
-#ifdef BIG_DEBUG_ACTIVE
-				time_printf("[UART] (read loop) Conditional wait %d ns\n", waitTime);
-#endif //BIG_DEBUG_ACTIVE
+				debug_printf("[UART] (read loop) Conditional wait %d ns\n", waitTime);
 				pthread_cond_timedwait(&npi_rx_cond, &npi_rx_mutex, &expirytime);
 			}
 #else
-			sem_wait(&signal_mutex);
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Going to wait for more data\n", __FUNCTION__);
+			debug_printf(tmpStr);
+			pthread_cond_wait(&npi_rx_cond, &npi_rx_mutex);
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] Got signal to get more data\n", __FUNCTION__);
+			debug_printf(tmpStr);
+//			sem_wait(&signal_mutex);
 #endif
 		}
 	}
-	char tmpStr[256];
-	snprintf(tmpStr, sizeof(tmpStr), "[UART] npi_rx_terminate == %d, unlocking mutex\n", npi_rx_terminate);
+	snprintf(tmpStr, sizeof(tmpStr), "[%s] npi_rx_terminate == %d, unlocking mutex\n", __FUNCTION__, npi_rx_terminate);
 	debug_printf(tmpStr);
 	pthread_mutex_unlock(&npi_rx_mutex);
 
@@ -710,7 +747,10 @@ static void npi_termrx(void)
 #ifdef NPI_UNRELIABLE_SIGACTION
 	pthread_cond_signal(&npi_rx_cond);
 #else
-	sem_post(&signal_mutex);
+	pthread_mutex_lock(&npi_rx_mutex);
+	pthread_cond_signal(&npi_rx_cond);
+	pthread_mutex_unlock(&npi_rx_mutex);
+//	sem_post(&signal_mutex);
 #endif
 
 	// wait till the thread terminates
@@ -845,7 +885,7 @@ static int npi_write(const void *buf, size_t count)
 
 /* build and send an NPI frame
  */
-static int npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len)
+static int npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint16 len)
 {
 	// Build a frame from the primitive ID and primitive content
 
@@ -861,7 +901,8 @@ static int npi_sendframe(uint8 subsystem, uint8 cmd, uint8 *data, uint8 len)
 	}
 
 	pBuf[0] = AIC_UART_SOF;
-	pBuf[1 + AIC_POS_LEN] = len;
+	pBuf[1 + AIC_POS_LEN] = (len & 0x00FF);
+	pBuf[1 + AIC_POS_LEN + 1] = (((len & 0xFF00) >> 8) & 0x00FF);
 	pBuf[1 + AIC_POS_CMD0] = subsystem;
 	pBuf[1 + AIC_POS_CMD1] = cmd;
 	memcpy(&pBuf[1 + AIC_POS_DAT0], data, len);
@@ -890,7 +931,7 @@ static int npi_parseframe(const unsigned char *buf, int len)
 {
 	int ret = NPI_LNX_SUCCESS;
 	uint8 ch;
-	char tmpStr[512];
+	char tmpStr[AP_MAX_BUF_LEN * 3];
 	int  bytesInRxBuffer;
 
 	if (len)
@@ -901,26 +942,46 @@ static int npi_parseframe(const unsigned char *buf, int len)
 		pthread_mutex_unlock(&npiUartWakeupLock);
 	}
 
-	while (len)
+	while (len > 0)
 	{
 		ch = *buf++;
 		len--;
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] ch: 0x%.2X, state: %s\n", __FUNCTION__, ch, parseStateStr[npi_parseinfo.state]);
+		debug_printf(tmpStr);
 
 		switch (npi_parseinfo.state)
 		{
 		case SOP_STATE:
 			if (ch == AIC_UART_SOF)
-				npi_parseinfo.state = LEN_STATE;
+			{
+				npi_parseinfo.state = LEN_STATE1;
+			}
+			else
+			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] non-SOF found: 0x%.2X\n", __FUNCTION__, ch);
+				debug_printf(tmpStr);
+			}
 			break;
 
-		case LEN_STATE:
+		case LEN_STATE1:
 			npi_parseinfo.LEN_Token = ch;
+			npi_parseinfo.state = LEN_STATE2;
+			break;
+
+		case LEN_STATE2:
+			npi_parseinfo.LEN_Token += ((((uint16)ch) << 8) & 0xFF00);
+			snprintf(tmpStr, sizeof(tmpStr), "Length: 0x%.6X, malloc(%d)\n",
+					npi_parseinfo.LEN_Token, (int)(NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.LEN_Token));
+			debug_printf(tmpStr);
 
 			npi_parseinfo.tempDataLen = 0;
 
 			/* Allocate memory for the data */
 			npi_parseinfo.pMsg = (uint8 *)malloc(
 					NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.LEN_Token );
+
+			snprintf(tmpStr, sizeof(tmpStr), "npi_parseinfo.pMsg @%p\n", npi_parseinfo.pMsg);
+			debug_printf(tmpStr);
 
 			if (npi_parseinfo.pMsg)
 			{
@@ -964,6 +1025,10 @@ static int npi_parseframe(const unsigned char *buf, int len)
 			/* If the remainder of the data is there, read them all, otherwise, just read enough */
 			if (bytesInRxBuffer <= npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen)
 			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s, %d] copying %d bytes, missing %d, already have %d of total %d\n",
+						__FUNCTION__, __LINE__, bytesInRxBuffer, npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen,
+						npi_parseinfo.tempDataLen, npi_parseinfo.LEN_Token);
+				debug_printf(tmpStr);
 				memcpy(&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.tempDataLen],
 						buf, bytesInRxBuffer);
 				buf += bytesInRxBuffer;
@@ -972,30 +1037,38 @@ static int npi_parseframe(const unsigned char *buf, int len)
 			}
 			else
 			{
+				snprintf(tmpStr, sizeof(tmpStr), "[%s, %d] copying %d bytes of %d, already have %d of total %d\n",
+						__FUNCTION__, __LINE__, npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen, bytesInRxBuffer,
+						npi_parseinfo.tempDataLen, npi_parseinfo.LEN_Token);
+				debug_printf(tmpStr);
 				memcpy(&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN + npi_parseinfo.tempDataLen],
 						buf, npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen);
 				buf += npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen;
 				len -= npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen;
 				npi_parseinfo.tempDataLen += (npi_parseinfo.LEN_Token - npi_parseinfo.tempDataLen);
 			}
+			snprintf(tmpStr, sizeof(tmpStr), "[%s, %d] tempLen: %d of total %d\n", __FUNCTION__, __LINE__, npi_parseinfo.tempDataLen, npi_parseinfo.LEN_Token);
+			debug_printf(tmpStr);
 
 			/* If number of bytes read is equal to data length, time to move on to FCS */
 			if ( npi_parseinfo.tempDataLen == npi_parseinfo.LEN_Token )
+			{
 				npi_parseinfo.state = FCS_STATE;
+			}
 
 			break;
 
 		case FCS_STATE:
 
 			npi_parseinfo.FSC_Token = ch;
-
-			/* Make sure it's correct */
-			if ((npi_calcfcs(
+			uint8 fcsCalculated = npi_calcfcs(
 					npi_parseinfo.LEN_Token,
 					npi_parseinfo.CMD0_Token,
 					npi_parseinfo.CMD1_Token,
-					&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN])
-					== npi_parseinfo.FSC_Token))
+					&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN]);
+
+			/* Make sure it's correct */
+			if (fcsCalculated == npi_parseinfo.FSC_Token)
 			{
 				// Trace the received data
 				if (npi_tracehook_rx)
@@ -1004,16 +1077,19 @@ static int npi_parseframe(const unsigned char *buf, int len)
 							&npi_parseinfo.pMsg[NPI_CBACK_BUF_HDR_LEN],
 							npi_parseinfo.LEN_Token);
 				}
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] found frame, going to npi_procframe\n", __FUNCTION__);
+				debug_printf(tmpStr);
 
-				debug_printf("[UART] npi_parseframe: found frame, going to npi_procframe\n");
 				// process the received frame
 				ret = npi_procframe(npi_parseinfo.CMD0_Token, npi_parseinfo.CMD1_Token,
 						npi_parseinfo.pMsg, npi_parseinfo.LEN_Token);
 			}
 			else
 			{
-				debug_printf("[UART] npi_parseframe: found incomplete frame, destroying the message:\n");
-				snprintf(tmpStr, sizeof(tmpStr), "[UART] \t \t len: 0x%.2X, cmd0: 0x%.2X, cmd1: 0x%.2X, FCS: 0x%.2X\n",
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] fcs failed 0x%.2X vs 0x%.2X, destroying the message:\n", __FUNCTION__,
+						fcsCalculated, npi_parseinfo.FSC_Token);
+				debug_printf(tmpStr);
+				snprintf(tmpStr, sizeof(tmpStr), "[%s] len: 0x%.2X, cmd0: 0x%.2X, cmd1: 0x%.2X, FCS: 0x%.2X\n", __FUNCTION__,
 						npi_parseinfo.LEN_Token,
 						npi_parseinfo.CMD0_Token,
 						npi_parseinfo.CMD1_Token,
@@ -1037,21 +1113,14 @@ static int npi_parseframe(const unsigned char *buf, int len)
 }
 
 /* Process received frame */
-static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
-		uint8 length)
+static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf, uint16 length)
 {
 	int ret = NPI_LNX_SUCCESS;
 	int i;
-	char tmpStr[512];
-	int charCount = 0;
-	for (i=0;i<length;i++)
-	{
-		snprintf(&tmpStr[charCount], sizeof(tmpStr) - charCount, "%.2x ", pBuf[i]);
-		charCount += 3;
-	}
-	snprintf(tmpStr, sizeof(tmpStr), "[UART] npi_procframe, subsys: 0x%.2x, Cmd ID: 0x%.2X, length: %d ,Data:  %s\n", subsystemId, commandId, length, tmpStr);
-	debug_printf(tmpStr);
-		
+	char tmpStr[AP_MAX_BUF_LEN * 3];
+	int strIndex = 0;
+
+#ifndef SREQ_VIA_AREQ
 	if ( ((subsystemId & RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP) ||
 			((subsystemId & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT))
 	{
@@ -1072,20 +1141,35 @@ static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
 		// the buffer usage is done, no more use expected
 		free(pBuf);
 
-		debug_printf("[UART] npi_procframe signal synch response received (invoked by read loop) \n");
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] signal synch response received (invoked by read loop)\n", __FUNCTION__);
+		debug_printf(tmpStr);
 		// Unblock the synchronous request call
 		pthread_cond_signal(&npiSyncRespCond);
 		pthread_mutex_unlock(&npiSyncRespLock);
 	}
 	else
+#endif //SREQ_VIA_AREQ
 	{
 		// must be an asynchronous message
 
-		// type cast to asynchornous message queue element data structure
+		// type cast to asynchronous message queue element data structure
 		npiAsyncDataHdr_t *pElement = (npiAsyncDataHdr_t *) pBuf;
 
 		// type cast the message structure
 		npiMsgData_t *pMsg = (npiMsgData_t *) (pBuf + sizeof(npiAsyncDataHdr_t));
+
+		if (__BIG_DEBUG_ACTIVE == TRUE)
+		{
+			snprintf(tmpStr, sizeof(tmpStr), "[%s] subsys: 0x%.2x, Cmd ID: 0x%.2X, length: %d, Data: ", __FUNCTION__, subsystemId, commandId, length);
+			strIndex = strlen(tmpStr);
+			for (i = 0 ; i < length; i++ )
+			{
+				snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "%.2X ", pMsg->pData[i]);
+				strIndex += 3;
+			}
+			snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "\n");
+			debug_printf(tmpStr);
+		}
 
 		// Fill in the message structure
 		pMsg->len = length;
@@ -1105,25 +1189,37 @@ static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
 		}
 		pNpiAsyncQueueHead = pElement;
 
-		debug_printf("[UART] npi_procframe signal areq callback thread (invoked by read loop) \n");
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] signal areq callback thread (invoked by read loop). \n\tpNpiAsyncQueueHead @%p\n\tpNpiAsyncQueueTail @%p\n",
+				__FUNCTION__, pNpiAsyncQueueHead, pNpiAsyncQueueTail);
+		debug_printf(tmpStr);
 		/* wake up the asynchronous callback thread */
 		pthread_cond_signal(&npiAsyncCond);
 		pthread_mutex_unlock(&npiAsyncLock);
+		snprintf(tmpStr, sizeof(tmpStr), "[%s] unlocked npiAsyncLock (invoked by read loop)\n", __FUNCTION__);
+		debug_printf(tmpStr);
 	}
 
 	return ret;
 }
 
 /* Calculate NPI frame FCS */
-static uint8 npi_calcfcs( uint8 len, uint8 cmd0, uint8 cmd1, uint8 *data_ptr )
+static uint8 npi_calcfcs( uint16 len, uint8 cmd0, uint8 cmd1, uint8 *data_ptr )
 {
-	uint8 x;
+	uint16 i;
 	uint8 xorResult;
 
-	xorResult = len ^ cmd0 ^ cmd1;
+	uint8 len_lo = (len & 0x00FF);
+	uint8 len_hi = (((len & 0xFF00) >> 8) & 0x00FF);
+	xorResult = len_lo ^ len_hi ^ cmd0 ^ cmd1;
+//	printf("\nlen_lo: 0x%.2X len_hi: 0x%.2X cmd0: 0x%.2X cmd1: 0x%.2X,", len_lo, len_hi, cmd0, cmd1);
 
-	for ( x = 0; x < len; x++, data_ptr++ )
+	for ( i = 0; i < len; i++, data_ptr++ )
+	{
 		xorResult = xorResult ^ *data_ptr;
+//		printf(" (%d)0x%.2X", x, *data_ptr);
+	}
+//	printf(" FCS: 0x%.2X -- 0x%.2X", *data_ptr, xorResult);
+//	printf("\n");
 
 	return ( xorResult );
 }
@@ -1135,21 +1231,37 @@ static void npi_iohandler(int status)
 
 	((void)status);
 	/* send wakeup signal */
-#ifdef __DEBUG_TIME__
-	if (__DEBUG_TIME_ACTIVE == TRUE)
+	if (0 == pthread_mutex_trylock(&npi_rx_signal_mutex))
 	{
-		debug_printf("Signal from UART, grabbing mutex\n");
-	}
+#ifdef __DEBUG_TIME__
+		if (__DEBUG_TIME_ACTIVE == TRUE)
+		{
+			debug_printf("Signal from UART, grabbing mutex\n");
+		}
 #endif //__DEBUG_TIME__
 
-	sem_post(&signal_mutex);
+		pthread_mutex_lock(&npi_rx_mutex);
+		pthread_cond_signal(&npi_rx_cond);
+		pthread_mutex_unlock(&npi_rx_mutex);
+		//	sem_post(&signal_mutex);
+		pthread_mutex_unlock(&npi_rx_signal_mutex);
 
 #ifdef __DEBUG_TIME__
-	if (__DEBUG_TIME_ACTIVE == TRUE)
-	{
-		debug_printf(" Signal read handle, owning mutex\n");
-	}
+		if (__DEBUG_TIME_ACTIVE == TRUE)
+		{
+			debug_printf("Signal read handle, owning mutex\n");
+		}
 #endif //__DEBUG_TIME__
+	}
+	else
+	{
+#ifdef __DEBUG_TIME__
+		if (__DEBUG_TIME_ACTIVE == TRUE)
+		{
+			debug_printf("Got signal from UART, but busy processing previous signal\n");
+		}
+#endif //__DEBUG_TIME__
+	}
 }
 
 /* Install signal handler for UART IO */

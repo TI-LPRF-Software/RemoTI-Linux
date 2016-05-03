@@ -1,5 +1,5 @@
 /**************************************************************************************************
-  Filename:       npi_lnx.h
+  Filename:       npi_lnx_serial_configuration.h
   Revised:        $Date: 2011-11-23 12:02:49 -0800 (Wed, 23 Nov 2011) $
   Revision:       $Revision: 108 $
 
@@ -38,124 +38,94 @@
    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **************************************************************************************************/
-#ifndef NPI_UART_LNX_H
-#define NPI_UART_LNX_H
+#ifndef NPI_SER_CFG_LNX_H
+#define NPI_SER_CFG_LNX_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#include "npi_lnx_spi.h"
+#include "npi_lnx_i2c.h"
+#include "npi_lnx_uart.h"
 
 #if !defined PACK_1
 #define PACK_1
 #endif
+
+#define SERIAL_CFG_MAX_NUM_OF_GPIOS			5
 
 // To be compatible with MS and unix native target
 // declare pragma for structure packing
 #if defined(_MSC_VER) || defined(unix) || (defined(__ICC430__) && (__ICC430__==1))
 #pragma pack(1)
 #endif
-
   /////////////////////////////////////////////////////////////////////////////
   // Typedefs
 
-PACK_1 typedef struct ATTR_PACKED
-{
-	  uint32 speed;
-	  uint8 flowcontrol;
-} npiUartCfg_t;
+  PACK_1 typedef struct ATTR_PACKED
+  {
+	  char port[128];
+	  char devPath[128];
+	  char logPath[128];
+	  halGpioCfg_t gpioCfg[SERIAL_CFG_MAX_NUM_OF_GPIOS];
+	  uint8 devIdx;
+	  uint8 debugSupported;
+	  union {
+		  npiSpiCfg_t npiSpiCfg;
+		  npiI2cCfg_t npiI2cCfg;
+		  npiUartCfg_t npiUartCfg;
+	  } serial;
+  } npiSerialCfg_t;
 
-  /////////////////////////////////////////////////////////////////////////////
-  // globals
 
   /////////////////////////////////////////////////////////////////////////////
   // Interface function prototypes
 
   /******************************************************************************
-   * @fn         NPI_UART_OpenDevice
+   * @fn        getSerialConfiguration
    *
-   * @brief      This function establishes a serial communication connection with
-   *             a network processor device.
-   *             As windows machine does not have a single dedicated serial
-   *             interface, this function will designate which serial port shall
-   *             be used for communication.
+   * @brief     This function populates the serial configuration parameters as
+   * 			read from the configuration file.
    *
    * input parameters
    *
-   * @param      portName � name of the serial port
-   * @param		 pCfg	- pointer to configuration parameters
+   * @param		configFilePath	-- configuration file path
+   * @param     serialCfg 		-- pointer to structure holding all parameters
    *
    * output parameters
    *
-   * None.
+   * @param     serialCfg 		-- pointer to structure holding all parameters
    *
-   * @return     TRUE if the connection is established successfully.
+   * @return     TRUE if the configuration parameters were read successfully.
    *             FALSE, otherwise.
    ******************************************************************************
    */
-  extern int NPI_UART_OpenDevice(const char *portName, void *pCfg);
-
-  /******************************************************************************
-   * @fn         NPI_CloseDevice
-   *
-   * @brief      This function closes connection with a network processor device
-   *
-   * input parameters
-   *
-   * @param      pDevice   - pointer to a device data structure
-   *
-   * output parameters
-   *
-   * None.
-   *
-   * @return     None
-   ******************************************************************************
-   */
-  extern void NPI_UART_CloseDevice(void);
+  extern int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg);
 
   /**************************************************************************************************
-   * @fn          NPI_UART_SendAsynchData
    *
-   * @brief       This function is called by the client when it has data ready to
-   *              be sent asynchronously. This routine allocates an AREQ buffer,
-   *              copies the client's payload, and sets up the send.
+   * @fn          SerialConfigParser
+   *
+   * @brief       This function searches for a string a returns its value
    *
    * input parameters
    *
-   * @param *pMsg  - Pointer to data to be sent asynchronously (i.e. AREQ).
+   * @param          configFilePath   - path to configuration file
+   * @param          section          - section to search for
+   * @param          key                                                         - key to return value of within section
    *
    * output parameters
    *
    * None.
    *
    * @return      None.
-   **************************************************************************************************
-   */
-  extern int NPI_UART_SendAsynchData( npiMsgData_t *pMsg );
-
-  /**************************************************************************************************
-   * @fn          NPI_UART_SendSynchData
    *
-   * @brief       This function is called by the client when it has data ready to
-   *              be sent synchronously. This routine allocates a SREQ buffer,
-   *              copies the client's payload, sends the data, and waits for the
-   *              reply. The input buffer is used for the output data.
-   *
-   * input parameters
-   *
-   * @param *pMsg  - Pointer to data to be sent synchronously (i.e. the SREQ).
-   *
-   * output parameters
-   *
-   * @param *pMsg  - Pointer to replay data (i.e. the SRSP).
-   *
-   * @return      None.
-   **************************************************************************************************
-   */
-  extern int NPI_UART_SendSynchData( npiMsgData_t *pMsg );
+   **************************************************************************************************/
+  extern int SerialConfigParser(FILE* serialCfgFd, const char* section, const char* key, char* resultString);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // NPI_UART_LNX_H
+#endif // NPI_SER_CFG_LNX_H
