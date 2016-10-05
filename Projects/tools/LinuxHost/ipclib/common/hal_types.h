@@ -6,7 +6,7 @@
   Description:    Describe the purpose and contents of the file.
 
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -41,8 +41,6 @@
 #ifndef HAL_TYPES_H
 #define HAL_TYPES_H
 
-#include <stdbool.h>
-
 /* PC */
 
 /* ------------------------------------------------------------------------------------------------
@@ -61,6 +59,10 @@ typedef unsigned int   	uint32;
 #else
 typedef signed   long   int32;
 typedef unsigned long   uint32;
+#endif
+
+#ifndef __cplusplus // For C++ compiler typedef bool will cause lots of trouble
+typedef unsigned char   bool;
 #endif
 
 typedef uint8           halDataAlign_t;

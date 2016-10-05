@@ -7,7 +7,7 @@
                   module.
 
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -215,16 +215,16 @@ int NPI_I2C_OpenDevice(const char *portName, void *pCfg)
 		time_printf(tmpStr);
 	}
 
-  	if ( NPI_LNX_FAILURE == (GpioSrdyFd = HalGpioSrdyInit(((npiI2cCfg_t *)pCfg)->gpioCfg[0])))
+  	if ( NPI_LNX_FAILURE == (GpioSrdyFd = HalGpioSrdyInit((halGpioCfg_t *)&((npiI2cCfg_t *)pCfg)->gpioCfg[0])))
 	{
 		error_printf("%s(): ERROR returned from HalGpioSrdyInit!\n", __FUNCTION__);
 		ret = GpioSrdyFd;
 	}
-	if ( NPI_LNX_FAILURE == (ret = HalGpioMrdyInit(((npiI2cCfg_t *)pCfg)->gpioCfg[1])))
+	if ( NPI_LNX_FAILURE == (ret = HalGpioMrdyInit((halGpioCfg_t *)&((npiI2cCfg_t *)pCfg)->gpioCfg[1])))
 	{
 		error_printf("%s(): ERROR returned from HalGpioMrdyInit!\n", __FUNCTION__);
 	}
-	if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit(((npiI2cCfg_t *)pCfg)->gpioCfg[2])))
+	if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit((halGpioCfg_t *)&((npiI2cCfg_t *)pCfg)->gpioCfg[2])))
 	{
 		error_printf("%s(): ERROR returned from HalGpioResetInit!\n", __FUNCTION__);
 	}

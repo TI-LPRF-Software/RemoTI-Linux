@@ -7,7 +7,7 @@
                   module.
 
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -69,7 +69,7 @@ extern "C" {
 
 PACK_1 typedef struct ATTR_PACKED
 {
-	halGpioCfg_t** gpioCfg;
+	halGpioCfg_t* gpioCfg;
 } npiI2cCfg_t;
 
 

@@ -43,6 +43,7 @@ COMPILO_FLAGS_armBeagleBone = "-Wall  $(INCLUDES) $(DEFINES) -mcpu=cortex-a8 -ma
 #list of object file to compile for the server
 SERVER_OBJS= \
 	$(OBJS)/npi_lnx_ipc.o \
+	$(OBJS)/npi_lnx_serial_configuration.o \
 	$(OBJS)/npi_lnx_uart.o \
 	$(OBJS)/npi_lnx_spi.o \
 	$(OBJS)/npi_lnx_i2c.o \
@@ -127,6 +128,10 @@ $(OBJS)/NPI_lnx_x86_server: $(SERVER_OBJS)
 	@echo "********************************************************" 
 
 $(OBJS)/npi_lnx_ipc.o: ipclib/server/npi_lnx_ipc.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+
+$(OBJS)/npi_lnx_serial_configuration.o: ipclib/server/npi_lnx_serial_configuration.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 

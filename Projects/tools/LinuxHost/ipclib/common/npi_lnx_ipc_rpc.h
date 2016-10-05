@@ -7,7 +7,7 @@
                   use the Remote Procedure Call (RPC) standard to communicate
                   with (and control) the NPI Server.
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -70,7 +70,7 @@ extern "C" {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //Version Major.Minor.Revision
 #define NPI_LNX_MAJOR_VERSION		1
-#define NPI_LNX_MINOR_VERSION		1
+#define NPI_LNX_MINOR_VERSION		4
 #define NPI_LNX_REVISION			0
 
 #define NPI_LNX_PARAM_NB_CONNECTIONS 		1

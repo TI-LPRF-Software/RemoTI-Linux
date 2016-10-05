@@ -693,6 +693,8 @@ static void *zrcAppThreadFunc(void *ptr)
 				if (RTI_SUCCESS != RTI_ReadItem(RTI_CONST_ITEM_SW_VERSION, 1, value))
 				{
 					LOG_ERROR("Failed to read Software Version.\n");
+					swVerExtended_t rnpSwVerExtended;
+					zrcAppGetAndPrintExtendedSoftwareVersion(&rnpSwVerExtended);
 				}
 				else
 				{

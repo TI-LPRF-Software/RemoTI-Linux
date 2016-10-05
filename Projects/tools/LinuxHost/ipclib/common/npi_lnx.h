@@ -9,7 +9,7 @@
                   serves as the HAL's client for the SPI and UART drivers, and
                   provides API and callback services for its client.
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without

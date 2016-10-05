@@ -7,7 +7,7 @@
                   module.
 
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -193,6 +193,7 @@ static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf, uint8
 static uint8 npi_calcfcs(uint8 len, uint8 cmd0, uint8 cmd1, uint8 *data);
 static void npi_iohandler(int status);
 static void npi_installsig(void);
+static int pthread_accurate_cond_timedwait(pthread_cond_t *__restrict __cond, pthread_mutex_t *__restrict __mutex, struct timespec timeout);
 
 // thread entry routines
 static void *npiAsyncCbackProc(void *ptr);
@@ -382,8 +383,6 @@ int NPI_UART_SendAsynchData( npiMsgData_t *pMsg )
 int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 {
 	int result, ret = NPI_LNX_SUCCESS;
-	struct timespec expirytime;
-	struct timeval currentTime;
 
 	pthread_mutex_lock(&npiSyncRespLock);
 	pNpiSyncData = pMsg;
@@ -393,16 +392,7 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 
 	if (ret == NPI_LNX_SUCCESS)
 	{
-		gettimeofday(&currentTime, NULL);
-		expirytime.tv_sec = currentTime.tv_sec + NPI_RNP_TIMEOUT;
-		expirytime.tv_nsec = currentTime.tv_usec * 1000;
-#ifdef __DEBUG_TIME__
 		char tmpStr[512];
-		snprintf(tmpStr, sizeof(tmpStr), "[UART] (synch data) Conditional wait %d.%ld\n",
-				(int)(expirytime.tv_sec - currentTime.tv_sec),
-				expirytime.tv_nsec - (currentTime.tv_usec * 1000));
-		debug_printf(tmpStr);
-#endif //__DEBUG_TIME__
 		// Response may have already come in. This may be the case for Serial Bootloader which is really fast.
 		if ( ((pMsg->subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP) ||
 			 ((pMsg->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_BOOT) )
@@ -414,7 +404,12 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 		}
 		else
 		{
-			result = pthread_cond_timedwait(&npiSyncRespCond, &npiSyncRespLock, &expirytime);
+		  struct timespec timeout;
+		  timeout.tv_sec = NPI_RNP_TIMEOUT;
+		  timeout.tv_nsec = 0;
+      snprintf(tmpStr, sizeof(tmpStr), "[UART] (synch data) Conditional wait %d.%ld\n", NPI_RNP_TIMEOUT, timeout.tv_nsec);
+      debug_printf(tmpStr);
+		  result = pthread_accurate_cond_timedwait(&npiSyncRespCond, &npiSyncRespLock, timeout);
 			if (ETIMEDOUT == result)
 			{
 				// TODO: Indicate synchronous transaction error
@@ -465,8 +460,6 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 void npiUartDisableSleep( void )
 {
 	static uint8 pBuf[] = { 0x00 };
-	struct timespec expirytime;
-	struct timespec curtime;
 
 	// wait for a signal triggered by a character received only after
 	// sending wakeup character.
@@ -475,12 +468,12 @@ void npiUartDisableSleep( void )
 	// Send wakeup character
 	npi_write(pBuf, sizeof(pBuf));
 
-	// wait 20 seconds for wakeup
+	// wait for wakeup
 	// The timeout is handy for the PC host application to move on when RNP goes wrong.
-	clock_gettime(CLOCK_MONOTONIC, &curtime);
-	expirytime.tv_sec = curtime.tv_sec + NPI_RNP_TIMEOUT;
-	expirytime.tv_nsec = curtime.tv_nsec;
-	pthread_cond_timedwait(&npiUartWakeupCond, &npiUartWakeupLock, &expirytime);
+  struct timespec timeout;
+  timeout.tv_sec = NPI_RNP_TIMEOUT;
+  timeout.tv_nsec = 0;
+  pthread_accurate_cond_timedwait(&npiUartWakeupCond, &npiUartWakeupLock, timeout);
 
 	pthread_mutex_unlock(&npiUartWakeupLock);
 }
@@ -638,6 +631,11 @@ static void *npi_rx_entry(void *ptr)
 					npi_ipc_errno = NPI_LNX_ERROR_UART_RX_THREAD;
 					ret = NPI_LNX_FAILURE;
 				}
+				else
+				{
+				  // Do not wait for semaphore, but try again immediately. Set readcount to a value > 0 to do so.
+				  readcount = 1;
+				}
 			}
 		} while (readcount > 0);
 
@@ -651,21 +649,14 @@ static void *npi_rx_entry(void *ptr)
 #ifdef NPI_UNRELIABLE_SIGACTION
 			/* In some system, sigaction is not reliable hence poll reading even without signal. */
 			{
-				struct timespec expirytime;
-				struct timespec curtime;
-
-				int waitTime = 10000000;
-				clock_gettime(CLOCK_MONOTONIC, &curtime);
-				expirytime.tv_sec = curtime.tv_sec;
-				expirytime.tv_nsec = (curtime.tv_nsec) + waitTime;
-				if (expirytime.tv_nsec >= 1000000000) {
-					expirytime.tv_nsec -= 1000000000;
-					expirytime.tv_sec++;
-				}
-#ifdef BIG_DEBUG_ACTIVE
-				time_printf("[UART] (read loop) Conditional wait %d ns\n", waitTime);
-#endif //BIG_DEBUG_ACTIVE
-				pthread_cond_timedwait(&npi_rx_cond, &npi_rx_mutex, &expirytime);
+		    char tmpStr[512];
+        int waitTime = 10000000;
+		    snprintf(tmpStr, sizeof(tmpStr), "[UART] (read loop) Conditional wait %d ns\n", waitTime);
+        time_printf(tmpStr);
+			  struct timespec timeout;
+			  timeout.tv_sec = 0;
+			  timeout.tv_nsec = waitTime;
+			  result = pthread_accurate_cond_timedwait(&npi_rx_cond, &npi_rx_mutex, timeout);
 			}
 #else
 			sem_wait(&signal_mutex);
@@ -1126,6 +1117,69 @@ static uint8 npi_calcfcs( uint8 len, uint8 cmd0, uint8 cmd1, uint8 *data_ptr )
 		xorResult = xorResult ^ *data_ptr;
 
 	return ( xorResult );
+}
+
+static int pthread_accurate_cond_timedwait(pthread_cond_t *__restrict __cond, pthread_mutex_t *__restrict __mutex, struct timespec timeout)
+{
+  int result = ETIMEDOUT;
+  struct timespec expirytime;
+  struct timespec curtime;
+  struct timespec curMonotonicTime, startMonotonicTime, timeLapsed;
+
+  timeLapsed.tv_sec = 0;
+  timeLapsed.tv_nsec = 0;
+  // Control time that actually passed
+  clock_gettime(CLOCK_MONOTONIC, &startMonotonicTime);
+  while (ETIMEDOUT == result)
+  {
+    // Set wanted expiration time
+    clock_gettime(CLOCK_REALTIME, &curtime);
+    expirytime.tv_sec = curtime.tv_sec + timeout.tv_sec;
+    expirytime.tv_nsec = curtime.tv_nsec + timeout.tv_nsec;
+    // Adjust for time already waited. Will start with 0.0
+    if ((expirytime.tv_nsec + timeLapsed.tv_nsec) > 1000000000)
+    {
+      expirytime.tv_sec = expirytime.tv_sec - timeLapsed.tv_sec + 1;
+      expirytime.tv_nsec = expirytime.tv_nsec + timeLapsed.tv_nsec - 1000000000;
+    }
+    else
+    {
+      expirytime.tv_sec = expirytime.tv_sec - timeLapsed.tv_sec;
+      expirytime.tv_nsec = expirytime.tv_nsec + timeLapsed.tv_nsec;
+    }
+    result = pthread_cond_timedwait(__cond, __mutex, &expirytime);
+    // Get time actually lapsed
+    clock_gettime(CLOCK_MONOTONIC, &curMonotonicTime);
+    if ((curMonotonicTime.tv_nsec - startMonotonicTime.tv_nsec) < 0)
+    {
+      timeLapsed.tv_sec = curMonotonicTime.tv_sec - startMonotonicTime.tv_sec - 1;
+      timeLapsed.tv_nsec = 1000000000 + curMonotonicTime.tv_nsec - startMonotonicTime.tv_nsec;
+    }
+    else
+    {
+      timeLapsed.tv_sec = curMonotonicTime.tv_sec - startMonotonicTime.tv_sec;
+      timeLapsed.tv_nsec = curMonotonicTime.tv_nsec - startMonotonicTime.tv_nsec;
+    }
+
+    if (ETIMEDOUT == result)
+    {
+      if (timeLapsed.tv_sec > timeout.tv_sec)
+      {
+        // No need to check nanosec component
+        break;
+      }
+      else if (timeLapsed.tv_sec == timeout.tv_sec)
+      {
+        // Check nanosec component
+        if (timeLapsed.tv_nsec >= timeout.tv_nsec)
+        {
+          break;
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
 static void npi_iohandler(int status)

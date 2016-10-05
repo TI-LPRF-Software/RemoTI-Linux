@@ -6,7 +6,7 @@
   Description:    This file contains Linux platform specific RemoTI (RTI) API
                   Surrogate implementation
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
    Beej's Guide to Unix IPC was used in the development of this software:
    http://beej.us/guide/bgipc/output/html/multipage/intro.html#audience

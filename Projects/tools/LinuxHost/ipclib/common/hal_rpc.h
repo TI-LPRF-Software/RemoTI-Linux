@@ -6,7 +6,7 @@
   Description:    This file contains information required by services that
                   use the Remote Procedure Call (RPC) standard.
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without

@@ -6,7 +6,7 @@
   Description:     This file contains the interface to the GPIO Service.
 
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -155,6 +155,12 @@ void HalGpioMrdyClose( void );
 void HalGpioResetClose( void );
 int HalGpioResetSet(uint8 state);
 int HalGpioReset( void );
+
+#ifdef GPIO_DOES_NOT_SUPPORT_POLL_FUNCTION
+   // Waits up to timeout for an interupt.  Returns 1 if success, 0 if timeout, negative value if any other error.
+   int HalGpioCheckForUnsolicitedInterrupt(int timeoutMilliseconds);
+#endif
+
 
 #ifdef __cplusplus
 }

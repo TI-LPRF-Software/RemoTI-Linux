@@ -6,7 +6,7 @@
   Description:     This file contains the interface to the CC2533 Flash Programmer.
 
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -52,7 +52,7 @@ extern "C"
 //#include "hal_board.h"
 #include "hal_types.h"
 #include "npi_lnx.h"
-#include  "hal_gpio.h"
+#include "hal_gpio.h"
 
 /*********************************************************************
  * MACROS
