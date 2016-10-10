@@ -682,7 +682,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 		if (npi_ipc_areq_rec_buf != NULL)
 		{
 #ifdef __DEBUG_TIME__
-      		LOG_DEBUG("[NPI Client READ] Read thread 1ms timeout \n");
+      		LOG_TRACE("[NPI Client READ] Read thread 1ms timeout \n");
 #endif //__DEBUG_TIME__
 			// In case there are messages received yet to be processed allow processing by timing out after 1ms.
 			pollRet = poll((struct pollfd*)&ufds, 1, 1);
@@ -893,11 +893,10 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 #endif //__BIG_DEBUG__
 			if ( (messageCount > 100) && ( (messageCount % 100) == 0) )
 			{
-				LOG_WARN("[NPI Client READ] AREQ message count: %4d", messageCount);
-				if (messageCount < 500)
+				LOG_WARN("[NPI Client READ] AREQ message count: %4d\n", messageCount);
+				if (messageCount > 500)
 				{
-					// More than 500 messages in the buffer requires attention!
-					LOG_WARN("\n");
+					LOG_WARN("[NPI Client READ] SEVERE: More than 500 messages in the buffer requires attention!\n");
 				}
 			}
 		}
@@ -1109,8 +1108,8 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 	if ((mutexRet = pthread_mutex_lock(&npiLnxClientSREQSerializationMutex)) != 0)
 	{
 		// Should be "impossible" to get here, given the nature of the mutex, but handle case anyway.
+		// Unfortunately, there is no way to return an error from this function as-coded.
 		LOG_ERROR("[NPI Client SEND SYNCH][MUTEX] Thread %ld: Error %d waiting for npiLnxClientSREQSerializationMutex! Cannot send!\n", callingThreadID, mutexRet);
-		pMsg->pData[0]=0xF0; // Indicate an error  TORBJORN: Is this legitimate?  Is there a better way to let caller know the transaction didn't happen?
 	}
 	else
 	{

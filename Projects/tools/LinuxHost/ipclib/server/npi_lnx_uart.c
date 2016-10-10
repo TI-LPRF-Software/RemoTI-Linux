@@ -407,8 +407,8 @@ int NPI_UART_SendSynchData( npiMsgData_t *pMsg )
 		  struct timespec timeout;
 		  timeout.tv_sec = NPI_RNP_TIMEOUT;
 		  timeout.tv_nsec = 0;
-      snprintf(tmpStr, sizeof(tmpStr), "[UART] (synch data) Conditional wait %d.%ld\n", NPI_RNP_TIMEOUT, timeout.tv_nsec);
-      debug_printf(tmpStr);
+          snprintf(tmpStr, sizeof(tmpStr), "[UART] (synch data) Conditional wait %d.%ld\n", NPI_RNP_TIMEOUT, timeout.tv_nsec);
+          debug_printf(tmpStr);
 		  result = pthread_accurate_cond_timedwait(&npiSyncRespCond, &npiSyncRespLock, timeout);
 			if (ETIMEDOUT == result)
 			{
@@ -1034,13 +1034,14 @@ static int npi_procframe( uint8 subsystemId, uint8 commandId, uint8 *pBuf,
 	int ret = NPI_LNX_SUCCESS;
 	int i;
 	char tmpStr[512];
+	snprintf(tmpStr, sizeof(tmpStr), "[UART] npi_procframe, subsys: 0x%.2x, Cmd ID: 0x%.2X, length: %d ,Data: ", subsystemId, commandId, length);
 	int charCount = 0;
 	for (i=0;i<length;i++)
 	{
 		snprintf(&tmpStr[charCount], sizeof(tmpStr) - charCount, "%.2x ", pBuf[i]);
 		charCount += 3;
 	}
-	snprintf(tmpStr, sizeof(tmpStr), "[UART] npi_procframe, subsys: 0x%.2x, Cmd ID: 0x%.2X, length: %d ,Data:  %s\n", subsystemId, commandId, length, tmpStr);
+	snprintf(&tmpStr[charCount], sizeof(tmpStr) - charCount, "\n");
 	debug_printf(tmpStr);
 		
 	if ( ((subsystemId & RPC_CMD_TYPE_MASK) == RPC_CMD_SRSP) ||

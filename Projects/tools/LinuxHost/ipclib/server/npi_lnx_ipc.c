@@ -569,16 +569,19 @@ int main(int argc, char ** argv)
 	#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 		{
 			// Now open device for processing
-         debug_printf("Opening SPI device...\n");
+      debug_printf("Opening SPI device...\n");
 			ret = (NPI_OpenDeviceFnArr[serialCfg.devIdx])(serialCfg.devPath, (npiSpiCfg_t *) &serialCfg.serial.npiSpiCfg);
 
-			// Perform Reset of the RNP
-         debug_printf("Resetting RNP...\n");
-			(NPI_ResetSlaveFnArr[serialCfg.devIdx])();
+			if (ret == NPI_LNX_SUCCESS)
+			{
+			  // Perform Reset of the RNP
+			  debug_printf("Resetting RNP...\n");
+			  (NPI_ResetSlaveFnArr[serialCfg.devIdx])();
 
-			// Do the Hw Handshake
-         debug_printf("Synch slave...\n");
-			(NPI_SynchSlaveFnArr[serialCfg.devIdx])();
+			  // Do the Hw Handshake
+			  debug_printf("Synch slave...\n");
+			  (NPI_SynchSlaveFnArr[serialCfg.devIdx])();
+			}
 		}
 	#endif
 		break;
