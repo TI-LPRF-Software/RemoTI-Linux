@@ -1,4 +1,4 @@
- /**************************************************************************************************
+/**************************************************************************************************
   Filename:       npi_rti.c
   Revised:        $Date: 2012-03-21 17:37:33 -0700 (Wed, 21 Mar 2012) $
   Revision:       $Revision: 246 $
@@ -52,8 +52,8 @@
 #include "npi_ipc_client.h"
 #include "hal_defs.h"
 #include "rti_lnx.h"
+#include "tiLogging.h"
 
-#include "lprfLogging.h"
 
 #if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 #include "mso_common.h"
@@ -202,7 +202,7 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 
 #if (defined FEATURE_MSO) && (FEATURE_MSO == TRUE)
 		case RTIS_CMD_ID_RTI_PAIR_IND:
-			RTI_PairInd(pMsg->pData[0], pMsg->pData[2], pMsg->pData[3]);
+			RTI_PairInd(pMsg->pData[0], pMsg->pData[1], pMsg->pData[2]);
 			break;
 
 		case RTIS_CMD_ID_RTI_START_VALIDATION_IND:
@@ -293,7 +293,7 @@ int RTI_AsynchMsgCback( npiMsgData_t *pMsg )
 			break;
 #endif //ZRC20_PROFILE
 		default:
-			LOG_DEBUG("Unhandled API (0x%.2X)!\n", pMsg->cmdId);
+			LOG_ERROR("%s(): Unhandled API (0x%.2X)!\n", __FUNCTION__, pMsg->cmdId);
 			break;
 		}
 	}

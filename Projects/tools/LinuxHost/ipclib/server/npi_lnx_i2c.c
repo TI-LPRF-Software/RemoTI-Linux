@@ -66,7 +66,7 @@
 #include "hal_gpio.h"
 
 #include "npi_lnx_error.h"
-#include "time_printf.h"
+#include "tiLogging.h"
 
 #ifdef __STRESS_TEST__
 #include <sys/time.h>
@@ -87,8 +87,6 @@
 #ifndef FALSE
 # define FALSE (0)
 #endif
-
-#define error_printf(fmt, ...) fprintf(stdout, fmt, ##__VA_ARGS__)
 
 // -- Constants --
 
@@ -161,7 +159,7 @@ static int npi_i2c_pollData(npiMsgData_t *pMsg);
  */
 static int PollLockVarError(int originator, int shouldNotBe)
 {
-    error_printf("ERROR! PollLock Var is %d, it should be %d. Called by %d\n", !shouldNotBe, shouldNotBe, originator);
+    LOG_ERROR("ERROR! PollLock Var is %d, it should be %d. Called by %d\n", !shouldNotBe, shouldNotBe, originator);
     npi_ipc_errno = NPI_LNX_ERROR_I2C_POLL_LOCK_VAR_ERROR;
     return NPI_LNX_FAILURE;
 }
@@ -190,7 +188,6 @@ static int PollLockVarError(int originator, int shouldNotBe)
 int NPI_I2C_OpenDevice(const char *portName, void *pCfg)
 {
 	int ret = NPI_LNX_SUCCESS;
-	char tmpStr[256];
 	if(npiOpenFlag)
 	{
 	    npi_ipc_errno = NPI_LNX_ERROR_I2C_OPEN_ALREADY_OPEN;
@@ -201,8 +198,7 @@ int NPI_I2C_OpenDevice(const char *portName, void *pCfg)
 
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] Opening Device File: %s\n", __FUNCTION__, portName);
-		time_printf(tmpStr);
+		time_printf("[%s] Opening Device File: %s\n", __FUNCTION__, portName);
 	}
 
 	ret = HalI2cInit(portName);
@@ -211,22 +207,21 @@ int NPI_I2C_OpenDevice(const char *portName, void *pCfg)
 
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] ((npiI2cCfg_t *)pCfg)->gpioCfg[0] \t @%p\n", __FUNCTION__, (void *)&(((npiI2cCfg_t *)pCfg)->gpioCfg[0]));
-		time_printf(tmpStr);
+		time_printf("[%s] ((npiI2cCfg_t *)pCfg)->gpioCfg[0] \t @%p\n", __FUNCTION__, (void *)&(((npiI2cCfg_t *)pCfg)->gpioCfg[0]));
 	}
 
   	if ( NPI_LNX_FAILURE == (GpioSrdyFd = HalGpioSrdyInit((halGpioCfg_t *)&((npiI2cCfg_t *)pCfg)->gpioCfg[0])))
 	{
-		error_printf("%s(): ERROR returned from HalGpioSrdyInit!\n", __FUNCTION__);
+		LOG_ERROR("%s(): ERROR returned from HalGpioSrdyInit!\n", __FUNCTION__);
 		ret = GpioSrdyFd;
 	}
 	if ( NPI_LNX_FAILURE == (ret = HalGpioMrdyInit((halGpioCfg_t *)&((npiI2cCfg_t *)pCfg)->gpioCfg[1])))
 	{
-		error_printf("%s(): ERROR returned from HalGpioMrdyInit!\n", __FUNCTION__);
+		LOG_ERROR("%s(): ERROR returned from HalGpioMrdyInit!\n", __FUNCTION__);
 	}
 	if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit((halGpioCfg_t *)&((npiI2cCfg_t *)pCfg)->gpioCfg[2])))
 	{
-		error_printf("%s(): ERROR returned from HalGpioResetInit!\n", __FUNCTION__);
+		LOG_ERROR("%s(): ERROR returned from HalGpioResetInit!\n", __FUNCTION__);
 	}
 
 	if	(ret == NPI_LNX_SUCCESS)
@@ -249,14 +244,13 @@ int NPI_I2C_OpenDevice(const char *portName, void *pCfg)
 		}
 		else
 		{
-			error_printf("%s() ERROR: Did not attempt to start Threads\n", __FUNCTION__);
+			LOG_ERROR("%s() ERROR: Did not attempt to start Threads\n", __FUNCTION__);
 		}
 	}
 
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] returning %d\n", __FUNCTION__, ret);
-		time_printf(tmpStr);
+		time_printf("[%s] returning %d\n", __FUNCTION__, ret);
 	}
    return ret;
 }
@@ -279,17 +273,17 @@ int NPI_I2C_OpenDevice(const char *portName, void *pCfg)
  */
 void NPI_I2C_CloseDevice(void)
 {
-  error_printf("Shutting down threads\n");
+  LOG_ERROR("Shutting down threads\n");
   npi_termpoll();
-  error_printf("Closing I2C\n"); 
+  LOG_ERROR("Closing I2C\n");
   HalI2cClose();
-  error_printf("Closing GPIO-SRDY\n");
+  LOG_ERROR("Closing GPIO-SRDY\n");
   HalGpioSrdyClose();
-  error_printf("Closing GPIO-MRDY\n");
+  LOG_ERROR("Closing GPIO-MRDY\n");
   HalGpioMrdyClose();
-  error_printf("Closing GPIO-RESET\n");
+  LOG_ERROR("Closing GPIO-RESET\n");
   HalGpioResetClose();
-  error_printf("Closing completed\n");
+  LOG_ERROR("Closing completed\n");
   npiOpenFlag = FALSE;
 }
 
@@ -314,11 +308,9 @@ void NPI_I2C_CloseDevice(void)
 int NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
 {
 	int ret = NPI_LNX_SUCCESS;
-	char tmpStr[1024];
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] Locking POLL and SRDY\n", __FUNCTION__);
-		time_printf(tmpStr);
+		time_printf("[%s] Locking POLL and SRDY\n", __FUNCTION__);
 	}
 	fflush(stdout);
 	//Lock the polling until the command is send
@@ -335,8 +327,7 @@ int NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
 		PollLockVar = 1;
 		if ( __BIG_DEBUG_ACTIVE == TRUE )
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
-			time_printf(tmpStr);
+			time_printf("[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
 		}
 	}
 
@@ -344,15 +335,13 @@ int NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
 	{
 		if ( __BIG_DEBUG_ACTIVE == TRUE )
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] (Sync) success\n", __FUNCTION__);
-			time_printf(tmpStr);
+			time_printf("[%s] (Sync) success\n", __FUNCTION__);
 		}
 	}
 
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] ******************** START SEND ASYNC DATA ********************\n", __FUNCTION__);
-		time_printf(tmpStr);
+		time_printf("[%s] ******************** START SEND ASYNC DATA ********************\n", __FUNCTION__);
 	}
 	// Add Proper RPC type to header
 	((uint8*)pMsg)[RPC_POS_CMD0] = (((uint8*)pMsg)[RPC_POS_CMD0] & RPC_SUBSYSTEM_MASK) | RPC_CMD_AREQ;
@@ -369,8 +358,7 @@ int NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
 
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] AREQ\n", __FUNCTION__);
-		time_printf(tmpStr);
+		time_printf("[%s] AREQ\n", __FUNCTION__);
 	}
 
 	//Wait for SRDY Clear
@@ -394,16 +382,14 @@ int NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
 		PollLockVar = 0;
 		if ( __BIG_DEBUG_ACTIVE == TRUE )
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
-			time_printf(tmpStr);
+			time_printf("[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
 		}
 	}
 	// Also signal poll thread so it can poll for a NULL message from the RNP. Otherwise we won't later get
 	// the interrupt from the RNP, since the RNP will keep SRDY low until it has answered NULL to a poll.
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] Signaling poll thread to perform a final 0 response poll ...\n", __FUNCTION__);
-		time_printf(tmpStr);
+		time_printf("[%s] Signaling poll thread to perform a final 0 response poll ...\n", __FUNCTION__);
 	}
 	pthread_cond_signal(&npi_srdy_H2L_poll); // Signal it (let it get cond)
 	pthread_mutex_unlock(&npiPollLock);      // Release mutex so it can re-acquire it.
@@ -412,10 +398,8 @@ int NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
 #endif
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] Unlock SRDY mutex\n", __FUNCTION__);
-		time_printf(tmpStr);
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] ******************** STOP SEND ASYNC DATA ********************\n", __FUNCTION__);
-		time_printf(tmpStr);
+		time_printf("[%s] Unlock SRDY mutex\n", __FUNCTION__);
+		time_printf("[%s] ******************** STOP SEND ASYNC DATA ********************\n", __FUNCTION__);
 	}
 
 	return ret;
@@ -443,11 +427,9 @@ int NPI_I2C_SendAsynchData(npiMsgData_t *pMsg)
 int npi_i2c_pollData(npiMsgData_t *pMsg)
 {
 	int	ret = NPI_LNX_SUCCESS;
-	char tmpStr[1024];
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] -------------------- START POLLING DATA --------------------\n", __FUNCTION__);
-		time_printf(tmpStr);
+		time_printf("[%s] -------------------- START POLLING DATA --------------------\n", __FUNCTION__);
 	}
 
 #ifdef SRDY_INTERRUPT
@@ -482,14 +464,13 @@ int npi_i2c_pollData(npiMsgData_t *pMsg)
 					(pMsg->cmdId == 0xFF) )
 			{
 				// Do nothing
-				error_printf("[POLL] WARNING: Invalid header (FF FF FF) received!\n");
+				LOG_ERROR("[POLL] WARNING: Invalid header (FF FF FF) received!\n");
 			}
 			else if (pMsg->len > 0)
 			{
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] I2C Read Response \n", __FUNCTION__);
-					time_printf(tmpStr);
+					time_printf("[%s] I2C Read Response \n", __FUNCTION__);
 				}
 				//Zero buffer for length about to read, then do a write/read of the corresponding length
 				memset(pMsg->pData, 0, ((uint8*)pMsg)[0]);
@@ -504,8 +485,7 @@ int npi_i2c_pollData(npiMsgData_t *pMsg)
 
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] -------------------- END POLLING DATA --------------------\n", __FUNCTION__);
-		time_printf(tmpStr);
+		time_printf("[%s] -------------------- END POLLING DATA --------------------\n", __FUNCTION__);
 	}
 #ifdef SRDY_INTERRUPT
 	pthread_mutex_unlock(&npiSrdyLock);
@@ -543,14 +523,13 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 
 	if (__BIG_DEBUG_ACTIVE == TRUE)
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] Lock Poll mutex \n", __FUNCTION__);
-		time_printf(tmpStr);
+		time_printf("[%s] Lock Poll mutex \n", __FUNCTION__);
 	}
 	//Lock the polling until the command is send
 	lockRetPoll = pthread_mutex_lock(&npiPollLock);
 	if (lockRetPoll)
 	{
-		error_printf("[SYNCH] [ERR] Error %d getting POLL mutex lock\n", lockRetPoll);
+		LOG_ERROR("[SYNCH] [ERR] Error %d getting POLL mutex lock\n", lockRetPoll);
 		perror("mutex lock");
 		npi_ipc_errno = NPI_LNX_ERROR_I2C_SEND_SYNCH_FAILED_LOCK;
 		ret = NPI_LNX_FAILURE;
@@ -559,19 +538,17 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 	{
 		if (__BIG_DEBUG_ACTIVE == TRUE)
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] Poll mutex locked\n", __FUNCTION__);
-			time_printf(tmpStr);
+			time_printf("[%s] Poll mutex locked\n", __FUNCTION__);
 		}
 #ifdef SRDY_INTERRUPT
 		if (__BIG_DEBUG_ACTIVE == TRUE)
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] Lock SRDY mutex \n", __FUNCTION__);
-			time_printf(tmpStr);
+			time_printf("[%s] Lock SRDY mutex \n", __FUNCTION__);
 		}
 		lockRetSrdy = pthread_mutex_lock(&npiSrdyLock);
 		if (lockRetSrdy)
 		{
-			error_printf("[SYNCH] [ERR] Error %d getting SRDY mutex lock\n", lockRetSrdy);
+			LOG_ERROR("[SYNCH] [ERR] Error %d getting SRDY mutex lock\n", lockRetSrdy);
 			perror("mutex lock");
 			ret = NPI_LNX_FAILURE;
 		}
@@ -579,8 +556,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 		{
 			if (__BIG_DEBUG_ACTIVE == TRUE)
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] SRDY mutex locked\n", __FUNCTION__);
-				time_printf(tmpStr);
+				time_printf("[%s] SRDY mutex locked\n", __FUNCTION__);
 			}
 		}
 #endif
@@ -597,14 +573,12 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 			PollLockVar = 1;
 			if (__BIG_DEBUG_ACTIVE == TRUE)
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
-				time_printf(tmpStr);
+				time_printf("[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
 			}
 		}
 		if (__BIG_DEBUG_ACTIVE == TRUE)
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] =================== START SEND SYNCH DATA ====================\n", __FUNCTION__);
-			time_printf(tmpStr);
+			time_printf("[%s] =================== START SEND SYNCH DATA ====================\n", __FUNCTION__);
 		}
 	}
 
@@ -612,9 +586,9 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 	{
 #ifdef __BIG_DEBUG__
 		if (TRUE == HAL_RNP_SRDY_CLR())
-			printf("[SYNCH] SRDY set\n");
+			LOG_ALWAYS("[SYNCH] SRDY set\n");
 		else
-			printf("[SYNCH] SRDY Clear\n");
+			LOG_ALWAYS("[SYNCH] SRDY Clear\n");
 #endif
 
 		// Add Proper RPC type to header
@@ -629,7 +603,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 		ret = HalGpioWaitSrdyClr();
 
 		if (ret != NPI_LNX_SUCCESS)
-			error_printf("[SYNCH] [SREQ] ERROR! Waiting for SRDY assert failed, ret=0x%x\n", ret);
+			LOG_ERROR("[SYNCH] [SREQ] ERROR! Waiting for SRDY assert failed, ret=0x%x\n", ret);
 		else
 		{
 			if (__BIG_DEBUG_ACTIVE == TRUE)
@@ -641,8 +615,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 					snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, " 0x%.2X", ((uint8*)pMsg)[i]);
 					strIndex += 5;
 				}
-				snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "\n");
-				time_printf(tmpStr);
+				time_printf("%s\n", tmpStr);
 			}
 
 			//This wait is only valid if RNP manage MRDY line, if not SRDY will never be set low on SREQ.
@@ -668,19 +641,18 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 						snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, " 0x%.2X", ((uint8*)pMsg)[i]);
 						strIndex += 5;
 					}
-					snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "\n");
-					time_printf(tmpStr);
+					time_printf("%s\n", tmpStr);
 				}
 
 				if (ret != NPI_LNX_SUCCESS)
 				{
-						error_printf("[%s] HalI2cRead() returned 0x%x, line %d, errno=0x%x\n", __FUNCTION__, ret, __LINE__, npi_ipc_errno);
+						LOG_ERROR("[%s] HalI2cRead() returned 0x%x, line %d, errno=0x%x\n", __FUNCTION__, ret, __LINE__, npi_ipc_errno);
 				}
 				else if (pMsg->len > 0)
 				{
 					if (pMsg->len == 0xFF && pMsg->subSys == 0xFF && pMsg->cmdId == 0xFF)
 					{
-						error_printf("[%s] Received 0xFF 0xFF 0xFF.  Ignoring it and returning an error!\n", __FUNCTION__);
+						LOG_ERROR("[%s] Received 0xFF 0xFF 0xFF.  Ignoring it and returning an error!\n", __FUNCTION__);
 						ret = NPI_LNX_FAILURE;
 					}
 					else
@@ -699,8 +671,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 								snprintf(tmpStr, sizeof(tmpStr) - strIndex, " 0x%.2X", pMsg->pData[i]);
 								strIndex += 5;
 							}
-							snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "\n");
-							time_printf(tmpStr);
+							time_printf("%s\n", tmpStr);
 						}
 					}
 				}
@@ -724,8 +695,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 		PollLockVar = 0;
 		if (__BIG_DEBUG_ACTIVE == TRUE)
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
-			time_printf(tmpStr);
+			time_printf("[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
 		}
 	}
 
@@ -733,8 +703,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 	//Release the polling lock
 	if (__BIG_DEBUG_ACTIVE == TRUE)
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] =================== END SEND SYNCH DATA ====================\n", __FUNCTION__);
-		time_printf(tmpStr);
+		time_printf("[%s] =================== END SEND SYNCH DATA ====================\n", __FUNCTION__);
 	}
 
 	if (!lockRetPoll)
@@ -743,8 +712,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 		// the interrupt from the RNP, since the RNP will keep SRDY low until it has answered NULL to a poll.
 		if (__BIG_DEBUG_ACTIVE == TRUE)
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] Signaling poll thread to perform a final 0 response poll ...\n", __FUNCTION__);
-			time_printf(tmpStr);
+			time_printf("[%s] Signaling poll thread to perform a final 0 response poll ...\n", __FUNCTION__);
 		}
 		pthread_cond_signal(&npi_srdy_H2L_poll); // Signal it (let it get cond)
 		pthread_mutex_unlock(&npiPollLock);      // Release mutex so it can re-acquire it.
@@ -756,8 +724,7 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 		pthread_mutex_unlock(&npiSrdyLock);
 		if (__BIG_DEBUG_ACTIVE == TRUE)
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] Unlocked SRDY mutex\n", __FUNCTION__);
-			time_printf(tmpStr);
+			time_printf("[%s] Unlocked SRDY mutex\n", __FUNCTION__);
 		}
 	}
 #endif
@@ -783,16 +750,12 @@ int NPI_I2C_SendSynchData(npiMsgData_t *pMsg)
 int NPI_I2C_ResetSlave(void)
 {
 	int ret = NPI_LNX_SUCCESS;
-	char tmpStr[128];
 
-	snprintf(tmpStr, sizeof(tmpStr), "[%s] -------------------- START RESET SLAVE -------------------\n", __FUNCTION__);
-	time_printf(tmpStr);
+	time_printf("[%s] -------------------- START RESET SLAVE -------------------\n", __FUNCTION__);
 	ret = HalGpioReset();
-	snprintf(tmpStr, sizeof(tmpStr), "[%s] Wait 1.2s for RNP to initialize after a Reset... This may change in the future, check for RTI_ResetInd()...\n", __FUNCTION__);
-	time_printf(tmpStr);
+	time_printf("[%s] Wait 1.2s for RNP to initialize after a Reset... This may change in the future, check for RTI_ResetInd()...\n", __FUNCTION__);
 	usleep(1200000); //wait 1.2s for RNP to initialize
-	snprintf(tmpStr, sizeof(tmpStr), "[%s] ---------------------- END RESET SLAVE -------------------\n", __FUNCTION__);
-	time_printf(tmpStr);
+	time_printf("[%s] ---------------------- END RESET SLAVE -------------------\n", __FUNCTION__);
 
 	return ret;
 }
@@ -832,41 +795,41 @@ static int npi_initThreads(void)
 /* Initialize thread synchronization resources */
 static int npi_initsyncres(void)
 {
-	printf("[MUTEX] Initializing mutexes\n");
+	LOG_DEBUG("[MUTEX] Initializing mutexes\n");
 	// initialize all mutexes
 	pthread_mutexattr_init(&npiPollLock_attr);
 	pthread_mutexattr_settype(&npiPollLock_attr, PTHREAD_MUTEX_ERRORCHECK);
 	if ( pthread_mutex_init(&npiPollLock, &npiPollLock_attr) )
 //	if ( pthread_mutex_init(&npiPollLock, NULL) )
 	{
-		error_printf("Fail To Initialize Mutex npiPollLock\n");
+		LOG_ERROR("Fail To Initialize Mutex npiPollLock\n");
 	    npi_ipc_errno = NPI_LNX_ERROR_I2C_OPEN_FAILED_POLL_LOCK_MUTEX;
 	    return NPI_LNX_FAILURE;
 	}
 
 	if(pthread_mutex_init(&npi_poll_mutex, NULL))
 	{
-		error_printf("Fail To Initialize Mutex npi_poll_mutex\n");
+		LOG_ERROR("Fail To Initialize Mutex npi_poll_mutex\n");
 	    npi_ipc_errno = NPI_LNX_ERROR_I2C_OPEN_FAILED_POLL_MUTEX;
 	    return NPI_LNX_FAILURE;
 	}
 #ifdef SRDY_INTERRUPT
 	if(pthread_cond_init(&npi_srdy_H2L_poll, NULL))
 	{
-		error_printf("Fail To Initialize Condition npi_srdy_H2L_poll\n");
+		LOG_ERROR("Fail To Initialize Condition npi_srdy_H2L_poll\n");
 	    npi_ipc_errno = NPI_LNX_ERROR_I2C_OPEN_FAILED_SRDY_COND;
 	    return NPI_LNX_FAILURE;
 	}
 	if (pthread_mutex_init(&npiSrdyLock, NULL))
 	{
-		error_printf("Fail To Initialize Mutex npiSrdyLock\n");
+		LOG_ERROR("Fail To Initialize Mutex npiSrdyLock\n");
 	    npi_ipc_errno = NPI_LNX_ERROR_I2C_OPEN_FAILED_SRDY_LOCK_MUTEX;
 	    return NPI_LNX_FAILURE;
 	}
 #else
 	if(pthread_cond_init(&npi_poll_cond, NULL))
 	{
-		error_printf("Fail To Initialize Condition npi_poll_cond\n");
+		LOG_ERROR("Fail To Initialize Condition npi_poll_cond\n");
 	    npi_ipc_errno = NPI_LNX_ERROR_I2C_OPEN_FAILED_POLL_COND;
 	    return NPI_LNX_FAILURE;
 	}
@@ -896,38 +859,32 @@ static void *npi_poll_entry(void *ptr)
 {
 	int ret = NPI_LNX_SUCCESS;
 	uint8 readbuf[128];
-	char tmpStr[1024];
 #ifndef SRDY_INTERRUPT
 	uint8 pollStatus = FALSE;
 #endif //SRDY_INTERRUPT
 
 	((void)ptr);
-	snprintf(tmpStr, sizeof(tmpStr), "[%s] Locking Mutex for Poll Thread \n", __FUNCTION__);
-	time_printf(tmpStr);
+	time_printf("[%s] Locking Mutex for Poll Thread \n", __FUNCTION__);
 
 	/* lock mutex in order not to lose signal */
 	pthread_mutex_lock(&npi_poll_mutex);
 
-	snprintf(tmpStr, sizeof(tmpStr), "[%s] Poll Thread Started\n", __FUNCTION__);
-	time_printf(tmpStr);
+	time_printf("[%s] Poll Thread Started\n", __FUNCTION__);
 
 	//This lock wait for Initialization to finish (reset)
 	pthread_mutex_lock(&npiPollLock);
 
-	snprintf(tmpStr, sizeof(tmpStr), "[%s] Poll Thread Continues After Synchronization\n", __FUNCTION__);
-	time_printf(tmpStr);
+	time_printf("[%s] Poll Thread Continues After Synchronization\n", __FUNCTION__);
 
 #ifdef SRDY_INTERRUPT
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] Lock Poll mutex (SRDY=%d) \n", __FUNCTION__, global_srdy);
-		time_printf(tmpStr);
+		time_printf("[%s] Lock Poll mutex (SRDY=%d) \n", __FUNCTION__, global_srdy);
 	}
 	pthread_cond_wait(&npi_srdy_H2L_poll, &npiPollLock);
 	if ( __BIG_DEBUG_ACTIVE == TRUE )
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "[%s] Locked Poll mutex (SRDY=%d) \n",	__FUNCTION__, global_srdy);
-		time_printf(tmpStr);
+		time_printf("[%s] Locked Poll mutex (SRDY=%d) \n",	__FUNCTION__, global_srdy);
 	}
 #else
 	pthread_mutex_unlock(&npiPollLock);
@@ -949,9 +906,8 @@ static void *npi_poll_entry(void *ptr)
 			PollLockVar = 1;
 			if ( __BIG_DEBUG_ACTIVE == TRUE )
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] PollLockVar set to %d\n",
+				time_printf("[%s] PollLockVar set to %d\n",
 						__FUNCTION__, PollLockVar);
-				time_printf(tmpStr);
 			}
 		}
 
@@ -972,8 +928,7 @@ static void *npi_poll_entry(void *ptr)
 		{
 			if ( __BIG_DEBUG_ACTIVE == TRUE )
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] Polling received... \n", __FUNCTION__);
-				time_printf(tmpStr);
+				time_printf("[%s] Polling received... \n", __FUNCTION__);
 			}
 
 			//RNP is polling, retrieve the data
@@ -992,7 +947,7 @@ static void *npi_poll_entry(void *ptr)
 					{
 						// Exit thread to invoke report to main thread
 						npi_poll_terminate = 1;
-						error_printf("%s:%d: ERROR! Terminating poll because RPC_CMD_AREQ.\n", __FUNCTION__, __LINE__);
+						LOG_ERROR("%s:%d: ERROR! Terminating poll because RPC_CMD_AREQ.\n", __FUNCTION__, __LINE__);
 					}
 				}
 			}
@@ -1020,7 +975,7 @@ static void *npi_poll_entry(void *ptr)
 				default:
 					// Exit clean so main knows...
 					npi_poll_terminate = 1;
-					error_printf("%s:%d: ERROR! Terminating poll because error return (ret=%d, npi_ipc_errno=%d).\n", __FUNCTION__, __LINE__, ret, npi_ipc_errno);
+					LOG_ERROR("%s:%d: ERROR! Terminating poll because error return (ret=%d, npi_ipc_errno=%d).\n", __FUNCTION__, __LINE__, ret, npi_ipc_errno);
 					break;
 				}
 			}
@@ -1034,8 +989,7 @@ static void *npi_poll_entry(void *ptr)
 				PollLockVar = 0;
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
-					time_printf(tmpStr);
+					time_printf("[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
 				}
 			}
 
@@ -1045,21 +999,19 @@ static void *npi_poll_entry(void *ptr)
 				pollStatus = TRUE;
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] Unlock SRDY mutex \n", __FUNCTION__);
-					time_printf(tmpStr);
+					time_printf("[%s] Unlock SRDY mutex \n", __FUNCTION__);
 				}
 			}
 			else
 			{
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] Failed to unlock SRDY mutex \n", __FUNCTION__);
-					time_printf(tmpStr);
+					time_printf("[%s] Failed to unlock SRDY mutex \n", __FUNCTION__);
 				}
 			    npi_ipc_errno = NPI_LNX_ERROR_I2C_POLL_THREAD_POLL_UNLOCK;
 			    ret = NPI_LNX_FAILURE;
 				npi_poll_terminate = 1;
-				error_printf("%s:%d: ERROR! Terminating poll because POLL mutex unlock failed.\n", __FUNCTION__, __LINE__);
+				LOG_ERROR("%s:%d: ERROR! Terminating poll because POLL mutex unlock failed.\n", __FUNCTION__, __LINE__);
 			}
 #endif //SRDY_INTERRUPT
 		}
@@ -1074,37 +1026,33 @@ static void *npi_poll_entry(void *ptr)
 				PollLockVar = 0;
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
-					time_printf(tmpStr);
+					time_printf("[%s] PollLockVar set to %d\n", __FUNCTION__, PollLockVar);
 				}
 			}
 
 #ifdef SRDY_INTERRUPT
 			if ( __BIG_DEBUG_ACTIVE == TRUE )
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] SRDY was not 0 when we expected!\n", __FUNCTION__);
-				time_printf(tmpStr);
+				time_printf("[%s] SRDY was not 0 when we expected!\n", __FUNCTION__);
 			}
 #else
 			if ( 0 == pthread_mutex_unlock(&npiPollLock))
 			{
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] Unlock SRDY mutex \n", __FUNCTION__);
-					time_printf(tmpStr);
+					time_printf("[%s] Unlock SRDY mutex \n", __FUNCTION__);
 				}
 			}
 			else
 			{
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] Failed to unlock SRDY mutex \n", __FUNCTION__);
-					time_printf(tmpStr);
+					time_printf("[%s] Failed to unlock SRDY mutex \n", __FUNCTION__);
 				}
 			    npi_ipc_errno = NPI_LNX_ERROR_I2C_POLL_THREAD_POLL_UNLOCK;
 			    ret = NPI_LNX_FAILURE;
 				npi_poll_terminate = 1;
-				error_printf("%s:%d: ERROR! Terminating poll because POLL mutex unlock failed.\n", __FUNCTION__, __LINE__);
+				LOG_ERROR("%s:%d: ERROR! Terminating poll because POLL mutex unlock failed.\n", __FUNCTION__, __LINE__);
 			}
 			pollStatus = FALSE;
 #endif //SRDY_INTERRUPT
@@ -1113,22 +1061,19 @@ static void *npi_poll_entry(void *ptr)
 #ifdef SRDY_INTERRUPT
 		if ( __BIG_DEBUG_ACTIVE == TRUE )
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] Unlock POLL mutex by conditional wait (SRDY=%d) \n", __FUNCTION__, global_srdy);
-			time_printf(tmpStr);
+			time_printf("[%s] Unlock POLL mutex by conditional wait (SRDY=%d) \n", __FUNCTION__, global_srdy);
 		}
 		if (TRUE == HAL_RNP_SRDY_SET())
 		{
 			if ( __BIG_DEBUG_ACTIVE == TRUE )
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] Waiting for SRDY to go low\n", __FUNCTION__);
-				time_printf(tmpStr);
+				time_printf("[%s] Waiting for SRDY to go low\n", __FUNCTION__);
 			}
 			int condWaitRetVal = pthread_cond_wait(&npi_srdy_H2L_poll, &npiPollLock);
 			if (condWaitRetVal)
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] pthread_cond_wait returned with %d (%s, %s)\n", __FUNCTION__,
+				time_printf("[%s] pthread_cond_wait returned with %d (%s, %s)\n", __FUNCTION__,
 						condWaitRetVal, strerror(condWaitRetVal), strerror(errno));
-				time_printf(tmpStr);
 				if (condWaitRetVal == 1) exit(-1);
 			}
 		}
@@ -1145,16 +1090,14 @@ static void *npi_poll_entry(void *ptr)
 			}
 			if ( __BIG_DEBUG_ACTIVE == TRUE )
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] SRDY found high after poll, poll again\n", __FUNCTION__);
-				time_printf(tmpStr);
+				time_printf("[%s] SRDY found high after poll, poll again\n", __FUNCTION__);
 			}
 			// After a synchronous request we need to poll RNP again. The RNP will only release SRDY after
 			// replying with 0x00 0x00 0x00 to a poll request.
 		}
 		if ( __BIG_DEBUG_ACTIVE == TRUE )
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "[%s] Locked POLL mutex because condition was met (SRDY=%d) \n", __FUNCTION__, global_srdy);
-			time_printf(tmpStr);
+			time_printf("[%s] Locked POLL mutex because condition was met (SRDY=%d) \n", __FUNCTION__, global_srdy);
 		}
 #else
 		if (!pollStatus) //If previous poll failed, wait 10ms to do another one, else do it right away to empty the RNP queue.
@@ -1172,7 +1115,7 @@ static void *npi_poll_entry(void *ptr)
 		}
 #endif
 	}
-	error_printf("[POLL] WARNING. Thread exiting with ret=%d, npi_ipc_errno0x%x...\n", ret, npi_ipc_errno);
+	LOG_ERROR("[POLL] WARNING. Thread exiting with ret=%d, npi_ipc_errno0x%x...\n", ret, npi_ipc_errno);
 	pthread_mutex_unlock(&npi_poll_mutex);
 
 	char const *errorMsg;
@@ -1210,7 +1153,7 @@ static void npi_termpoll(void)
 {
   //This will cause the Thread to exit
   npi_poll_terminate = 1;
-  error_printf("%s:%d: Terminating poll because...well, we're %s().\n", __FUNCTION__, __LINE__, __FUNCTION__);
+  LOG_ERROR("%s:%d: Terminating poll because...well, we're %s().\n", __FUNCTION__, __LINE__, __FUNCTION__);
 
 #ifdef SRDY_INTERRUPT
 	pthread_cond_signal(&npi_srdy_H2L_poll);
@@ -1262,11 +1205,10 @@ static void *npi_event_entry(void *ptr)
 	/* Timeout in msec. Drop down to I2C_ISR_POLL_TIMEOUT_MS_MIN if two consecutive interrupts are missed */
 	struct pollfd pollfds[1];
 	int val;
-	char tmpStr[1024];
 
-	snprintf(tmpStr, sizeof(tmpStr), "[%s] Interrupt Event Thread Started \n", __FUNCTION__);
-	time_printf(tmpStr);
 	((void)ptr);
+
+	time_printf("[%s] Interrupt Event Thread Started \n", __FUNCTION__);
 	/* thread loop */
 	while (!npi_poll_terminate)
 	{
@@ -1284,13 +1226,11 @@ static void *npi_event_entry(void *ptr)
 				// We are in Asynch or Synch, so return to poll
 				if (HAL_RNP_SRDY_SET() == TRUE)
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] SRDY found to be de-asserted while we are transmitting\n", __FUNCTION__);
-					time_printf(tmpStr);
+					time_printf("[%s] SRDY found to be de-asserted while we are transmitting\n", __FUNCTION__);
 				}
 				else
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] SRDY found to be asserted while we are transmitting\n", __FUNCTION__);
-					time_printf(tmpStr);
+					time_printf("[%s] SRDY found to be asserted while we are transmitting\n", __FUNCTION__);
 				}
 			}
 			continue;
@@ -1299,8 +1239,7 @@ static void *npi_event_entry(void *ptr)
 		{
 			if ( __BIG_DEBUG_ACTIVE == TRUE && (consecutiveTimeout % 5000 == 0) )
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] Event thread has SRDY mutex lock, result = %d\n", __FUNCTION__, result);
-				time_printf(tmpStr);
+				time_printf("[%s] Event thread has SRDY mutex lock, result = %d\n", __FUNCTION__, result);
 			}
 			// We got lock, move on
 			switch (result)
@@ -1315,8 +1254,7 @@ static void *npi_event_entry(void *ptr)
 				}
 				if (__BIG_DEBUG_ACTIVE == TRUE)
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] poll() timeout (timeout set to %d), poll() returned %d\n", __FUNCTION__, timeout, result);
-					time_printf(tmpStr);
+					time_printf("[%s] poll() timeout (timeout set to %d), poll() returned %d\n", __FUNCTION__, timeout, result);
 				}
 				result = 2; //Force wrong result to avoid deadlock caused by timeout
 				//#ifdef __BIG_DEBUG__
@@ -1324,7 +1262,7 @@ static void *npi_event_entry(void *ptr)
 				{
 					ret = val;
 					npi_poll_terminate = 1;
-					error_printf("%s:%d: ERROR! Terminating poll because HalGpioSrdyCheck() returned error %d.\n", __FUNCTION__, __LINE__, ret);
+					LOG_ERROR("%s:%d: ERROR! Terminating poll because HalGpioSrdyCheck() returned error %d.\n", __FUNCTION__, __LINE__, ret);
 				}
 				else
 				{
@@ -1333,8 +1271,7 @@ static void *npi_event_entry(void *ptr)
 					{
 						if ( __BIG_DEBUG_ACTIVE == TRUE )
 						{
-							snprintf(tmpStr, sizeof(tmpStr), "[%s] Missed interrupt: %d (it #%d)\n", __FUNCTION__, missedInterrupt, whileIt);
-							time_printf(tmpStr);
+							time_printf("[%s] Missed interrupt: %d (it #%d)\n", __FUNCTION__, missedInterrupt, whileIt);
 						}
 						missedInterrupt++;
 						consecutiveTimeout = 0;
@@ -1363,8 +1300,7 @@ static void *npi_event_entry(void *ptr)
 
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] SRDY: %d\n", __FUNCTION__, global_srdy);
-					time_printf(tmpStr);
+					time_printf("[%s] SRDY: %d\n", __FUNCTION__, global_srdy);
 				}
 				__BIG_DEBUG_ACTIVE = bigDebugWas;
 				break;
@@ -1373,15 +1309,14 @@ static void *npi_event_entry(void *ptr)
 			{
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] poll() error (%s)\n", __FUNCTION__, strerror(errno));
-					time_printf(tmpStr);
+					time_printf("[%s] poll() error (%s)\n", __FUNCTION__, strerror(errno));
 				}
 				npi_ipc_errno = NPI_LNX_ERROR_I2C_EVENT_THREAD_FAILED_POLL;
 				ret = NPI_LNX_FAILURE;
 				consecutiveTimeout = 0;
 				// Exit clean so main knows...
 				npi_poll_terminate = 1;
-				error_printf("%s:%d: ERROR! Terminating poll because poll() error (%s).\n", __FUNCTION__, __LINE__, strerror(errno));
+				LOG_ERROR("%s:%d: ERROR! Terminating poll because poll() error (%s).\n", __FUNCTION__, __LINE__, strerror(errno));
 				break;
 			}
 			default:
@@ -1395,18 +1330,16 @@ static void *npi_event_entry(void *ptr)
 					{
 						if ( __BIG_DEBUG_ACTIVE == TRUE )
 						{
-							snprintf(tmpStr, sizeof(tmpStr), "[%s] Poll returned error (it #%d), revent[0] = %d",
+							time_printf("[%s] Poll returned error (it #%d), revent[0] = %d",
 									__FUNCTION__, whileIt, pollfds[0].revents);
-							time_printf(tmpStr);
 						}
 					}
 					else
 					{
 						if ( __BIG_DEBUG_ACTIVE == TRUE )
 						{
-							snprintf(tmpStr, sizeof(tmpStr), "[%s] Clearing missed INT (it #%d), results = %d, revent[0] = %d",
+							time_printf("[%s] Clearing missed INT (it #%d), results = %d, revent[0] = %d",
 									__FUNCTION__, whileIt, result, pollfds[0].revents);
-							time_printf(tmpStr);
 						}
 						missedInterrupt = 0;
 						// Set timeout back to 100ms
@@ -1420,8 +1353,7 @@ static void *npi_event_entry(void *ptr)
 				result = global_srdy = HalGpioSrdyCheck(1);
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] Set global SRDY: %d\n", __FUNCTION__, global_srdy);
-					time_printf(tmpStr);
+					time_printf("[%s] Set global SRDY: %d\n", __FUNCTION__, global_srdy);
 				}
 
 				break;
@@ -1475,12 +1407,11 @@ static void *npi_event_entry(void *ptr)
 			{
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] Failed to check MRDY\n", __FUNCTION__);
-					time_printf(tmpStr);
+					time_printf("[%s] Failed to check MRDY\n", __FUNCTION__);
 				}
 				// Exit clean so main knows...
 				npi_poll_terminate = 1;
-				error_printf("%s:%d: ERROR! Terminating poll because HalGpioMrdyCheck() returned error %d.\n", __FUNCTION__, __LINE__, ret);
+				LOG_ERROR("%s:%d: ERROR! Terminating poll because HalGpioMrdyCheck() returned error %d.\n", __FUNCTION__, __LINE__, ret);
 			}
 
 			if (ret != NPI_LNX_FAILURE)
@@ -1492,19 +1423,17 @@ static void *npi_event_entry(void *ptr)
 					{
 						timeout = I2C_ISR_POLL_TIMEOUT_MS_MIN;
 					}
-	
+
 					if ( __BIG_DEBUG_ACTIVE == TRUE )
 					{
-						snprintf(tmpStr, sizeof(tmpStr), "[%s] Missed interrupt, but SRDY is asserted! %d (it #%d)\n",
+						time_printf("[%s] Missed interrupt, but SRDY is asserted! %d (it #%d)\n",
 								__FUNCTION__, missedInterrupt, whileIt);
-						time_printf(tmpStr);
 					}
 				}
 
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] Event thread is releasing SRDY mutex lock, line %d\n", __FUNCTION__, __LINE__);
-					time_printf(tmpStr);
+					time_printf("[%s] Event thread is releasing SRDY mutex lock, line %d\n", __FUNCTION__, __LINE__);
 				}
 
 				// Unlock before signaling poll thread
@@ -1512,15 +1441,13 @@ static void *npi_event_entry(void *ptr)
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
 					//MRDY High, This is a request from the RNP
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] MRDY High??: %d, send H2L to POLL (srdy = %d)\n", __FUNCTION__, ret, global_srdy);
-					time_printf(tmpStr);
+					time_printf("[%s] MRDY High??: %d, send H2L to POLL (srdy = %d)\n", __FUNCTION__, ret, global_srdy);
 				}
 				// Before we can signal poll thread we need to make sure SynchData has completed
 				pthread_mutex_lock(&npiPollLock);        // Wait for it to call cond_wait, which releases mutex
 				if (__BIG_DEBUG_ACTIVE == TRUE)
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] Signaling poll thread to perform a poll ...\n", __FUNCTION__);
-					time_printf(tmpStr);
+					time_printf("[%s] Signaling poll thread to perform a poll ...\n", __FUNCTION__);
 				}
 				pthread_cond_signal(&npi_srdy_H2L_poll); // Signal it (let it get cond)
 				pthread_mutex_unlock(&npiPollLock);      // Release mutex so it can re-acquire it.
@@ -1529,8 +1456,7 @@ static void *npi_event_entry(void *ptr)
 			{
 				if ( __BIG_DEBUG_ACTIVE == TRUE )
 				{
-					snprintf(tmpStr, sizeof(tmpStr), "[%s] Event thread is releasing SRDY mutex lock, line %d\n", __FUNCTION__, __LINE__);
-					time_printf(tmpStr);
+					time_printf("[%s] Event thread is releasing SRDY mutex lock, line %d\n", __FUNCTION__, __LINE__);
 				}
 				pthread_mutex_unlock(&npiSrdyLock);
 			}
@@ -1541,8 +1467,7 @@ static void *npi_event_entry(void *ptr)
 			//Do nothing for now ...
 			if ( __BIG_DEBUG_ACTIVE == TRUE && (consecutiveTimeout % 5000 == 0) )
 			{
-				snprintf(tmpStr, sizeof(tmpStr), "[%s] Event thread is releasing SRDY mutex lock, result = %d, line %d\n", __FUNCTION__, result, __LINE__);
-				time_printf(tmpStr);
+				time_printf("[%s] Event thread is releasing SRDY mutex lock, result = %d, line %d\n", __FUNCTION__, result, __LINE__);
 			}
 			pthread_mutex_unlock(&npiSrdyLock);
 		}

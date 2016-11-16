@@ -47,14 +47,14 @@
 #endif
 
 #if defined _WIN32 || defined unix
-#define NEAR_FUNC
-#define XDATA
+	#define NEAR_FUNC
+	#define XDATA
 #elif defined __ICC430__
-#define NEAR_FUNC
-#define XDATA
+	#define NEAR_FUNC
+	#define XDATA
 #else
-#define NEAR_FUNC __near_func
-#define XDATA __xdata
+	#define NEAR_FUNC __near_func
+	#define XDATA __xdata
 #endif
 
 // Serial RX configuration

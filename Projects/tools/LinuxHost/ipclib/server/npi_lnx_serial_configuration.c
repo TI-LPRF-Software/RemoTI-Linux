@@ -46,14 +46,13 @@
 #include "npi_lnx.h"
 #include "npi_lnx_serial_configuration.h"
 #include "npi_lnx_error.h"
+#include "tiLogging.h"
 
 static char* pStrBufRoot;
 
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
-#endif
+
+#define IDX_GPIO          0
+#define IDX_LEVEL_SHIFTER 1
 
 const char* sectionNamesArray[5][2] =
 {
@@ -121,28 +120,28 @@ int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg
 	if (serialCfgFd == NULL)
 	{
 		//                            debug_
-		printf("Could not open file '%s'\n", configFilePath);
+		LOG_ERROR("Could not open file '%s'\n", configFilePath);
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_OPEN_REMOTI_RNP_CFG;
 	}
 
    // Check start-up option(s)
 
 	if (NPI_LNX_FAILURE != (SerialConfigParser(serialCfgFd, "STARTUP", "delaySeconds", strBuf)))
-   {
-      int delaySeconds = atoi(strBuf);
-      printf("NOTICE: Found optional STARTUP delaySeconds = %d\n", delaySeconds);
-      if (delaySeconds > 0)
-      {
-         printf("Sleeping %d seconds before continuing.\n", delaySeconds);
-         sleep(delaySeconds);
-         printf("Resuming.\n");
-      }
-   }
+	{
+		int delaySeconds = atoi(strBuf);
+		LOG_INFO("NOTICE: Found optional STARTUP delaySeconds = %d\n", delaySeconds);
+		if (delaySeconds > 0)
+		{
+			LOG_INFO("Sleeping %d seconds before continuing.\n", delaySeconds);
+			sleep(delaySeconds);
+			LOG_INFO("Resuming.\n");
+		}
+	}
 
 	// Get device type
 	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "DEVICE", "deviceKey", strBuf)))
 	{
-		printf("Could not find 'deviceKey' inside config file '%s'\n", configFilePath);
+		LOG_FATAL("Could not find 'deviceKey' inside config file '%s'\n", configFilePath);
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_KEY;
 		retVal = NPI_LNX_FAILURE;
 	}
@@ -150,7 +149,7 @@ int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg
 	// Copy from buffer to variable
 	serialCfg->devIdx = strBuf[0] - '0';
 	//            debug_
-	printf("deviceKey = %i  (%s - %s)\n", serialCfg->devIdx, strBuf,
+	LOG_DEBUG("deviceKey = %i  (%s - %s)\n", serialCfg->devIdx, strBuf,
 	      (serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_UART) ? "UART" :
 			(serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_SPI)  ? "SPI" :
 			(serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_I2C)  ? "I2C" : "?");
@@ -159,42 +158,36 @@ int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg
 	strBuf = pStrBufRoot;
 	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "DEVICE", "devPath", strBuf)))
 	{
-		printf("Could not find 'devPath' inside config file '%s'\n", configFilePath);
+		LOG_FATAL("Could not find 'devPath' inside config file '%s'\n", configFilePath);
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_PATH;
 		retVal = NPI_LNX_FAILURE;
 	}
 	// Copy from buffer to variable
 	memcpy(serialCfg->devPath, strBuf, strlen(strBuf));
 	//            debug_
-	printf("serialCfg->devPath = '%s'\n", serialCfg->devPath);
+	LOG_DEBUG("serialCfg->devPath = '%s'\n", serialCfg->devPath);
 
-	//            printf("serialCfg->devPath = ");
-	//            for (i = 0; i < strlen(strBuf); i++)
-	//            {
-	//                            printf("_");
-	//            }
-	//            printf("<\n");
 	// Get path to the log file
 	strBuf = pStrBufRoot;
 	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "LOG", "log", strBuf)))
 	{
-		printf("Could not find 'log' inside config file '%s'\n", configFilePath);
+		LOG_FATAL("Could not find 'log' inside config file '%s'\n", configFilePath);
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_LOG_PATH;
 		retVal = NPI_LNX_FAILURE;
 	}
 	// Copy from buffer to variable
 	strcpy(serialCfg->logPath, strBuf);
 	//            debug_
-	printf("serialCfg->logPath = '%s'\n", serialCfg->logPath);
+	LOG_DEBUG("serialCfg->logPath = '%s'\n", serialCfg->logPath);
 	if (!*serialCfg->logPath)
 	{
-		printf("Logs will go to stderr.\n");
+		LOG_ALWAYS("No log file path configured. Logs will go to stderr.\n");
 	}
 
 	// If Debug Interface is supported, configure it.
 	if (NPI_LNX_FAILURE == (SerialConfigParser(serialCfgFd, "DEBUG", "supported", strBuf)))
 	{
-		printf("Could not find [DEBUG]'supported' inside config file '%s'\n", configFilePath);
+		LOG_DEBUG("Could not find [DEBUG]'supported' inside config file '%s'\n", configFilePath);
 		serialCfg->debugSupported = 0;
 	}
 	else
@@ -206,7 +199,7 @@ int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg
 	uint8 gpioStart = 0, gpioEnd = 0;
 	if (serialCfg->debugSupported)
 	{
-		printf("Debug Interface is supported\n");
+		LOG_DEBUG("Debug Interface is supported\n");
 		gpioEnd = 5;
 		// If UART then skip MRDY, SRDY
 		if (serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_UART)
@@ -215,7 +208,7 @@ int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg
 		}
 	}
 	else if ((serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_SPI) ||
-			 (serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_I2C))
+	         (serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_I2C))
 	{
 		gpioEnd = 3;
 	}
@@ -227,140 +220,156 @@ int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg
 
 	// GPIO configuration
 	if ((serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_UART) ||
-			(serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_SPI) ||
-			(serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_I2C))
+	    (serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_SPI) ||
+	    (serialCfg->devIdx == NPI_SERVER_DEVICE_INDEX_I2C))
 	{
-		for (gpioIdx = gpioStart; gpioIdx < gpioEnd; gpioIdx++)	{
+		for (gpioIdx = gpioStart; gpioIdx < gpioEnd; gpioIdx++)
+		{
 			// Get SRDY, MRDY or RESET GPIO
-			debug_printf("serialCfg->gpioCfg[gpioIdx].gpio \t\t\t%p\n",
+			LOG_DEBUG("serialCfg->gpioCfg[gpioIdx].gpio \t\t\t%p\n",
 					(void *)&(serialCfg->gpioCfg[gpioIdx].gpio));
 
 			// Get SRDY, MRDY or RESET GPIO value
 			strBuf = pStrBufRoot;
-			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][0],
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][IDX_GPIO],
 					"value", strBuf)))
 			{
 			// Copy from buffer to variable
-				debug_printf("strBuf \t\t\t\t\t%p\n",
+				LOG_DEBUG("strBuf \t\t\t\t\t%p\n",
 						(void *)&strBuf);
-				debug_printf("serialCfg->gpioCfg[gpioIdx].gpio.value \t\t%p\n",
+				LOG_DEBUG("serialCfg->gpioCfg[gpioIdx].gpio.value \t\t%p\n",
 						(void *)&(serialCfg->gpioCfg[gpioIdx].gpio.value));
 				memcpy(serialCfg->gpioCfg[gpioIdx].gpio.value, strBuf, strlen(strBuf));
-				debug_printf("serialCfg->gpioCfg[%i]->gpio.value = '%s'\n",
+				LOG_DEBUG("serialCfg->gpioCfg[%i]->gpio.value = '%s'\n",
 						gpioIdx, serialCfg->gpioCfg[gpioIdx].gpio.value);
 			}
 			else
 			{
-				printf("[CONFIG] ERROR , key 'value' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][0]);
+				LOG_FATAL("[CONFIG] Key 'value' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][IDX_GPIO]);
 				npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO(gpioIdx, 0, serialCfg->devIdx);
 				retVal = NPI_LNX_FAILURE;
 			}
 
 			// Get SRDY, MRDY or RESET GPIO direction
 			strBuf = pStrBufRoot;
-			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][0],
+			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][IDX_GPIO],
 					"direction", strBuf)))
 			{
 			// Copy from buffer to variable
-				debug_printf("strBuf \t\t\t\t\t%p\n",
+				LOG_DEBUG("strBuf \t\t\t\t\t%p\n",
 						(void *)&strBuf);
-				debug_printf("serialCfg->gpioCfg[gpioIdx].gpio.direction \t%p\n",
+				LOG_DEBUG("serialCfg->gpioCfg[gpioIdx].gpio.direction \t%p\n",
 						(void *)&(serialCfg->gpioCfg[gpioIdx].gpio.direction));
 				memcpy(serialCfg->gpioCfg[gpioIdx].gpio.direction, strBuf,
 						strlen(strBuf));
-				debug_printf("serialCfg->gpioCfg[%i]->gpio.direction = '%s'\n",
+				LOG_DEBUG("serialCfg->gpioCfg[%i]->gpio.direction = '%s'\n",
 						gpioIdx, serialCfg->gpioCfg[gpioIdx].gpio.direction);
 			}
+		#ifndef USE_BCM_NEXUS_GPIO // direction is unused for Nexus GPIO config, so it's not an error if missing
 			else
 			{
-				printf("[CONFIG] ERROR , key 'direction' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][0]);
+				LOG_FATAL("[CONFIG] Key 'direction' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][IDX_GPIO]);
 				npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO(gpioIdx, 0, serialCfg->devIdx);
 				retVal = NPI_LNX_FAILURE;
 			}
+		#endif
 
-#ifdef SRDY_INTERRUPT
+		#ifdef SRDY_INTERRUPT
 			// Get SRDY, MRDY or RESET GPIO edge
 			if (gpioIdx == 0)
 			{
 				strBuf = pStrBufRoot;
-				if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][0],
+				if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, sectionNamesArray[gpioIdx][IDX_GPIO],
 						"edge", strBuf)))
 				{
 					// Copy from buffer to variable
-					debug_printf("strBuf \t\t\t\t\t%p\n",
+					LOG_DEBUG("strBuf \t\t\t\t\t%p\n",
 							(void *)&strBuf);
-					debug_printf("serialCfg->gpioCfg[gpioIdx].gpio.edge \t%p\n",
+					LOG_DEBUG("serialCfg->gpioCfg[gpioIdx].gpio.edge \t%p\n",
 							(void *)&(serialCfg->gpioCfg[gpioIdx].gpio.edge));
 					memcpy(serialCfg->gpioCfg[gpioIdx].gpio.edge, strBuf, strlen(strBuf));
-					debug_printf("serialCfg->gpioCfg[%i]->gpio.edge = '%s'\n",
+					LOG_DEBUG("serialCfg->gpioCfg[%i]->gpio.edge = '%s'\n",
 							gpioIdx, serialCfg->gpioCfg[gpioIdx].gpio.edge);
 				}
+			#ifndef USE_BCM_NEXUS_GPIO // Edge is unused for Nexus GPIO (hard-coded to both edges) so it's not an error if missing
 				else
 				{
-					printf("[CONFIG] ERROR , key 'edge' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][0]);
+					LOG_FATAL("[CONFIG] Key 'edge' is missing for mandatory GPIO %s\n", sectionNamesArray[gpioIdx][IDX_GPIO]);
 					npi_ipc_errno = NPI_LNX_ERROR_IPC_REMOTI_RNP_CFG_PARSER_DEVICE_GPIO(gpioIdx, 0, serialCfg->devIdx);
 					retVal = NPI_LNX_FAILURE;
 				}
+			#endif
 			}
-#endif
+		#endif
 			// Get SRDY, MRDY or RESET GPIO Active High/Low
 			strBuf = pStrBufRoot;
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd,
-					sectionNamesArray[gpioIdx][1], "active_high_low",
-					strBuf))) {
+					sectionNamesArray[gpioIdx][IDX_GPIO], "active_high_low",
+					strBuf)))
+			{
 			// Copy from buffer to variable
-			serialCfg->gpioCfg[gpioIdx].gpio.active_high_low = strBuf[0] - '0';
-			debug_printf("serialCfg->gpioCfg[%i]->gpio.active_high_low = %d\n",
-							gpioIdx, serialCfg->gpioCfg[gpioIdx].gpio.active_high_low);
+				serialCfg->gpioCfg[gpioIdx].gpio.active_high_low = strBuf[0] - '0';
+				LOG_DEBUG("serialCfg->gpioCfg[%i]->gpio.active_high_low = %d\n",
+								gpioIdx, serialCfg->gpioCfg[gpioIdx].gpio.active_high_low);
 			}
 			else
-				printf("[CONFIG] Warning , key 'active_high_low' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][0]);
+			{
+				LOG_WARN("[CONFIG] Key 'active_high_low' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][IDX_GPIO]);
+			}
 
+		#ifndef USE_BCM_NEXUS_GPIO // Level Shifter is unused for Nexus GPIO, so don't look for it.
 			// Get SRDY, MRDY or RESET Level Shifter
-			debug_printf("serialCfg->gpioCfg[gpioIdx].levelshifter \t\t\t%p\n",
-					(void *)&(serialCfg->gpioCfg[gpioIdx].levelshifter));
+			LOG_DEBUG("serialCfg->gpioCfg[gpioIdx].levelshifter \t\t\t%p\n",
+						(void *)&(serialCfg->gpioCfg[gpioIdx].levelshifter));
 
 			// Get SRDY, MRDY or RESET Level Shifter value
 			strBuf = pStrBufRoot;
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd,
-					sectionNamesArray[gpioIdx][1], "value", strBuf)))
+					sectionNamesArray[gpioIdx][IDX_LEVEL_SHIFTER], "value", strBuf)))
 			{
 			// Copy from buffer to variable
-			memcpy(serialCfg->gpioCfg[gpioIdx].levelshifter.value, strBuf,
-					strlen(strBuf));
-			debug_printf("serialCfg->gpioCfg[%i]->levelshifter.value = '%s'\n",
+				memcpy(serialCfg->gpioCfg[gpioIdx].levelshifter.value, strBuf,
+						strlen(strBuf));
+				LOG_DEBUG("serialCfg->gpioCfg[%i]->levelshifter.value = '%s'\n",
 						gpioIdx, serialCfg->gpioCfg[gpioIdx].levelshifter.value);
 			}
 			else
-				printf("[CONFIG] Warning , key 'value' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][1]);
+			{
+				LOG_WARN("[CONFIG] Key 'value' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][IDX_LEVEL_SHIFTER]);
+			}
 
 			// Get SRDY, MRDY or RESET Level Shifter direction
 			strBuf = pStrBufRoot;
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd,
-					sectionNamesArray[gpioIdx][1], "direction", strBuf)))
+					sectionNamesArray[gpioIdx][IDX_LEVEL_SHIFTER], "direction", strBuf)))
 			{
-			// Copy from buffer to variable
-			memcpy(serialCfg->gpioCfg[gpioIdx].levelshifter.direction, strBuf,
-					strlen(strBuf));
-			debug_printf("serialCfg->gpioCfg[%i]->levelshifter.direction = '%s'\n",
-						gpioIdx, serialCfg->gpioCfg[gpioIdx].levelshifter.direction);
+				// Copy from buffer to variable
+				memcpy(serialCfg->gpioCfg[gpioIdx].levelshifter.direction, strBuf,
+						strlen(strBuf));
+				LOG_DEBUG("serialCfg->gpioCfg[%i]->levelshifter.direction = '%s'\n",
+							gpioIdx, serialCfg->gpioCfg[gpioIdx].levelshifter.direction);
 			}
 			else
-				printf("[CONFIG] Warning , key 'direction' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][1]);
+			{
+				LOG_WARN("[CONFIG] Key 'direction' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][IDX_LEVEL_SHIFTER]);
+			}
 
 
 			// Get SRDY, MRDY or RESET Level Shifter Active High/Low
 			strBuf = pStrBufRoot;
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd,
-					sectionNamesArray[gpioIdx][1], "active_high_low", strBuf)))
+					sectionNamesArray[gpioIdx][IDX_LEVEL_SHIFTER], "active_high_low", strBuf)))
 			{
 			// Copy from buffer to variable
-			serialCfg->gpioCfg[gpioIdx].levelshifter.active_high_low = atoi(strBuf);
-			debug_printf("serialCfg->gpioCfg[%i]->levelshifter.active_high_low = %d\n",
-					gpioIdx, serialCfg->gpioCfg[gpioIdx].levelshifter.active_high_low);
+				serialCfg->gpioCfg[gpioIdx].levelshifter.active_high_low = atoi(strBuf);
+				LOG_DEBUG("serialCfg->gpioCfg[%i]->levelshifter.active_high_low = %d\n",
+							gpioIdx, serialCfg->gpioCfg[gpioIdx].levelshifter.active_high_low);
 			}
 			else
-				printf("[CONFIG] Warning , key 'active_high_low' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][1]);
+			{
+				LOG_WARN("[CONFIG] Key 'active_high_low' is missing for optional GPIO %s\n", sectionNamesArray[gpioIdx][IDX_LEVEL_SHIFTER]);
+			}
+		#endif  // USE_BCM_NEXUS_GPIO
 		}
 	}
 
@@ -370,8 +379,7 @@ int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg
 			// Initialization of UART for USB is the same as for physical UART.
 			// Except for Reset GPIO
 		case NPI_SERVER_DEVICE_INDEX_UART:
-	#if (defined NPI_UART) && (NPI_UART == TRUE)
-		{
+		#if (defined NPI_UART) && (NPI_UART == TRUE)
 			strBuf = pStrBufRoot;
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "UART", "speed", strBuf)))
 			{
@@ -389,12 +397,11 @@ int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg
 			{
 				serialCfg->serial.npiUartCfg.flowcontrol=0;
 			}
-		}
-	#endif
-		break;
+		#endif
+			break;
+
 		case NPI_SERVER_DEVICE_INDEX_SPI:
-	#if (defined NPI_SPI) && (NPI_SPI == TRUE)
-		{
+		#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 			// SPI Specific configuration
 			if (NPI_LNX_SUCCESS == (SerialConfigParser(serialCfgFd, "SPI", "speed", strBuf)))
 			{
@@ -468,20 +475,18 @@ int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg
 			}
 
 			serialCfg->serial.npiSpiCfg.gpioCfg = (halGpioCfg_t *)serialCfg->gpioCfg;
-		}
-	#endif
-		break;
+		#endif
+			break;
 
 		case NPI_SERVER_DEVICE_INDEX_I2C:
-	#if (defined NPI_I2C) && (NPI_I2C == TRUE)
-		{
+		#if (defined NPI_I2C) && (NPI_I2C == TRUE)
 			serialCfg->serial.npiI2cCfg.gpioCfg = (halGpioCfg_t *)serialCfg->gpioCfg;
-		}
-	#endif
-		break;
+		#endif
+			break;
+
 		default:
 			retVal = NPI_LNX_FAILURE;
-		break;
+			break;
 	}
 
 	// Get port from configuration file
@@ -489,7 +494,7 @@ int getSerialConfiguration(const char *configFilePath, npiSerialCfg_t *serialCfg
 	{
 		// Fall back to default if port was not found in the configuration file
 		strncpy(serialCfg->port, NPI_PORT, sizeof(serialCfg->port)-1);
-		printf("Warning! Port not found in configuration file. Will use default port: %s\n", serialCfg->port);
+		LOG_WARN("Port not found in configuration file! Will use default port: %s\n", serialCfg->port);
 	}
 	else
 	{
@@ -534,10 +539,10 @@ int SerialConfigParser(FILE* serialCfgFd, const char* section, const char* key, 
 		return NPI_LNX_FAILURE;
 	}
 	resStringToFree = resString;
-	debug_printf("------------------------------------------------------\n");
-	debug_printf("Serial Config Parsing:\n");
-	debug_printf("- \tSection: \t%s\n", section);
-	debug_printf("- \tKey: \t\t%s\n", key);
+	LOG_DEBUG("------------------------------------------------------\n");
+	LOG_DEBUG("Serial Config Parsing:\n");
+	LOG_DEBUG("- \tSection: \t%s\n", section);
+	LOG_DEBUG("- \tKey: \t\t%s\n", key);
 
 	// Do nothing if the file doesn't exist
 	if (serialCfgFd != NULL)
@@ -554,8 +559,8 @@ int SerialConfigParser(FILE* serialCfgFd, const char* section, const char* key, 
 			if (strlen(resString) == 128)
 			{
 				invalidLineLen = TRUE;
-				debug_printf("Found line > 128 bytes! Too long!\n");
-				fflush(stdout);
+				LOG_DEBUG("Found line > 128 bytes! Too long!\n");
+				fflush(LOG_DESTINATION_FP);
 			}
 			else
 			{
@@ -569,11 +574,11 @@ int SerialConfigParser(FILE* serialCfgFd, const char* section, const char* key, 
 					// Remove the newline character (ok even if line had length 128)
 					resString[strlen(resString) - 1] = '\0';
 
-					debug_printf("Found line < 128 bytes\r");
-					fflush(stdout);
+					LOG_TRACE("Found line < 128 bytes...");
+					fflush(LOG_DESTINATION_FP);
 					if (resString[0] == '[')
 					{
-						debug_printf("Found section %s\n", resString);
+						LOG_DEBUG("Found section %s\n", resString);
 						// Search for wanted section
 						psStr = strstr(resString, section);
 						if (psStr != NULL)
@@ -581,7 +586,7 @@ int SerialConfigParser(FILE* serialCfgFd, const char* section, const char* key, 
 							resString = psStr;
 							// We found our wanted section. Now search for wanted key.
 							sectionFound = TRUE;
-							debug_printf("Found wanted section!\n");
+							LOG_DEBUG("Found wanted section!\n");
 						}
 						else
 						{
@@ -591,7 +596,7 @@ int SerialConfigParser(FILE* serialCfgFd, const char* section, const char* key, 
 					}
 					else if (sectionFound == TRUE)
 					{
-						debug_printf("Line to process %s (strlen=%zd)\n",
+						LOG_DEBUG("Line to process %s (strlen=%zd)\n",
 								resString,
 								strlen(resString));
 						// We have found our section, now we search for wanted key
@@ -603,10 +608,10 @@ int SerialConfigParser(FILE* serialCfgFd, const char* section, const char* key, 
 							psStr = strstr(resString, key);
 							if (psStr != NULL)
 							{
-								debug_printf("Found key \t'%s' in \t'%s'\n", key, resString);
+								LOG_DEBUG("Found key \t'%s' in \t'%s'\n", key, resString);
 								// We found our key. The value is located after the '='
 								// after the key.
-								//                                                                                                                            printf("%s\n", psStr);
+								// LOG_DEBUG("%s\n", psStr);
 								psStr = strtok(psStr, "=");
 
 								// strtok doesn't work if the value is specified as "" (empty string) because it will
@@ -614,13 +619,14 @@ int SerialConfigParser(FILE* serialCfgFd, const char* section, const char* key, 
 								if (strncmp(psStr+strlen(psStr)+1, "\"\"", 2) == 0)
 									psStr = psStr+strlen(psStr); // No need to parse, just point to null so string is empty.
 								else
-									psStr = strtok(NULL, "=;\"");                                                                                                    printf("%s\n", psStr);
+									psStr = strtok(NULL, "=;\"");
+								LOG_DEBUG("%s\n", psStr);
 
 								resString = psStr;
 								res = NPI_LNX_SUCCESS;
-								debug_printf("Found value '%s'\n", resString);
+								LOG_DEBUG("Found value '%s'\n", resString);
 								strcpy(resultString, resString);
-								debug_printf("Found value2 '%s'\n", resultString);
+								LOG_DEBUG("Found value2 '%s'\n", resultString);
 								// We can return this string to the calling function
 								break;
 							}
@@ -628,12 +634,12 @@ int SerialConfigParser(FILE* serialCfgFd, const char* section, const char* key, 
 					}
                else
                {
-                  // debug_printf("Irrelevant line (%s)\n", resString);
+                  // LOG_DEBUG("Irrelevant line (%s)\n", resString);
                }
 				}
 				else
 				{
-					debug_printf("Found end of line > 128 bytes\n");
+					LOG_DEBUG("Found end of line > 128 bytes\n");
 					invalidLineLen = FALSE;
 				}
 			}

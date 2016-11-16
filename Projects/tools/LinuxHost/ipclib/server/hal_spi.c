@@ -57,9 +57,9 @@
 
 #include "hal_types.h"
 #include "hal_spi.h"
-#include "time_printf.h"
 
 #include "npi_lnx_error.h"
+#include "tiLogging.h"
 
 
 #if (defined NPI_SPI) && (NPI_SPI == TRUE)
@@ -68,11 +68,6 @@
 #include <sys/time.h>
 #endif // __STRESS_TEST__
 
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
-#endif
 /**************************************************************************************************
  *                                            CONSTANTS
  **************************************************************************************************/
@@ -139,13 +134,12 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
   useFullDuplexAPI = halSpiCfg->useFullDuplexAPI;
 
 #ifdef __BIG_DEBUG__
-  printf("Opening %s ...\n",devpath);
+  LOG_DEBUG("Opening %s ...\n",devpath);
 #endif
   spiDevFd = open(devpath, O_RDWR );
   if (spiDevFd <0)
   {
-    perror(devpath);
-    printf("%s open failed\n",devpath);
+    LOG_ERROR("%s open failed\n",devpath);
     npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_OPEN_DEVICE;
     return NPI_LNX_FAILURE;
   }
@@ -156,7 +150,7 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
   ret = ioctl(spiDevFd, SPI_IOC_WR_MODE, &mode);
   if (ret < 0 )
   {
-    perror("can't set spi mode\n");
+    LOG_ERROR("Can't set spi mode %d\n", mode);
     npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_SET_MODE;
     return NPI_LNX_FAILURE;
   }
@@ -167,7 +161,7 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
   ret = ioctl(spiDevFd, SPI_IOC_WR_BITS_PER_WORD, &bits);
   if (ret < 0 )
   {
-    perror("can't set bits per word\n");
+    LOG_ERROR("Can't set bits per word %d\n", bits);
     npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_SET_BPW;
     return NPI_LNX_FAILURE;
   }
@@ -178,7 +172,7 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
   ret = ioctl(spiDevFd, SPI_IOC_WR_MAX_SPEED_HZ, &speed);
   if (ret < 0 )
   {
-    perror("can't set max speed hz\n");
+    LOG_ERROR("Can't set max speed %dHz\n", speed);
     npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_SET_MAX_SPEED;
     return NPI_LNX_FAILURE;
   }
@@ -189,7 +183,7 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
   ret = ioctl(spiDevFd, SPI_IOC_RD_BITS_PER_WORD, &bits);
   if (ret < 0 )
   {
-    perror("can't get bits per word\n");
+    LOG_ERROR("Can't get bits per word\n");
     npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_GET_BPW;
     return NPI_LNX_FAILURE;
   }
@@ -197,7 +191,7 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
   ret = ioctl(spiDevFd, SPI_IOC_RD_MODE, &mode);
   if (ret < 0 )
   {
-    perror("can't get spi mode\n");
+    LOG_ERROR("Can't get spi mode\n");
     npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_GET_MODE;
     return NPI_LNX_FAILURE;
   }
@@ -205,14 +199,14 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg)
   ret = ioctl(spiDevFd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);
   if (ret < 0 )
   {
-    perror("can't get max speed hz\n");
+    LOG_ERROR("Can't get max speed\n");
     npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_INIT_FAILED_TO_GET_MAX_SPEED;
     return NPI_LNX_FAILURE;
   }
 
-  debug_printf("[HAL SPI] spi mode: 0x%02X\n", mode);
-  debug_printf("[HAL SPI] bits per word: %d\n", bits);
-  debug_printf("[HAL SPI] max speed: %d Hz (%d KHz)\n", speed, speed/1000);
+  LOG_DEBUG("[HAL SPI] spi mode: 0x%02X\n", mode);
+  LOG_DEBUG("[HAL SPI] bits per word: %d\n", bits);
+  LOG_DEBUG("[HAL SPI] max speed: %d Hz (%d KHz)\n", speed, speed/1000);
 
   return NPI_LNX_SUCCESS;
 }
@@ -258,35 +252,31 @@ void HalSpiPoll(void)
 int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 {
 	int ret;
+#ifndef EXCLUDE_HAL_SPI_WRITEREAD_API
 	if (useFullDuplexAPI == TRUE)
 	{
 		ret = HalSpiWriteRead(port, pBuf, len);
 	}
 	else
+#endif
 	{
 #ifdef __BIG_DEBUG__
 		uint8 i;
 #endif
 		(void)port;
 
-#ifdef __DEBUG_TIME__
-		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
-		{
-			static struct timespec prevTime;
-			time_printf_always_localized(" ----- WRITE SPI LOCK MUTEX ---------\n", NULL, NULL, &prevTime);
-		}
-#endif //(defined __DEBUG_TIME__)
+		LOG_TRACE(" ----- WRITE SPI LOCK MUTEX ---------\n");
 		pthread_mutex_lock(&spiMutex1);
 #ifdef __BIG_DEBUG__
-		printf("SPI: Sending ...");
-		for (i = 0 ; i < len; i++ ) printf(" 0x%.2x",tx[i]);
-		printf("\n");
+		LOG_ALWAYS("SPI: Sending ...");
+		for (i = 0 ; i < len; i++ ) fprintf(LOG_DESTINATION_FP, " 0x%.2x",tx[i]);
+		fprintf(LOG_DESTINATION_FP, "\n");
 #endif
 
 		ret = write(spiDevFd, pBuf, len);
 		if (ret < 0 )
 		{
-			perror("can't write to SPI \n");
+      LOG_ERROR("Can't write to SPI: %d-%s\n", ret, strerror(errno));
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_WRITE_FAILED;
 			ret = NPI_LNX_FAILURE;
 		}
@@ -300,13 +290,7 @@ int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 			ret = NPI_LNX_FAILURE;
 		}
 
-#ifdef __DEBUG_TIME__
-		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
-		{
-			static struct timespec prevTime;
-			time_printf_always_localized(" ----- WRITE SPI DONE ---------------\n", NULL, NULL, &prevTime);
-		}
-#endif //(defined __DEBUG_TIME__)
+		LOG_TRACE(" ----- WRITE SPI DONE ---------------\n");
 
 		pthread_mutex_unlock(&spiMutex1);
 
@@ -315,7 +299,7 @@ int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 }
 
 /**************************************************************************************************
- * @fn      HalSpiWriteRead
+ * @fn      HalSpiRead
  *
  * @brief   Read a buffer from the SPI. Half duplex API.
  *
@@ -328,10 +312,12 @@ int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len)
 int HalSpiRead(uint8 port, uint8 *pBuf, uint8 len)
 {
 	int ret;
+#ifndef EXCLUDE_HAL_SPI_WRITEREAD_API
 	if (useFullDuplexAPI == TRUE)
 	{
 		ret = HalSpiWriteRead(port, pBuf, len);
 	}
+#endif
 	else
 	{
 #ifdef __BIG_DEBUG__
@@ -339,25 +325,19 @@ int HalSpiRead(uint8 port, uint8 *pBuf, uint8 len)
 #endif
 		(void)port;
 
-#ifdef __DEBUG_TIME__
-		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
-		{
-			static struct timespec prevTime;
-			time_printf_always_localized(" ----- READ SPI LOCK MUTEX ---------\n", NULL, NULL, &prevTime);
-		}
-#endif //(defined __DEBUG_TIME__)
+		LOG_TRACE(" ----- READ SPI LOCK MUTEX ---------\n");
 		pthread_mutex_lock(&spiMutex1);
 
 #ifdef __BIG_DEBUG__
-		printf("SPI: Receive ...");
-		for (i = 0 ; i < len; i++ ) printf(" 0x%.2x",rx[i]);
-		printf("\n");
+		LOG_ALWAYS("SPI: Receive ...");
+		for (i = 0 ; i < len; i++ ) fprintf(LOG_DESTINATION_FP, " 0x%.2x",rx[i]);
+		fprintf(LOG_DESTINATION_FP, "\n");
 #endif
 
 		ret = read(spiDevFd, pBuf, len);
 		if (ret < 0 )
 		{
-			perror("can't read from SPI \n");
+      LOG_ERROR("Can't read from SPI: %d-%s\n", ret, strerror(errno));
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_READ_FAILED;
 			ret = NPI_LNX_FAILURE;
 		}
@@ -371,19 +351,14 @@ int HalSpiRead(uint8 port, uint8 *pBuf, uint8 len)
 			ret = NPI_LNX_FAILURE;
 		}
 
-#ifdef __DEBUG_TIME__
-		if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
-		{
-			static struct timespec prevTime;
-			time_printf_always_localized(" ----- READ SPI DONE ---------------\n", NULL, NULL, &prevTime);
-		}
-#endif //(defined __DEBUG_TIME__)
+		LOG_TRACE(" ----- READ SPI DONE ---------------\n");
 
 		pthread_mutex_unlock(&spiMutex1);
 	}
 	return ret;
 }
 
+#ifndef EXCLUDE_HAL_SPI_WRITEREAD_API
 /**************************************************************************************************
  * @fn      HalSpiWriteRead
  *
@@ -415,24 +390,18 @@ int HalSpiWriteRead(uint8 port, uint8 *pBuf, uint8 len)
   tr.speed_hz = speed;
   tr.bits_per_word = bits;
 
-#ifdef __DEBUG_TIME__
-	if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
-	{
-		static struct timespec prevTime;
-		time_printf_always_localized(" ----- WRITE_READ SPI LOCK MUTEX ---------\n", NULL, NULL, &prevTime);
-	}
-#endif //(defined __DEBUG_TIME__)
+  LOG_TRACE(" ----- WRITE_READ SPI LOCK MUTEX ---------\n");
   pthread_mutex_lock(&spiMutex1);
 #ifdef __BIG_DEBUG__
-  printf("SPI: Sending ...");
-  for (i = 0 ; i < len; i++ ) printf(" 0x%.2x",tx[i]);
-  printf("\n");
+  LOG_ALWAYS("SPI: Sending ...");
+  for (i = 0 ; i < len; i++ ) fprintf(LOG_DESTINATION_FP, " 0x%.2x",tx[i]);
+  fprintf(LOG_DESTINATION_FP, "\n");
 #endif
 
   ret = ioctl(spiDevFd, SPI_IOC_MESSAGE(1), &tr);
   if (ret < 0 )
   {
-    perror("can't write to SPI \n");
+    LOG_ERROR("Can't write to SPI: %d-%s\n", ret, strerror(errno));
     npi_ipc_errno = NPI_LNX_ERROR_HAL_SPI_WRITE_READ_FAILED;
     ret = NPI_LNX_FAILURE;
   }
@@ -446,27 +415,21 @@ int HalSpiWriteRead(uint8 port, uint8 *pBuf, uint8 len)
 	  ret = NPI_LNX_FAILURE;
   }
 
-#ifdef __DEBUG_TIME__
-	if ( (__DEBUG_TIME_ACTIVE == TRUE) &&  (__BIG_DEBUG_ACTIVE == TRUE) )
-	{
-		static struct timespec prevTime;
-		time_printf_always_localized(" ----- WRITE_READ SPI DONE ---------------\n", NULL, NULL, &prevTime);
-	}
-#endif //(defined __DEBUG_TIME__)
+  LOG_TRACE(" ----- WRITE_READ SPI DONE ---------------\n");
 
   memcpy(pBuf, rx, len);
 #ifdef __BIG_DEBUG__
-  printf("SPI: Receive ...");
-  for (i = 0 ; i < len; i++ ) printf(" 0x%.2x",rx[i]);
-  printf("\n");
+  LOG_ALWAYS("SPI: Receive ...");
+  for (i = 0 ; i < len; i++ ) fprintf(LOG_DESTINATION_FP, " 0x%.2x",rx[i]);
+  fprintf(LOG_DESTINATION_FP, "\n");
 #endif
   free(rx);
   pthread_mutex_unlock(&spiMutex1);
 
   return ret;
 }
-
-#endif
+#endif // EXCLUDE_HAL_SPI_WRITEREAD_API
+#endif // (defined NPI_SPI) && (NPI_SPI == TRUE)
 
 /**************************************************************************************************
 **************************************************************************************************/

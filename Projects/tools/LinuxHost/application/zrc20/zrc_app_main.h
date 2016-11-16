@@ -58,25 +58,25 @@ extern void DispMenuInit( void );
 
 // Global variables
 
-#define MAIN_INPUT_RELEASED		0
-#define MAIN_INPUT_READY		1
+#define MAIN_INPUT_RELEASED     0
+#define MAIN_INPUT_READY        1
 
 extern char *imagePath;
 
 struct consoleInput_s 
 {
-	char latestCh;			// latest character from stdin
-	char latestStr[128];	// latest string of characters from stdin
-	char handle;			// handle to allow application to say when the character is read;
-							//    set to 1 by main thread when character is ready
-							//    set to 0 by application thread when character is processed
+    char latestCh;          // latest character from stdin
+    char latestStr[128];    // latest string of characters from stdin
+    char handle;            // handle to allow application to say when the character is read;
+                            //    set to 1 by main thread when character is ready
+                            //    set to 0 by application thread when character is processed
 };
 
 struct consoleInput_s consoleInput;
 
-uint8  main_set_event	(uint8 threadId, uint16 event);
-uint8  main_clear_event	(uint8 threadId, uint16 event);
-uint16 main_get_event	(uint8 threadId);
+uint8  main_set_event    (uint8 threadId, uint16 event);
+uint8  main_clear_event  (uint8 threadId, uint16 event);
+uint16 main_get_event    (uint8 threadId);
 
 #ifdef __cplusplus
 }

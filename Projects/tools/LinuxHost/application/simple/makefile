@@ -28,6 +28,7 @@ GPROF=
 INCLUDES= \
 	-I ../common \
 	-I ../$(app) \
+	-I ../../common \
 	-I ../../ipclib/client \
 	-I ../../ipclib/client/gdp \
 	-I ../../ipclib/common \
@@ -62,7 +63,9 @@ MAINAPP_OBJS= \
 	$(OBJS)/npi_attenuator.o \
 	$(OBJS)/npi_ipc_client.o \
 	$(OBJS)/RTI_Testapp.o \
-	$(OBJS)/liveGraph.o
+	$(OBJS)/liveGraph.o \
+	$(OBJS)/time_printf.o \
+	$(OBJS)/tiLogging.o
 
 #by default, do not use the library.
 PROJ_OBJS=$(MAINAPP_OBJS)
@@ -170,6 +173,14 @@ $(OBJS)/RTI_Testapp.o: ../common/RTI_Testapp.c
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 
 $(OBJS)/liveGraph.o: ../common/liveGraph.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
+
+$(OBJS)/time_printf.o: ../../common/time_printf.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
+
+$(OBJS)/tiLogging.o: ../../common/tiLogging.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 

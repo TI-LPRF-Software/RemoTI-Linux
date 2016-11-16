@@ -134,7 +134,7 @@ extern int Hal_read_flash_size(uint8 *chipId, uint32 *returnVal);
 extern uint8 Hal_configure_buffer(uint32 bufferSize, uint32 startAddress);
 
 extern int Hal_program_bufferReq(void);
-extern int Hal_read_from_chip_to_bufferReq();
+extern int Hal_read_from_chip_to_bufferReq(void);
 extern int Hal_EnterDebugModeReq(void);
 
 extern void Hal_program_bufferCnf(uint8 status);

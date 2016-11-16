@@ -68,7 +68,7 @@
 #include "npi_lnx.h"
 
 #include "npi_lnx_error.h"
-#include "lprfLogging.h"
+#include "tiLogging.h"
 
 #ifdef NPI_SYS
 #include "npi_sys.h"
@@ -432,14 +432,12 @@ int NPI_ClientInit(const char *devPath)
         len = strlen(remote.sun_path) + sizeof(remote.sun_family);
         if (connect(sNPIconnected, (struct sockaddr *)&remote, len) == -1)
         {
-            LOG_ERROR("[NPI Client] connect");
             res = NPI_LNX_ERROR_IPC_SOCKET_CONNECT;;
             LOG_DEBUG("[NPI Client] %s(): Not connected. res = 0x%.2X\n", __FUNCTION__, res);
         }
 #else
         if (connect(sNPIconnected, resAddr->ai_addr, resAddr->ai_addrlen) == -1)
         {
-            LOG_ERROR("[NPI Client] connect");
             res = NPI_LNX_ERROR_IPC_SOCKET_CONNECT;;
             LOG_DEBUG("[NPI Client] %s(): Not connected. res = 0x%.2X\n", __FUNCTION__, res);
         }
@@ -453,7 +451,7 @@ int NPI_ClientInit(const char *devPath)
         {
             if (--connectAttemptsLeft)
             {
-                LOG_WARN("[NPI Client] Unable to connect to NPI server.  Will retry again in %d second%s.  (Will give up after %d more attempts.)\n", 
+                LOG_WARN("[NPI Client] Unable to connect to NPI server.  Will retry again in %d second%s.  (Will give up after %d more attempts.)\n",
                      NPI_SERVER_CONNECT_RETRY_SECONDS, NPI_SERVER_CONNECT_RETRY_SECONDS==1 ? "" : "s", connectAttemptsLeft);
                 sleep(NPI_SERVER_CONNECT_RETRY_SECONDS);
             }
@@ -566,7 +564,7 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
 				if (writeOnce == 0)
 				{
 					LOG_TRACE("[NPI Client HANDLE][MUTEX] AREQ Mutex (Handle) busy");
-					fflush(stdout);
+					fflush(LOG_DESTINATION_FP);
 					writeOnce++;
 				}
 				else
@@ -578,10 +576,10 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
 					}
 					if (writeOnce > 0xEFFFFFF0)
 						writeOnce = 1;
-					fflush(stdout);
+					fflush(LOG_DESTINATION_FP);
 				}
 			}
-			LOG_TRACE("\n[NPI Client HANDLE][MUTEX] AREQ Lock (Handle) status: %d\n", mutexRet);
+			LOG_TRACE("[NPI Client HANDLE][MUTEX] AREQ Lock (Handle) status: %d\n", mutexRet);
 			tryLockFirstTimeOnly = 1;
 		}
 
@@ -594,7 +592,7 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
 		areqMsg *searchList = npi_ipc_areq_proc_buf, *clearList;
 		while (searchList != NULL)
 		{
-			LOG_TRACE("\n\n[NPI Client HANDLE][DBG] Processing \t@ %p next \t@ %p\n",
+			LOG_TRACE("[NPI Client HANDLE][DBG] Processing \t@ %p next \t@ %p\n",
 					(void *)searchList,
 					(void *)(searchList->nextMessage));
 
@@ -638,6 +636,7 @@ static void *npi_ipc_handleThreadFunc (void *ptr)
 
 	} while (!done);
 
+	LOG_INFO("[NPI Client HANDLE] %s Exiting\n", __FUNCTION__);
 	return ptr;
 }
 /**************************************************************************************************
@@ -682,7 +681,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 		if (npi_ipc_areq_rec_buf != NULL)
 		{
 #ifdef __DEBUG_TIME__
-      		LOG_TRACE("[NPI Client READ] Read thread 1ms timeout \n");
+			LOG_TRACE("[NPI Client READ] Read thread 1ms timeout \n");
 #endif //__DEBUG_TIME__
 			// In case there are messages received yet to be processed allow processing by timing out after 1ms.
 			pollRet = poll((struct pollfd*)&ufds, 1, 1);
@@ -726,6 +725,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 				if (n < 0)
 					LOG_ERROR("[NPI Client] recv");
 				done = 1;
+				LOG_ERROR("Error: RECEIVED %d bytes.. other side might have closed connection\n", n);
 			}
 			else if  (n != RPC_FRAME_HDR_SZ)
 			{
@@ -785,7 +785,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 						// and signal the synchronous reception
 						LOG_DEBUG("[NPI Client READ][MUTEX] SRSP Cond signal set\n");
 						LOG_TRACE("[NPI Client READ] Client Read SRSP: (len %d)\n", numOfReceievedSRSPbytes);
-						fflush(stdout);
+						fflush(LOG_DESTINATION_FP);
 						// Get mutex first
 						pthread_mutex_lock(&npiLnxClientSREQmutex);   // Make sure the receiver has begin the wait on the cond so it doesn't miss the signal.
 						pthread_cond_signal(&npiLnxClientSREQcond);   // Signal the receiver, unblocking it on the cond.
@@ -810,7 +810,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 							{
 								messageCount++;
 								memset(newMessage, 0, sizeof(areqMsg));
-								LOG_TRACE("\n[NPI Client READ][DBG] Allocated \t@ %p (received\040 %d messages)...\n",
+								LOG_TRACE("[NPI Client READ][DBG] Allocated \t@ %p (received\040 %d messages)...\n",
 										(void *)newMessage,
 										messageCount);
 							}
@@ -872,7 +872,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 			if (writeOnceAREQReady == 0)
 			{
 				LOG_TRACE("[NPI Client READ][MUTEX] Waiting for AREQ Handle to acknowledge processing the message\n");
-				fflush(stdout);
+				fflush(LOG_DESTINATION_FP);
 				writeOnceAREQReady++;
 			}
 			else
@@ -888,7 +888,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 				}
 				if (writeOnceAREQReady > 0xEFFFFFF0)
 					writeOnceAREQReady = 1;
-				fflush(stdout);
+				fflush(LOG_DESTINATION_FP);
 			}
 #endif //__BIG_DEBUG__
 			if ( (messageCount > 100) && ( (messageCount % 100) == 0) )
@@ -913,7 +913,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 				if (writeOnceAREQMutexTry == 0)
 				{
 					LOG_TRACE("[NPI Client READ][MUTEX] AREQ Mutex (Read) busy");
-					fflush(stdout);
+					fflush(LOG_DESTINATION_FP);
 					writeOnceAREQMutexTry++;
 				}
 				else
@@ -925,7 +925,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 					}
 					if (writeOnceAREQMutexTry > 0xEFFFFFF0)
 						writeOnceAREQMutexTry = 1;
-					fflush(stdout);
+					fflush(LOG_DESTINATION_FP);
 				}
 #endif //__BIG_DEBUG__
 			}
@@ -933,7 +933,7 @@ static void *npi_ipc_readThreadFunc (void *ptr)
 			{
 #ifdef __BIG_DEBUG__
 				writeOnceAREQMutexTry = 0;
-				LOG_TRACE("\n[NPI Client READ][MUTEX] AREQ Lock (Read), status: %d\n", mutexRet);
+				LOG_TRACE("[NPI Client READ][MUTEX] AREQ Lock (Read), status: %d\n", mutexRet);
 #endif //__BIG_DEBUG__
 
 				areqMsgProcessStatus = NPI_MSG_AREQ_BUSY;
@@ -1121,7 +1121,7 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 		{
 			if (writeOnce == 0)
 			{
-				LOG_TRACE("\n[NPI Client SEND SYNCH][MUTEX] Thread %ld: SRSP Mutex busy\n", callingThreadID);
+				LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Thread %ld: SRSP Mutex busy\n", callingThreadID);
 				writeOnce++;
 			}
 			else
@@ -1129,14 +1129,14 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 				writeOnce++;
 				if ( (writeOnce % 1000) == 0)
 				{
-					LOG_TRACE(".");
+					LOG_TRACE("%d.", writeOnce);
 				}
 				if (writeOnce > 0xFFFFFFF0)
 					writeOnce = 1;
-				fflush(stdout);
+				fflush(LOG_DESTINATION_FP);
 			}
 		}
-		LOG_TRACE("\n[NPI Client SEND SYNCH][MUTEX] Thread %ld: SRSP Lock status: %d\n", callingThreadID, mutexRet);
+		LOG_TRACE("[NPI Client SEND SYNCH][MUTEX] Thread %ld: SRSP Lock status: %d\n", callingThreadID, mutexRet);
 
 
 		bytesSent = send(sNPIconnected, (uint8 *)pMsg, pMsg->len + RPC_FRAME_HDR_SZ, 0);
@@ -1154,9 +1154,9 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 		LOG_TRACE("[NPI Client SEND SYNCH] Sent %d bytes.  Waiting for synchronous response...\n", bytesSent);
 
 		// Conditional wait for the response handled in the receiving thread,
-		// wait maximum NPI_IPC_CLIENT_SYNCH_TIMEOUT seconds.  Since this is 
-		// vulnerable to clock adjustments and pthread_cond_timedwait requires 
-		// a realtime clock, wrap this in a monotonic clock check and retry if 
+		// wait maximum NPI_IPC_CLIENT_SYNCH_TIMEOUT seconds.  Since this is
+		// vulnerable to clock adjustments and pthread_cond_timedwait requires
+		// a realtime clock, wrap this in a monotonic clock check and retry if
 		// timed out before actual timeout in monotonic time was hit.
 		clock_gettime(CLOCK_MONOTONIC, &monotonicStart);
 		clock_gettime(CLOCK_REALTIME, &expiryTime);
@@ -1174,7 +1174,7 @@ void NPI_SendSynchData (npiMsgData_t *pMsg)
 				long elapsedMicroseconds;
 
 				clock_gettime(CLOCK_MONOTONIC, &monotonicCurrent);
-				elapsedMicroseconds = ((long)((long)(monotonicCurrent.tv_sec) - (long)(monotonicStart.tv_sec)) * 1000000L) + 
+				elapsedMicroseconds = ((long)((long)(monotonicCurrent.tv_sec) - (long)(monotonicStart.tv_sec)) * 1000000L) +
 				                      ((long)(((long)(monotonicCurrent.tv_nsec) - (long)(monotonicStart.tv_nsec))/1000L));
 
 				remainingMicroseconds = (NPI_IPC_CLIENT_SYNCH_TIMEOUT * 1000000L) - elapsedMicroseconds;

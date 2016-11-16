@@ -50,12 +50,12 @@
 #include "hal_defs.h"
 #include "npi_lnx_error.h"
 
-#include "lprfLogging.h"
+#include "tiLogging.h"
 
 #define TIMER_MAX			(0xFFFF * 1000 + 1)
 
 #ifdef TIMER_DEBUG
-#define LOG_DEBUG_TIMER(__FMT, __REST...)	LOG_DEBUG(__FMT, __REST...)
+#define LOG_DEBUG_TIMER(__FMT, __REST...)	LOG_DEBUG(__FMT, ##__REST)
 #else
 #define LOG_DEBUG_TIMER(__FMT, __REST...)
 #endif
@@ -125,8 +125,8 @@ static void *timerThreadFunc(void *ptr)
 			{
 				if (writeOnce == 0)
 				{
-					LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER Mutex (Handle) busy");
-					fflush(stdout);
+					LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER Mutex (Handle) busy\n");
+					fflush(LOG_DESTINATION_FP);
 					writeOnce++;
 				}
 				else
@@ -134,11 +134,14 @@ static void *timerThreadFunc(void *ptr)
 					writeOnce++;
 					if ( (writeOnce % 1000) == 0)
 					{
-						LOG_DEBUG_TIMER("[TIMER].");
+#ifdef TIMER_DEBUG
+						fprintf(LOG_DESTINATION_FP, "."); // We just want periods, not normal logging with line prefixes.
+						fflush(LOG_DESTINATION_FP);
+#endif
 					}
 					if (writeOnce > 0xEFFFFFF0)
 						writeOnce = 1;
-					fflush(stdout);
+					fflush(LOG_DESTINATION_FP);
 				}
 			}
 			LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER Lock (Handle) status: %d\n", (int)mutexRet);
@@ -243,10 +246,11 @@ static void *timerThreadFunc(void *ptr)
 						t = 1;
 					}
 
-					decrementValue = diffPrev  + 1000000 * (curMonotonicTime.tv_sec - prevMonotonicTime.tv_sec - t);
+					decrementValue = diffPrev + 1000000 * (curMonotonicTime.tv_sec - prevMonotonicTime.tv_sec - t);
 					timeWaitedDifference = (decrementValue - minimumTimeout);
+					LOG_DEBUG_TIMER("[TIMER] Updated decrementing value %dus (diffPrev: %ldus)(left: %ldus)(t: %d)\n",
+							(int)decrementValue, diffPrev, timeWaitedDifference, t);
 				}
-				LOG_DEBUG_TIMER("[TIMER] Updated decrementing value %dus\n", (int)decrementValue);
 			}
 		}
 
@@ -262,10 +266,10 @@ static void *timerThreadFunc(void *ptr)
 				// Check if event j for timer (for thread) i is enabled
 				if (timerThreadTbl[i].timerEnabled & BV(j))
 				{
-					LOG_DEBUG_TIMER("[TIMER] Decrementing %.4ldus for ThreadID 0x%.2X, event 0x%.8X. Time left before decrementing: %d\n",
+					LOG_DEBUG_TIMER("[TIMER] Decrementing %ldus for ThreadID 0x%.2X, event 0x%.8X. Time left before decrementing: %d\n",
 								decrementValue,
 								i,
-								j,
+								BV(j),
 								(int)timerThreadTbl[i].timeoutValue[j]);
 
 					if (timerThreadTbl[i].justKicked & BV(j))
@@ -324,7 +328,7 @@ static void *timerThreadFunc(void *ptr)
 			// Conditional wait for a call to TimerSet()
 			if ((minimumTimeout <= 0) || (active == FALSE))
 			{
-				LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER Wait forever\n");
+				LOG_DEBUG_TIMER("[TIMER][MUTEX] TIMER Wait forever... effectively releasing lock\n");
 				res = pthread_cond_wait(&timerSetCond, &timerMutex);
 
 				// Since we have waited an unknown period we set previous time here.
@@ -417,11 +421,11 @@ uint8 timer_start_timerEx(uint8 threadId, uint32 event, uint32 timeout)
 			break;
 	}
 
-	LOG_DEBUG_TIMER("[TIMER] timer_start_timerEx(%d, 0x%.8X, %d)... ", threadId, event, timeout);
-	fflush(stdout);
+	LOG_DEBUG_TIMER("[TIMER] timer_start_timerEx(%d, 0x%.8X, %d)... \n", threadId, event, timeout);
+	fflush(LOG_DESTINATION_FP);
 	// To avoid race conditions we cannot update timerThreadTbl without mutex lock
 	pthread_mutex_lock(&timerMutex);
-	LOG_DEBUG_TIMER("lock\n");
+	LOG_DEBUG_TIMER("lock (line: %d)\n", __LINE__);
 
 	// Value is stored in us for better precision
 	timerThreadTbl[threadId].timeoutValue[i] = timeout * 1000;

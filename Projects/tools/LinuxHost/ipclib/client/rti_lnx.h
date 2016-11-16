@@ -771,18 +771,18 @@ extern void RTI_SetBridgeMode(rtiRcnCbackFn_t pCback);
 // For now, to maintain backward compatibility, no such compile
 // flag is used.
 #ifdef _WIN32
-// This function is for windows platform only
- extern uint8 RTI_InitWin32Module(const char *pDevName);
- extern uint8 RTI_CloseWin32Module(void);
-# define RTI_InitRNP(_pDevName) RTI_InitWin32Module(_pDevName)
-# define RTI_CloseRNP() RTI_CloseWin32Module()
+	// This function is for windows platform only
+	extern uint8 RTI_InitWin32Module(const char *pDevName);
+	extern uint8 RTI_CloseWin32Module(void);
+	#define RTI_InitRNP(_pDevName) RTI_InitWin32Module(_pDevName)
+	#define RTI_CloseRNP() RTI_CloseWin32Module()
 #elif defined unix
- extern int RTIS_Init(const char *pDevName);
- extern void RTIS_Close(void);
-# define RTI_InitRNP(_pDevName) RTIS_Init(_pDevName)
-# define RTI_CloseRNP() RTIS_Close()
+	extern int RTIS_Init(const char *pDevName);
+	extern void RTIS_Close(void);
+	#define RTI_InitRNP(_pDevName) RTIS_Init(_pDevName)
+	#define RTI_CloseRNP() RTIS_Close()
 #else
- extern void RTIS_Init( void );
+	extern void RTIS_Init( void );
 #endif
 
 // Ping API

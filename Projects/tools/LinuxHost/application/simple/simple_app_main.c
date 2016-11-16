@@ -46,7 +46,7 @@
 #include "simple_app.h"
 #include "common_app.h"
 #include "timer.h"
-#include "lprfLogging.h"
+#include "tiLogging.h"
 
 #include "rti_lnx.h"
 // Linux surrogate interface
@@ -161,16 +161,15 @@ static uint8 mode = 0;
 
 /* Global variable definitions. Declared as externs in common_app.h */
 sem_t eventSem;
-int __APP_LOG_LEVEL = LOG_LEVEL_INFO;
 
-enum 
+enum
 {
 	RTI_main_linux_threadId, SIMPLE_App_threadId, RTI_main_threadId_tblSize
 };
 
 static void print_usage(const char *prog) {
-	printf("Usage: %s [-DlHOLC3]\n", prog);
-	puts(
+	fprintf(LOG_DESTINATION_FP, "Usage: %s [-DlHOLC3]\n", prog);
+	fprintf(LOG_DESTINATION_FP,
 			"  -D --device      device to use (default /dev/spidev4.0). For Socket use format IPaddress:port\n"
 			"  -d --debugOption debugAll: both time and big, debugTime: only timestamps, debugBig: verbose debug\n"
 			"  -l --lockChannel Disable FA and lock channel by default\n"
@@ -233,8 +232,13 @@ static void parse_opts(int argc, char *argv[])
 	}
 }
 
-int main(int argc, char **argv) 
+int main(int argc, char **argv)
 {
+	// IMPORTANT: This call to tiLogging_Init() MUST BE DONE FIRST.
+	// One thing it does is changes the buffering of stdout to line-based,
+	// and that works ONLY if the stream has not been used yet, so we
+	// MUST NOT printf/log anything before calling it...
+	tiLogging_Init(NULL);
 
 	LOG_INFO("Starting...\n");
 
@@ -257,7 +261,7 @@ int main(int argc, char **argv)
 
 	if ((ret = NPI_ClientInit(device)) != NPI_LNX_SUCCESS)
 	{
-		fprintf(stderr, "Failed to start RTI library module, device; %s\n", device);
+		LOG_FATAL("Failed to start RTI library module, device; %s\n", device);
 		print_usage(argv[0]);
 		return ret;
 	}
@@ -279,7 +283,7 @@ int main(int argc, char **argv)
 	//Start RTI timer thread, management of timer in separate thread.
 	if ((ret = timer_init(RTI_main_threadId_tblSize)) != 0)
 	{
-		printf("Failed to start timer thread. Exiting...");
+		LOG_FATAL("Failed to start timer thread. Exiting...");
 		return ret;
 	}
 
@@ -288,7 +292,7 @@ int main(int argc, char **argv)
 	int pollRet;
 
 	//MANAGE DISPLAY HERE
-	while (1) 
+	while (1)
 	{
 		//Wait for Display Mutex release before displaying anything.
 		//pthread_mutex_lock(&appDisplayMutex);
@@ -341,7 +345,7 @@ int main(int argc, char **argv)
 	return ret;
 }
 
-void DispMenuInit(void) 
+void DispMenuInit(void)
 {
 	LOG_INFO("------------------------------------------------------\n");
 	LOG_INFO("Init MENU:\n");
@@ -653,7 +657,7 @@ void DispSendDataProfileIDMenu(void)
 void DispSendDataCurrentCfg(appSendData_t appSendData_s)
 {
 	uint8 i;
-	int strLen;
+	int strLen=0;
 	char tmpStr[512];
 	LOG_INFO("------------------------------------------------------\n");
 	LOG_INFO("Current Send Data Configuration\n");

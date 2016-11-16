@@ -51,7 +51,7 @@
 #include "massProduction_main.h"
 #include "massProduction_app.h"
 #include "timer.h"
-#include "lprfLogging.h"
+#include "tiLogging.h"
 #include "configParser.h"
 
 // Linux surrogate interface, including both RTIS and NPI
@@ -96,7 +96,7 @@ char str[128];
 static uint8 toggleTimerPrintOnServer = FALSE;
 static uint8 toggleBigDebugPrintOnServer = FALSE;
 
-//THREAD and MUTEX 
+//THREAD and MUTEX
 static pthread_mutex_t appThreadMutex;
 static pthread_mutex_t appInitMutex;
 
@@ -144,7 +144,7 @@ void appDisplayPairingTable();
 
 void RTI_IrInd( uint8 irData ) {}
 
-int appInit(int mode, char threadId) 
+int appInit(int mode, char threadId)
 {
 	appThreadTerminate = 0;
 	appInitSyncRes();
@@ -229,7 +229,7 @@ int appInit(int mode, char threadId)
 	// TODO: it is ideal to make this thread higher priority
 	// but linux does not allow realtime of FIFO scheduling policy for
 	// non-priviledged threads.
-	if (pthread_create(&AppThreadId, NULL, appThreadFunc, NULL)) 
+	if (pthread_create(&AppThreadId, NULL, appThreadFunc, NULL))
 	{
 		// thread creation failed
 		LOG_INFO("Failed to create app thread\n");
@@ -289,7 +289,7 @@ static void *appThreadFunc(void *ptr)
 	LOG_DEBUG("...Waiting for RTI_InitCnf. (can take up to 6s if cold start and target RNP)...\n");
 
 	/* thread loop */
-	while (!appThreadTerminate) 
+	while (!appThreadTerminate)
 	{
 		// Wait for event
 		sem_wait(&eventSem);
@@ -509,9 +509,9 @@ static void appProcessEvents(uint32 events)
  *
  * @return  void
  */
-void RTI_InitCnf(rStatus_t status) 
+void RTI_InitCnf(rStatus_t status)
 {
-	if (status == RTI_SUCCESS) 
+	if (status == RTI_SUCCESS)
 	{
 		LOG_INFO("RTI_InitCnf(%s)\n", rtiStatus_list[status]);
 
@@ -619,7 +619,7 @@ void RTI_AllowPairCnf(rStatus_t status, uint8 dstIndex, uint8 devType) {}
  *
  * @return  void
  */
-void RTI_SendDataCnf(rStatus_t status) 
+void RTI_SendDataCnf(rStatus_t status)
 {
 	if (appState == AP_STATE_READY)
 	{
@@ -1029,9 +1029,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 	uint8 j;
 	char *strTmp0 = (char*) malloc(128);
 	memset(strTmp0, 0, 128);
-	char *strTmp1 = (char*) malloc(128);
-	memset(strTmp1, 0, 128);
-	sprintf(strTmp0, "IDX%d_PAIRINGREF", index);
+	snprintf(strTmp0, 128, "IDX%d_PAIRINGREF", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->pairingRef = (uint8) strtol(strBuf, NULL, 16);
@@ -1042,7 +1040,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		LOG_DEBUG("ERROR: %s not defined in configuration file\n", strTmp0);
 		ret = NPI_LNX_FAILURE;
 	}
-	sprintf(strTmp0, "IDX%d_SRCNWKADDR", index);
+	snprintf(strTmp0, 128, "IDX%d_SRCNWKADDR", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->srcNwkAddress = (uint16) strtol(strBuf, NULL, 16);
@@ -1053,7 +1051,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		LOG_DEBUG("ERROR: %s not defined in configuration file\n", strTmp0);
 		ret = NPI_LNX_FAILURE;
 	}
-	sprintf(strTmp0, "IDX%d_LOG_CH", index);
+	snprintf(strTmp0, 128, "IDX%d_LOG_CH", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->logicalChannel = (uint16) strtol(strBuf, NULL, 10);
@@ -1065,7 +1063,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		ret = NPI_LNX_FAILURE;
 	}
 	LOG_DEBUG("\n");
-	sprintf(strTmp0, "IDX%d_IEEE", index);
+	snprintf(strTmp0, 128, "IDX%d_IEEE", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->ieeeAddress[SADDR_EXT_LEN - 1] = (uint8) strtol(strBuf, &pStrCntd, 16);
@@ -1081,7 +1079,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		pEntry->ieeeAddress[j - 1] = (uint8) strtol(pStrCntd, &pStrCntd, 16);
 		LOG_DEBUG(":%.2X", pEntry->ieeeAddress[j - 1]);
 	}
-	sprintf(strTmp0, "IDX%d_PANID", index);
+	snprintf(strTmp0, 128, "IDX%d_PANID", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->panId = (uint16) strtol(strBuf, NULL, 16);
@@ -1092,7 +1090,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		LOG_DEBUG("ERROR: %s not defined in configuration file\n", strTmp0);
 		ret = NPI_LNX_FAILURE;
 	}
-	sprintf(strTmp0, "IDX%d_NWKADDR", index);
+	snprintf(strTmp0, 128, "IDX%d_NWKADDR", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->nwkAddress = (uint16) strtol(strBuf, NULL, 16);
@@ -1103,7 +1101,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		LOG_DEBUG("ERROR: %s not defined in configuration file\n", strTmp0);
 		ret = NPI_LNX_FAILURE;
 	}
-	sprintf(strTmp0, "IDX%d_RECCAP", index);
+	snprintf(strTmp0, 128, "IDX%d_RECCAP", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->recCapabilities = (uint8) strtol(strBuf, NULL, 16);
@@ -1114,7 +1112,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		LOG_DEBUG("ERROR: %s not defined in configuration file\n", strTmp0);
 		ret = NPI_LNX_FAILURE;
 	}
-	sprintf(strTmp0, "IDX%d_KEY_VALID", index);
+	snprintf(strTmp0, 128, "IDX%d_KEY_VALID", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->securityKeyValid = (uint8) strtol(strBuf, &pStrCntd, 16);
@@ -1125,7 +1123,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		LOG_DEBUG("ERROR: %s not defined in configuration file\n", strTmp0);
 		ret = NPI_LNX_FAILURE;
 	}
-	sprintf(strTmp0, "IDX%d_SECKEY", index);
+	snprintf(strTmp0, 128, "IDX%d_SECKEY", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->securityKey[0] = (uint8) strtol(strBuf, &pStrCntd, 16);
@@ -1145,7 +1143,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		LOG_DEBUG("ERROR: %s not defined in configuration file\n", strTmp0);
 		ret = NPI_LNX_FAILURE;
 	}
-	sprintf(strTmp0, "IDX%d_VENDORID", index);
+	snprintf(strTmp0, 128, "IDX%d_VENDORID", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->vendorIdentifier = (uint16) strtol(strBuf, NULL, 16);
@@ -1160,7 +1158,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 	tmpStr[0] = '\0'; // Initialize with empty string, in case it is not set
 	for (j = 0; j < RTI_MAX_NUM_DEV_TYPES; j++)
 	{
-		sprintf(strTmp0, "IDX%d_DEVTYPE%d", index, j);
+		snprintf(strTmp0, 128, "IDX%d_DEVTYPE%d", index, j);
 		if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 		{
 			pEntry->devTypeList[j] = (uint8) strtol(strBuf, NULL, 16);
@@ -1174,7 +1172,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		}
 	}
 	LOG_DEBUG("[CFG_FAKE_PTABLE] pEntry->devTypeList =%s\n", tmpStr);
-	sprintf(strTmp0, "IDX%d_RECFRAMECOUNTER", index);
+	snprintf(strTmp0, 128, "IDX%d_RECFRAMECOUNTER", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->recFrameCounter = (uint32) strtol(strBuf, NULL, 16);
@@ -1185,7 +1183,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		LOG_DEBUG("ERROR: %s not defined in configuration file\n", strTmp0);
 		ret = NPI_LNX_FAILURE;
 	}
-	sprintf(strTmp0, "IDX%d_PROFILE_DISC", index);
+	snprintf(strTmp0, 128, "IDX%d_PROFILE_DISC", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
 		pEntry->profileDiscs[0] = (uint8) strtol(strBuf, &pStrCntd, 16);
@@ -1200,10 +1198,6 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 	if (strTmp0 != NULL)
 	{
 		free(strTmp0);
-	}
-	if (strTmp1 != NULL)
-	{
-		free(strTmp1);
 	}
 
 	return ret;
@@ -1414,7 +1408,7 @@ int appInitConfigParam()
 		{
 			if (ret == NPI_LNX_SUCCESS)
 			{
-				sprintf(strTmp0, "BYTE%d", byte);
+				snprintf(strTmp0, 128, "BYTE%d", byte);
 				if (NPI_LNX_SUCCESS == ConfigParser("TESTPARAM", strTmp0, strBuf))
 				{
 					appSendData_s.pData[byte] = (int) strtol(strBuf, NULL, 16);
@@ -1432,7 +1426,7 @@ int appInitConfigParam()
 		{
 			if (ret == NPI_LNX_SUCCESS)
 			{
-				sprintf(strTmp0, "BYTE%d", byte);
+				snprintf(strTmp0, 128, "BYTE%d", byte);
 				if (NPI_LNX_SUCCESS == ConfigParser("TESTPARAM", strTmp0, strBuf))
 				{
 					appSendData_s.pData[byte] = (int) strtol(strBuf, NULL, 10);

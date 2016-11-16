@@ -134,7 +134,9 @@ int HalSpiInit(const char *devpath, halSpiCfg_t *halSpiCfg);
 void HalSpiPoll(void);
 int HalSpiRead(uint8 port, uint8 *pBuf, uint8 len);
 int HalSpiWrite(uint8 port, uint8 *pBuf, uint8 len);
-int HalSpiWriteRead(uint8 port, uint8 *pBuf, uint8 len);
+#ifndef EXCLUDE_HAL_SPI_WRITEREAD_API
+	int HalSpiWriteRead(uint8 port, uint8 *pBuf, uint8 len);
+#endif
 void HalSpiClose( void );
 
 

@@ -46,7 +46,7 @@
 #include "massProduction_app.h"
 #include "timer.h"
 #include "configParser.h"
-#include "lprfLogging.h"
+#include "tiLogging.h"
 
 #include "rti_lnx.h"
 // Linux surrogate interface
@@ -150,19 +150,18 @@ int connectedPort;
 
 /* Global variable definitions. Declared as externs in common_app.h */
 sem_t eventSem;
-int __APP_LOG_LEVEL = LOG_LEVEL_INFO;
 
 static int configFilePresent = FALSE;
 char *configFile;
 
-enum 
+enum
 {
 	FPA_main_threadId, MPA_App_threadId, MPA_App_threadId_tblSize
 };
 
 static void print_usage(const char *prog) {
-	printf("Usage: %s [-DlHOLC3]\n", prog);
-	puts(
+	fprintf(stderr, "Usage: %s [-DlHOLC3]\n", prog);
+	fprintf(stderr,
 			"  -c --configFilePath \tpath to configuration file. Should contain mass production configuration\n"
 		);
 	exit(1);
@@ -198,10 +197,16 @@ static void parse_opts(int argc, char *argv[])
 	}
 }
 
-int main(int argc, char **argv) 
+int main(int argc, char **argv)
 {
 	baseSettings.ip_addr = (char *) malloc(128);
 	baseSettings.port = (char *) malloc(32);
+
+	// IMPORTANT: This call to tiLogging_Init() MUST BE DONE FIRST.
+	// One thing it does is changes the buffering of stdout to line-based,
+	// and that works ONLY if the stream has not been used yet, so we
+	// MUST NOT printf/log anything before calling it...
+	tiLogging_Init(NULL);
 
 	LOG_INFO("Starting...\n");
 
@@ -243,7 +248,7 @@ int main(int argc, char **argv)
 
 	if ((ret = NPI_ClientInit(device)) != NPI_LNX_SUCCESS)
 	{
-		fprintf(stderr, "Failed to start RTI library module, device; %s\n", device);
+		LOG_FATAL("Failed to start RTI library module, device; %s\n", device);
 		print_usage(argv[0]);
 		return ret;
 	}
@@ -259,7 +264,7 @@ int main(int argc, char **argv)
 	//Start RTI timer thread, management of timer in separate thread.
 	if ((ret = timer_init(MPA_App_threadId_tblSize)) != 0)
 	{
-		printf("Failed to start timer thread. Exiting...");
+		LOG_FATAL("Failed to start timer thread. Exiting...");
 		return ret;
 	}
 

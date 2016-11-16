@@ -2,7 +2,7 @@
   Filename:       zrc_configuration.h
 
   Description:    This file declares all the configuration APIs that the ZRC
-  	  	  	  	  host may use.
+                  host may use.
 
 
   Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com/
@@ -69,11 +69,11 @@ extern "C" {
 /**********************************************************************************
  * Common defines
  */
-#define MAX_NUM_OF_PAIRING_ENTRIES_LINUX_SIDE			10
-#define ZRC_MAX_BOUND_REMOTES							 8
+#define MAX_NUM_OF_PAIRING_ENTRIES_LINUX_SIDE            10
+#define ZRC_MAX_BOUND_REMOTES                             8
 
-#define ZRC_CFG_STORE_NV							 	 0
-#define ZRC_CFG_STORE_NV_FORCED							 1
+#define ZRC_CFG_STORE_NV                                  0
+#define ZRC_CFG_STORE_NV_FORCED                           1
 
 typedef struct ATTR_PACKED ZRC_BoundRemote_s
 {
@@ -91,26 +91,26 @@ typedef struct ATTR_PACKED ZRC_BoundRemote_s
 
 typedef struct ATTR_PACKED GDP_ConfigParam_s
 {
-	uint8 primaryClassDescriptor;
-	uint8 secondaryClassDescriptor;
-	uint8 tertiaryClassDescriptor;
-	uint8 bindingCapabilities;
-	uint32 gdpCapabilities;
-	uint16 extendedValidationWaitTime;
+    uint8 primaryClassDescriptor;
+    uint8 secondaryClassDescriptor;
+    uint8 tertiaryClassDescriptor;
+    uint8 bindingCapabilities;
+    uint32 gdpCapabilities;
+    uint16 extendedValidationWaitTime;
 } GDP_ConfigParam_t;
 
 typedef struct ATTR_PACKED ZRC_ConfigParam_s
 {
-	uint32 zrcCapabilities;
-	uint8 actionBanksSupported[ZRC_ATTR_LEN_ACTION_BANKS_SUPPORTED];
+    uint32 zrcCapabilities;
+    uint8 actionBanksSupported[ZRC_ATTR_LEN_ACTION_BANKS_SUPPORTED];
 
 } ZRC_ConfigParam_t;
 
 typedef struct ATTR_PACKED RTI_ConfigParam_s
 {
-	appDevInfo_t devInfo;
-	GDP_ConfigParam_t gdpInfo;
-	ZRC_ConfigParam_t zrcInfo;
+    appDevInfo_t devInfo;
+    GDP_ConfigParam_t gdpInfo;
+    ZRC_ConfigParam_t zrcInfo;
 } RTI_ConfigParam_t;
 
 /////////////////////////////////////////////////////////////////////////////

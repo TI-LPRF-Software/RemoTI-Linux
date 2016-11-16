@@ -51,7 +51,9 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -70,11 +72,13 @@
 
 #include <sys/time.h>
 
+#include "OEM_NpiStartupHook.h"
+
 /* NPI includes */
 #include "npi_lnx.h"
 #include "npi_lnx_error.h"
 #include "npi_lnx_ipc_rpc.h"
-#include "time_printf.h"
+#include "tiLogging.h"
 #include "npi_lnx_serial_configuration.h"
 
 #if (defined NPI_SPI) && (NPI_SPI == TRUE)
@@ -105,11 +109,6 @@
 #include "hal_dbg_ifc.h"
 #include "hal_dbg_ifc_rpc.h"
 
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
-#endif
 
 /**************************************************************************************************
  *                                        Externals
@@ -256,7 +255,6 @@ const pNPI_SynchSlaveFn NPI_SynchSlaveFnArr[] =
  **************************************************************************************************/
 
 int npi_ipc_errno;
-int __BIG_DEBUG_ACTIVE = FALSE;
 
 /**************************************************************************************************
  *                                        Local Variables
@@ -325,7 +323,7 @@ static int removeFromActiveList(int c);
 static int addToActiveList(int c);
 
 static int setupSocket(npiSerialCfg_t *serialCfg);
-static int configureDebugInterface();
+static int configureDebugInterface(void);
 static void writeToNpiLnxLog(const char* str);
 
 static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf);
@@ -353,20 +351,21 @@ static int npi_ServerCmdHandle(npiMsgData_t *npi_ipc_buf);
  * @return      None.
  **************************************************************************************************
  */
-void halDelay(uint8 msecs, uint8 sleep)
-{
-	if (sleep)
-	{
-		//    usleep(msecs * 1000);
-	}
-	((void)msecs);
-}
+//void halDelay(uint8 msecs, uint8 sleep)
+//{
+//	if (sleep)
+//	{
+//	    usleep(msecs * 1000);
+//	}
+//}
 
 static void writeToNpiLnxLog(const char* str)
 {
-	int npiLnxLogFd, i = 0;
-	char *fullStr = (char *)malloc(255);
-	char *inStr = (char *)malloc(255);
+	static const int kStrSize=255;
+	int npiLnxLogFd;
+	size_t ix = 0;
+	char *fullStr = (char *)malloc(kStrSize);
+	char *inStr = (char *)malloc(kStrSize);
 
 	time_t timeNow;
 	struct tm * timeNowinfo;
@@ -374,19 +373,19 @@ static void writeToNpiLnxLog(const char* str)
 	time ( &timeNow );
 	timeNowinfo = localtime ( &timeNow );
 
-	sprintf(fullStr, "[%s", asctime(timeNowinfo));
-	sprintf(inStr, "%s", str);
+	snprintf(fullStr, kStrSize, "[%s", asctime(timeNowinfo));
+	snprintf(inStr, kStrSize, "%s", str);
 	// Remove \n characters
 	fullStr[strlen(fullStr) - 2] = 0;
-	for (i = strlen(str) - 1; i > MAX(strlen(str), 4); i--)
+	for (ix = strlen(str) - 1; ix > MAX(strlen(str), 4); ix--)
 	{
-		if (inStr[i] == '\n')
-			inStr[i] = 0;
+		if (inStr[ix] == '\n')
+			inStr[ix] = 0;
 	}
-	sprintf(fullStr, "%s] %s", fullStr, inStr);
+	snprintf(fullStr, kStrSize, "%s] %s", fullStr, inStr);
 
 	// Add global error code
-	sprintf(fullStr, "%s. Error: %.8X\n", fullStr, npi_ipc_errno);
+	snprintf(fullStr, kStrSize, "%s. Error: %.8X\n", fullStr, npi_ipc_errno);
 
 	// Write error message to /dev/npiLnxLog
 	if (*serialCfg.logPath)
@@ -397,11 +396,11 @@ static void writeToNpiLnxLog(const char* str)
 	if (npiLnxLogFd > 0)
 	{
 		write(npiLnxLogFd, fullStr, strlen(fullStr));
-//		printf("Wrote:\n%s\n to npiLnxLog.log\n", fullStr, errno);
+//		LOG_DEBUG("Wrote:\n%s\n to npiLnxLog.log\n", fullStr, errno);
 	}
 	else
 	{
-		printf("Could not write \n%s\n to npiLnxLog. Error: %.8X\n", str, errno);
+		LOG_ERROR("Could not write \n%s\n to npiLnxLog. Error: %.8X\n", str, errno);
 		perror("open");
 	}
 
@@ -414,12 +413,13 @@ static void writeToNpiLnxLog(const char* str)
 
 static void print_usage_and_exit(const char *prog)
 {
-	printf("Usage: %s [config_file_name] [debug]\n", prog);
-	puts("  config_file_name: the path/name of the config file to use.\n");
-	puts("                    If NOT specified, the default is RemoTI_RNP.cfg and it will first\n");
-	puts("                    look in the current directory, and if not found there, will look in\n");
-	puts("                    the directory of wherever this binary is located.\n");
-	puts("  debug: set debug options. 'debugAll' for both BIG and TIME, 'debugTime' for just TIME or 'debugBig' for just BIG \n");
+	fflush(stdout);// Get anything logged to stdout ahead of us flushed.
+	fprintf(stderr, "\nUsage: %s [config_file_name] [debug]\n", prog);
+	fprintf(stderr, "  config_file_name: the path/name of the config file to use.\n");
+	fprintf(stderr, "                    If NOT specified, the default is RemoTI_RNP.cfg and it will first\n");
+	fprintf(stderr, "                    look in the current directory, and if not found there, will look in\n");
+	fprintf(stderr, "                    the directory of wherever this binary is located.\n");
+	fprintf(stderr, "  debug: set debug options. 'debugAll' for both BIG and TIME, 'debugTime' for just TIME or 'debugBig' for just BIG \n");
 	exit(1);
 }
 
@@ -439,21 +439,39 @@ static void print_usage_and_exit(const char *prog)
  *
  *
  **************************************************************************************************/
-int main(int argc, char ** argv)
+int main(int argc, char *argv[])
 {
-	static npiMsgData_t npiIpcRecvBuf;
-	int    ret = NPI_LNX_SUCCESS;
+	static npiMsgData_t   npiIpcRecvBuf;
+	int                   ret = NPI_LNX_SUCCESS;
 
-	printf("\n*********************************************************************\n");
-	printf("*\tTexas Instruments\n");
-	printf("*\tNPI Server version %d.%d.%d\n",  NPI_LNX_MAJOR_VERSION, NPI_LNX_MINOR_VERSION, NPI_LNX_REVISION);
-	printf("*\tCopyright 2016\n");
-	printf("*********************************************************************\n\n");
+	// IMPORTANT: This call to tiLogging_Init() MUST BE DONE FIRST.
+	// One thing it does is changes the buffering of stdout to line-based,
+	// and that works ONLY if the stream has not been used yet, so we
+	// MUST NOT printf/log anything before calling it...
+	tiLogging_Init(NULL);
+
+#ifdef __BUILT_TIME_STRING__
+	LOG_ALWAYS("%s: Built %s\n\n", argv[0], __BUILT_TIME_STRING__);
+#endif
+
+
+	LOG_ALWAYS("*********************************************************************\n");
+	LOG_ALWAYS("*\tTexas Instruments\n");
+	LOG_ALWAYS("*\tNPI Server version %d.%d.%d\n",  NPI_LNX_MAJOR_VERSION, NPI_LNX_MINOR_VERSION, NPI_LNX_REVISION);
+	LOG_ALWAYS("*\tCopyright 2016\n");
+	LOG_ALWAYS("*********************************************************************\n\n");
+
+	if (!OEM_NpiStartupHook(argc, argv))
+	{
+		npi_ipc_errno = -1;
+		LOG_FATAL("%s(): OEM_NpiStartupHook() failed.\n", __FUNCTION__);
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
+	}
 
 #ifdef NPI_UNIX
-   printf("NPI_UNIX\n");
+	LOG_DEBUG("NPI_UNIX\n");
 #else
-   printf("NOT NPI_UNIX\n");
+	LOG_DEBUG("NOT NPI_UNIX\n");
 #endif
 
 	/**********************************************************************
@@ -469,27 +487,31 @@ int main(int argc, char ** argv)
 	// exit function.
 	char const * configFilePath = "RemoTI_RNP.cfg";
 
-   if (argc > 3)
-   {
-		printf("Too many arguments\n");
+	if (argc > 3)
+	{
+		LOG_FATAL("Too many arguments\n");
 		print_usage_and_exit(argv[0]);
-   }
-   else if (argc > 2)
+	}
+	else if (argc > 2)
 	{
 		configFilePath = argv[1];
 		if (strcmp(argv[2], "debugAll") == 0)
 		{
 			__BIG_DEBUG_ACTIVE = TRUE;
+#ifdef __DEBUG_TIME__
 			__DEBUG_TIME_ACTIVE = TRUE;
+#endif
 		}
 		else if (strcmp(argv[2], "debugBig") == 0)
 		{
 			__BIG_DEBUG_ACTIVE = TRUE;
 		}
+#ifdef __DEBUG_TIME__
 		else if (strcmp(argv[2], "debugTime") == 0)
 		{
 			__DEBUG_TIME_ACTIVE = TRUE;
 		}
+#endif
 		else
 		{
 			print_usage_and_exit(argv[0]);
@@ -499,51 +521,52 @@ int main(int argc, char ** argv)
 	{
 		configFilePath = argv[1];
 	}
-   else
-   {
-      // No config file path specified.  Try defaulting it...
+	else
+	{
+		// No config file path specified.  Try defaulting it...
 
-      FILE *fpTemp = fopen(configFilePath, "r");
-      if (fpTemp)
-      {
-         // Config file exists in working directory.  Use it.
-         fclose(fpTemp);
-      }
-      else
-      {
-         // Config file does not exist in working directory.
-         // Presume it's located in the same directory as
-         // the binary, so point there.
-         char *lastSlash = strrchr(argv[0], '/');
-         if (lastSlash)
-         {
-            char     *pathToUse;
-            size_t   pathLen;
+		FILE *fpTemp = fopen(configFilePath, "r");
+		if (fpTemp)
+		{
+			// Config file exists in working directory.  Use it.
+			fclose(fpTemp);
+		}
+		else
+		{
+			// Config file does not exist in working directory.
+			// Presume it's located in the same directory as
+			// the binary, so point there.
+			char *lastSlash = strrchr(argv[0], '/');
+			if (lastSlash)
+			{
+				char     *pathToUse;
+				size_t   pathLen;
 
-            ++lastSlash;
-            pathLen = (size_t)(lastSlash-argv[0]) + strlen(configFilePath) + 1; /* +1 is for null term */
+				++lastSlash;
+				pathLen = (size_t)(lastSlash-argv[0]) + strlen(configFilePath) + 1; /* +1 is for null term */
 
-            pathToUse = malloc(pathLen);
-            snprintf(pathToUse, pathLen, "%.*s%s", (int)(lastSlash-argv[0]), argv[0], configFilePath);
-            configFilePath = pathToUse;
-         }
-      }
-   }
+				pathToUse = malloc(pathLen);
+				snprintf(pathToUse, pathLen, "%.*s%s", (int)(lastSlash-argv[0]), argv[0], configFilePath);
+				configFilePath = pathToUse;
+			}
+		}
+	}
 
-   printf("configFilePath is \"%s\"\n", configFilePath);
+	LOG_INFO("configFilePath is \"%s\"\n", configFilePath);
 
-   if (NPI_LNX_SUCCESS == getSerialConfiguration(configFilePath, &serialCfg))
-   {
-	   printf("Successfully read configuration parameters\n");
-   }
-   else
-   {
-	   NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, FALSE);
-   }
+	if (NPI_LNX_SUCCESS == getSerialConfiguration(configFilePath, &serialCfg))
+	{
+		LOG_ALWAYS("Successfully read configuration parameters\n");
+	}
+	else
+	{
+		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, FALSE);
+	}
 
 	/**********************************************************************
 	 * Open the serial interface
 	 */
+
 	switch(serialCfg.devIdx)
 	{
 		case NPI_SERVER_DEVICE_INDEX_UART_USB:
@@ -555,7 +578,7 @@ int main(int argc, char ** argv)
 			ret = (NPI_OpenDeviceFnArr[NPI_SERVER_DEVICE_INDEX_UART])(serialCfg.devPath, (npiUartCfg_t *)&serialCfg.serial.npiUartCfg);
 
 			// Now configure reset GPIO for physical UART
-			if (serialCfg.devIdx == NPI_SERVER_DEVICE_INDEX_UART)
+			if (serialCfg.devIdx == (unsigned)NPI_SERVER_DEVICE_INDEX_UART)
 			{
 				if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit((halGpioCfg_t *)&serialCfg.gpioCfg[2])))
 				{
@@ -569,18 +592,20 @@ int main(int argc, char ** argv)
 	#if (defined NPI_SPI) && (NPI_SPI == TRUE)
 		{
 			// Now open device for processing
-      debug_printf("Opening SPI device...\n");
+			LOG_DEBUG("Opening SPI device...\n");
 			ret = (NPI_OpenDeviceFnArr[serialCfg.devIdx])(serialCfg.devPath, (npiSpiCfg_t *) &serialCfg.serial.npiSpiCfg);
 
-			if (ret == NPI_LNX_SUCCESS)
+			if (ret != NPI_LNX_SUCCESS)
+				LOG_ERROR("%s(): Failed to open SPI device!\n", __FUNCTION__);
+			else
 			{
-			  // Perform Reset of the RNP
-			  debug_printf("Resetting RNP...\n");
-			  (NPI_ResetSlaveFnArr[serialCfg.devIdx])();
+				// Perform Reset of the RNP
+				LOG_INFO("%s(): Resetting RNP...\n", __FUNCTION__);
+				(NPI_ResetSlaveFnArr[serialCfg.devIdx])();
 
-			  // Do the Hw Handshake
-			  debug_printf("Synch slave...\n");
-			  (NPI_SynchSlaveFnArr[serialCfg.devIdx])();
+				// Do the Hw Handshake
+				LOG_INFO("%s(): Synch slave...\n", __FUNCTION__);
+				(NPI_SynchSlaveFnArr[serialCfg.devIdx])();
 			}
 		}
 	#endif
@@ -591,6 +616,8 @@ int main(int argc, char ** argv)
 		{
 			// Open the Device and perform a reset
 			ret = (NPI_OpenDeviceFnArr[serialCfg.devIdx])(serialCfg.devPath, (npiI2cCfg_t *) &serialCfg.serial.npiI2cCfg);
+			if (ret != NPI_LNX_SUCCESS)
+				LOG_ERROR("%s(): Failed to open I2C device!\n", __FUNCTION__);
 		}
 	#endif
 		break;
@@ -620,10 +647,10 @@ int main(int argc, char ** argv)
 	char pathName[128];
 	do
 	{
-		sprintf(pathName, "results/stressTestData%.4d.txt", i++);
-		printf("%s\n", pathName);
+		snprintf(pathName, sizeof(pathName), "results/stressTestData%.4d.txt", i++);
+		LOG_ALWAYS("%s\n", pathName);
 		fdStressTestData = open( pathName , O_CREAT | O_EXCL | O_WRONLY, S_IWRITE | S_IREAD );
-		printf("fd = %d\n", fdStressTestData);
+		LOG_ALWAYS("fd = %d\n", fdStressTestData);
 		if (fdStressTestData >= 0)
 			done = 1;
 		else
@@ -647,7 +674,8 @@ int main(int argc, char ** argv)
 	sNPIlisten = setupSocket(&serialCfg);
 
 	fd_set activeConnectionsFDsSafeCopy;
-	int justConnected, c;
+	int justConnected;
+	int c;
 
 	// Connection main loop. Cannot get here with ret != SUCCESS
 
@@ -665,7 +693,7 @@ int main(int argc, char ** argv)
 	clock_gettime(CLOCK_MONOTONIC, &gStartTime);
 #endif // (defined __DEBUG_TIME__) || (__STRESS_TEST__)
 	//                                            debug_
-	printf("waiting for first connection on #%d...\n", sNPIlisten);
+	LOG_INFO("Waiting for first connection on #%d...\n", sNPIlisten);
 
 	while (ret == NPI_LNX_SUCCESS)
 	{
@@ -723,7 +751,7 @@ int main(int argc, char ** argv)
 						snprintf(toNpiLnxLog, AP_MAX_BUF_LEN, "Connected to #%d.(%s / %s)", justConnected, ipstr, ipstr2);
 #endif //NPI_UNIX
 						writeToNpiLnxLog(toNpiLnxLog);
-						printf("%s\n", toNpiLnxLog);
+						LOG_INFO("%s\n", toNpiLnxLog);
 						ret = addToActiveList(justConnected);
 
 #ifdef __DEBUG_TIME__
@@ -748,14 +776,14 @@ int main(int argc, char ** argv)
 						{
 						case NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT:
 							close(c);
-							printf("Removing connection #%d\n", c);
+							LOG_INFO("Removing connection #%d due to disconnect.\n", c);
 							// Connection closed. Remove from set
 							FD_CLR(c, &activeConnectionsFDs);
 							// We should now set ret to NPI_SUCCESS, but there is still one fatal error
 							// possibility so simply set ret = to return value from removeFromActiveList().
 							ret = removeFromActiveList(c);
 							snprintf(toNpiLnxLog, AP_MAX_BUF_LEN, "Removed connection #%d", c);
-							//							printf("%s\n", toNpiLnxLog);
+							//							LOG_WARN("%s\n", toNpiLnxLog);
 							writeToNpiLnxLog(toNpiLnxLog);
 							break;
 						case NPI_LNX_ERROR_UART_SEND_SYNCH_TIMEDOUT:
@@ -763,9 +791,9 @@ int main(int argc, char ** argv)
 							// if the network is in BOOT mode, it will not answer any synchronous request other than SYS_BOOT request.
 							// if we exit immediately, we will never be able to recover the NP device.
 							// This may be replace in the future by an update of the RNP behavior
-							printf("Synchronous Request Timeout...");
+							LOG_WARN("Synchronous Request Timeout...");
 							snprintf(toNpiLnxLog, AP_MAX_BUF_LEN, "Removed connection #%d", c);
-							//							printf("%s\n", toNpiLnxLog);
+							LOG_WARN("%s\n", toNpiLnxLog);
 							writeToNpiLnxLog(toNpiLnxLog);
 							ret = NPI_LNX_SUCCESS;
 							npi_ipc_errno = NPI_LNX_SUCCESS;
@@ -773,7 +801,7 @@ int main(int argc, char ** argv)
 
 						case NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DUP_READY:
 							// Device did not respond, it may be that it's not in debug mode anymore.
-							printf("Chip failed to respond\n");
+							LOG_WARN("Chip failed to respond\n");
 							// This error should not be considered critical at this stage.
 							snprintf(toNpiLnxLog, AP_MAX_BUF_LEN, "Could not get chip ID, device not in debug mode as it failed to respond\n");
 							writeToNpiLnxLog(toNpiLnxLog);
@@ -805,7 +833,7 @@ int main(int argc, char ** argv)
 										NPI_LNX_ERROR_MODULE(childThread),
 										(int)sizeof(npiIpcRecvBuf.pData),
 										(char *)(npiIpcRecvBuf.pData));
-								//							printf("%s\n", toNpiLnxLog);
+								//							LOG_WARN("%s\n", toNpiLnxLog);
 								writeToNpiLnxLog(toNpiLnxLog);
 								// Force continuation
 								ret = NPI_LNX_SUCCESS;
@@ -813,7 +841,7 @@ int main(int argc, char ** argv)
 							else
 							{
 								//							debug_
-								printf("[ERR] npi_ipc_errno 0x%.8X\n", npi_ipc_errno);
+								LOG_ERROR("npi_ipc_errno 0x%.8X\n", npi_ipc_errno);
 								// Everything about the error can be found in the message, and in npi_ipc_errno:
 								childThread = npiIpcRecvBuf.cmdId;
 								snprintf(toNpiLnxLog, AP_MAX_BUF_LEN, "Child thread with ID %d in module %d reported error:\t%.*s",
@@ -821,7 +849,7 @@ int main(int argc, char ** argv)
 										NPI_LNX_ERROR_MODULE(childThread),
 										(int)sizeof(npiIpcRecvBuf.pData),
 										(char *)(npiIpcRecvBuf.pData));
-								//							printf("%s\n", toNpiLnxLog);
+								//							LOG_ERROR("%s\n", toNpiLnxLog);
 								writeToNpiLnxLog(toNpiLnxLog);
 							}
 							break;
@@ -834,26 +862,26 @@ int main(int argc, char ** argv)
 							// Do it by reconnecting so that threads are kept synchronized
 							npiMsgData_t npi_ipc_buf_tmp;
 							int localRet = NPI_LNX_SUCCESS;
-							printf("Reset was requested, so try to disconnect device %d\n", serialCfg.devIdx);
+							LOG_WARN("Reset was requested, so try to disconnect device %d\n", serialCfg.devIdx);
 							npi_ipc_buf_tmp.cmdId = NPI_LNX_CMD_ID_DISCONNECT_DEVICE;
 							localRet = npi_ServerCmdHandle((npiMsgData_t *)&npi_ipc_buf_tmp);
-							printf("Disconnection from device %d was %s\n", serialCfg.devIdx, (localRet == NPI_LNX_SUCCESS) ? "successful" : "unsuccessful");
+							LOG_WARN("Disconnection from device %d was %s\n", serialCfg.devIdx, (localRet == NPI_LNX_SUCCESS) ? "successful" : "unsuccessful");
 							if (localRet == NPI_LNX_SUCCESS)
 							{
-								printf("Then try to connect device %d again\n", serialCfg.devIdx);
+								LOG_WARN("Then try to connect device %d again\n", serialCfg.devIdx);
 								int bigDebugWas = __BIG_DEBUG_ACTIVE;
 								if (bigDebugWas == FALSE)
 								{
 									__BIG_DEBUG_ACTIVE = TRUE;
-									printf("__BIG_DEBUG_ACTIVE set to TRUE\n");
+									LOG_ALWAYS("__BIG_DEBUG_ACTIVE set to TRUE\n");
 								}
 								npi_ipc_buf_tmp.cmdId = NPI_LNX_CMD_ID_CONNECT_DEVICE;
 								localRet = npi_ServerCmdHandle((npiMsgData_t *)&npi_ipc_buf_tmp);
-								printf("Reconnection to device %d was %s\n", serialCfg.devIdx, (localRet == NPI_LNX_SUCCESS) ? "successful" : "unsuccessful");
+								LOG_WARN("Reconnection to device %d was %s\n", serialCfg.devIdx, (localRet == NPI_LNX_SUCCESS) ? "successful" : "unsuccessful");
 								if (bigDebugWas == FALSE)
 								{
 									__BIG_DEBUG_ACTIVE = FALSE;
-									printf("__BIG_DEBUG_ACTIVE set to FALSE\n");
+									LOG_ALWAYS("__BIG_DEBUG_ACTIVE set to FALSE\n");
 								}
 							}
 						}
@@ -862,7 +890,7 @@ int main(int argc, char ** argv)
 						if ((npiIpcRecvBuf.subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_NOTIFY_ERR)
 						{
 							close(c);
-							printf("Removing connection #%d\n", c);
+							LOG_ERROR("Removing connection #%d due to RPC_CMD_NOTIFY_ERR\n", c);
 							// Connection closed. Remove from set
 							FD_CLR(c, &activeConnectionsFDs);
 						}
@@ -873,7 +901,7 @@ int main(int argc, char ** argv)
 	}
 	free(toNpiLnxLog);
 
-	printf("Exit socket while loop\n");
+	LOG_WARN("Exit socket while loop\n");
 	/**********************************************************************
 	 * Remember to close down all connections
 	 *********************************************************************/
@@ -971,7 +999,7 @@ static int removeFromActiveList(int c)
 			//continue to wait for new connection
 			activeConnections.size = 0;
 			activeConnections.list[0] = 0;
-			debug_printf("No  Active Connections");
+			LOG_DEBUG("No  Active Connections");
 		}
 		else
 		{
@@ -982,13 +1010,13 @@ static int removeFromActiveList(int c)
 			// Decrement size
 			activeConnections.size--;
 #ifdef __BIG_DEBUG__
-			printf("Remaining Active Connections: #%d", activeConnections.list[0]);
+			LOG_DEBUG("Remaining Active Connections: #%d", activeConnections.list[0]);
 			// Send data to all connections, except listener
 			for (i = 1; i < activeConnections.size; i++)
 			{
-				printf(", #%d", activeConnections.list[i]);
+				LOG_DEBUG(", #%d", activeConnections.list[i]);
 			}
-			printf("\n");
+			LOG_DEBUG("\n");
 #endif //__BIG_DEBUG__
 		}
 		return NPI_LNX_SUCCESS;
@@ -1001,6 +1029,7 @@ static int removeFromActiveList(int c)
 	}
 }
 
+#ifdef __DEBUG_TIME__
 static void time_print_npi_ipc_buf(const char *strDirection, const npiMsgData_t *npiMsgData, struct timespec const *callersStartTime, struct timespec const *callersCurrentTime, struct timespec *callersPreviousTime)
 {
 	char 		tmpStr[128 + (sizeof(npiMsgData_t) * 3)];
@@ -1019,9 +1048,10 @@ static void time_print_npi_ipc_buf(const char *strDirection, const npiMsgData_t 
 		snprintf(tmpStr+tmpLen, sizeof(tmpStr)-tmpLen, " %02X", npiMsgData->pData[i]);
 		tmpLen += 3;
 	}
-	snprintf(tmpStr+tmpLen, sizeof(tmpStr)-tmpLen, "]\n");
-	time_printf_always_localized(tmpStr, callersStartTime, callersCurrentTime, callersPreviousTime);
+	snprintf(tmpStr+tmpLen, sizeof(tmpStr)-tmpLen, "]");
+	time_printf_always_localized(callersStartTime, callersCurrentTime, callersPreviousTime, "%s\n", tmpStr);
 }
+#endif
 
 
 /**************************************************************************************************
@@ -1046,10 +1076,13 @@ static void time_print_npi_ipc_buf(const char *strDirection, const npiMsgData_t 
 static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 {
 	npiMsgData_t sendBuf;
+	char tmpStr[512];
+	size_t strLen;
+	strLen = 0;
 	int          n, i, ret = NPI_LNX_SUCCESS;
 
 	// Handle the connection
-	debug_printf("Receive message...\n");
+	LOG_DEBUG("Receive message...\n");
 
 	// Receive only NPI header first. Then then number of bytes indicated by length.
 	n = recv(connection, recvBuf, RPC_FRAME_HDR_SZ, 0);
@@ -1058,46 +1091,47 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 		if (n < 0)
 		{
 			perror("recv");
-	        fprintf(stderr, "%s(): ERROR! Receive message (n = %d)...\n", __FUNCTION__, n);
+			LOG_ERROR("%s(): Receive message (n = %d)...\n", __FUNCTION__, n);
 			if ( (errno == ENOTSOCK) || (errno == EPIPE))
 			{
-				debug_printf("[ERROR] Tried to read #%d as socket\n", connection);
-				debug_printf("Will disconnect #%d\n", connection);
+				LOG_ERROR("Tried to read #%d as socket\n", connection);
+				LOG_ERROR("Will disconnect #%d\n", connection);
 				npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT;
 				ret = NPI_LNX_FAILURE;
 			}
 			else if (errno == ECONNRESET)
 			{
 //				debug_
-				printf("[WARNING] Client disconnect while attempting to send to it\n");
-				debug_printf("Will disconnect #%d\n", connection);
+				LOG_WARN("Client disconnect while attempting to send to it\n");
+				LOG_WARN("Will disconnect #%d\n", connection);
 				npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT;
 				ret = NPI_LNX_FAILURE;
 			}
 			else
 			{
+				LOG_ERROR("%s(): Receive message (fail) with errno=%d.\n", __FUNCTION__, errno);
 				npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_CHECK_ERRNO;
 				ret = NPI_LNX_FAILURE;
 			}
 		}
 		else
 		{
-		    printf("Client #%d disconnected\n", connection);
+			LOG_WARN("Client #%d disconnected.\n", connection);
 			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT;
 			ret = NPI_LNX_FAILURE;
 		}
 	}
 	else if (n == RPC_FRAME_HDR_SZ)
 	{
-		// printf("%s(): Receive message header (good)...\n", __FUNCTION__);
+		// LOG_DEBUG("%s(): Receive message header (good)...\n", __FUNCTION__);
 		// Now read out the payload of the NPI message, if it exists
 		if (recvBuf->len > 0)
 		{
 			n = recv(connection, recvBuf->pData, recvBuf->len , 0);
-//   	   fprintf(stderr, "Receive payload len %d\n", n);
+//			LOG_DEBUG("Receive payload len %d\n", n);
 			if (n != (int)recvBuf->len)
 			{
-				fprintf(stderr, "%s(): ERROR! Could not read out the NPI payload. Requested %d, but read %d!\n",
+				LOG_ERROR("%s(): Could not read out the NPI payload. Requested %d, but read %d!\n",
 						__FUNCTION__,
 						recvBuf->len, n);
 				npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_TOO_FEW_BYTES;
@@ -1121,7 +1155,7 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 		/*
 		 * Take the message from the client and pass it to the NPI
 		 */
-#ifdef __DEBUG_TIME__
+	#ifdef __DEBUG_TIME__
 		static struct timespec prevTimeRec = {0,0};
 		if (__DEBUG_TIME_ACTIVE == TRUE)
 		{
@@ -1129,7 +1163,7 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 			struct timespec currentTime;
 			clock_gettime(CLOCK_MONOTONIC, &currentTime);
 
-#ifdef __STRESS_TEST__
+		#ifdef __STRESS_TEST__
 			long int diffPrevMillisecs;
 			int      t;
 			if (currentTime.tv_nsec >= prevTimeRec.tv_nsec)
@@ -1151,18 +1185,16 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 
 			time_print_npi_ipc_buf("<--", recvBuf, &gStartTime, &currentTime, &prevTimeRec);
 		}
-#endif //__DEBUG_TIME__
-
-
+	#endif //__DEBUG_TIME__
 
 		if ((recvBuf->subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_SREQ)
 		{
-			debug_printf("NPI SREQ:  (Total Len %d, Data Len %d, subSys 0x%02x, cmdId 0x%02x) PAYLOAD:", n, recvBuf->len, recvBuf->subSys, recvBuf->cmdId);
 			for (i = 0; i < recvBuf->len; i++)
 			{
-				debug_printf(" 0x%02X", recvBuf->pData[i]);
+				snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "%02X ", recvBuf->pData[i]);
+				strLen += 3;
 			}
-			debug_printf("\n");
+			LOG_DEBUG("NPI SREQ:  (Total Len %d, Data Len %d, subSys 0x%02x, cmdId 0x%02x) PAYLOAD: %s\n", n, recvBuf->len, recvBuf->subSys, recvBuf->cmdId, tmpStr);
 
 			if ((recvBuf->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_DEBUG)
 			{
@@ -1173,7 +1205,7 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 				}
 				else
 				{
-					debug_printf("Debug Interface SREQ received, but not supported\n");
+					LOG_DEBUG("Debug Interface SREQ received, but not supported\n");
 					// Debug not supported, return 0xFF
 					recvBuf->pData[0] = 0xFF;
 					ret = NPI_LNX_SUCCESS;
@@ -1219,7 +1251,7 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 
 			if ( (ret == NPI_LNX_SUCCESS) ||
 						(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_CLEAR_POLL_TIMEDOUT) ||
-						(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_POLL_TIMEDOUT) || 
+						(npi_ipc_errno == NPI_LNX_ERROR_HAL_GPIO_WAIT_SRDY_SET_POLL_TIMEDOUT) ||
 					(npi_ipc_errno == NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DUP_READY) )
 			{
 				n = ( (int)recvBuf->len + RPC_FRAME_HDR_SZ );
@@ -1230,16 +1262,17 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 				// Command type is not set, so set it here
 				sendBuf.subSys |= RPC_CMD_SRSP;
 
-				debug_printf("NPI SRSP: (Total Len %d, Data Len %d, subSys 0x%02x, cmdId 0x%02x) PAYLOAD:", n, sendBuf.len, sendBuf.subSys, sendBuf.cmdId);
+				strLen = 0;
 				for (i = 0; i < sendBuf.len; i++)
 				{
-					debug_printf(" 0x%02X", sendBuf.pData[i]);
+					snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "%02X ", sendBuf.pData[i]);
+					strLen += 3;
 				}
-				debug_printf("\n");
-				
+				LOG_DEBUG("NPI SRSP:  (Total Len %d, Data Len %d, subSys 0x%02x, cmdId 0x%02x) PAYLOAD: %s\n", n, sendBuf.len, sendBuf.subSys, sendBuf.cmdId, tmpStr);
+
 				if (sendBuf.len == 0)
 				{
-					fprintf(stderr, "[ERR] SRSP is 0!\n");
+					LOG_ERROR("SRSP is 0!\n");
 				}
 
 				//			pthread_mutex_lock(&npiSyncRespLock);
@@ -1249,17 +1282,18 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 			else
 			{
 				// Keep status from NPI_SendSynchDataFnArr
-				debug_printf("[ERR] SRSP: ret = 0x%.8X, npi_ipc_errno 0x%.8X\n", ret, npi_ipc_errno);
+				LOG_ERROR("SRSP: ret = 0x%.8X, npi_ipc_errno 0x%.8X\n", ret, npi_ipc_errno);
 			}
 		}
 		else if ((recvBuf->subSys & RPC_CMD_TYPE_MASK) == RPC_CMD_AREQ)
 		{
-			debug_printf("NPI AREQ:  (Total Len %d, Data Len %d, subSys 0x%02x, cmdId 0x%02x) PAYLOAD:", n, recvBuf->len, recvBuf->subSys, recvBuf->cmdId);
+			strLen = 0;
 			for (i = 0; i < recvBuf->len; i++)
 			{
-				debug_printf(" 0x%02X", recvBuf->pData[i]);
+				snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "%02X ", recvBuf->pData[i]);
+				strLen += 3;
 			}
-			debug_printf("\n");
+			LOG_DEBUG("NPI AREQ:  (Total Len %d, Data Len %d, subSys 0x%02x, cmdId 0x%02x) PAYLOAD: %s\n", n, recvBuf->len, recvBuf->subSys, recvBuf->cmdId, tmpStr);
 
 			if ((recvBuf->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_DEBUG)
 			{
@@ -1270,7 +1304,7 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 				}
 				else
 				{
-					debug_printf("Debug Interface AREQ received, but not supported\n");
+					LOG_DEBUG("Debug Interface AREQ received, but not supported\n");
 					// Debug not supported, do nothing
 					ret = NPI_LNX_SUCCESS;
 				}
@@ -1278,7 +1312,7 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 			else if ((recvBuf->subSys & RPC_SUBSYSTEM_MASK) == RPC_SYS_SRV_CTRL)
 			{
 				// Print caller ID
-				printf("[NPI Server] AREQ received from %d to control NPI Server\n", connection);
+				LOG_INFO("AREQ received from %d to control NPI Server\n", connection);
 				//AREQ Command send to this server.
 				ret = npi_ServerCmdHandle(recvBuf);
 			}
@@ -1295,13 +1329,14 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 		}
 		else
 		{
-			fprintf(stderr, "Can only accept AREQ or SREQ for now...\n");
-			fprintf(stderr, "Unknown:  (Total Len %d, Data Len %d, subSys 0x%02x, cmdId 0x%02x) PAYLOAD:", n, recvBuf->len, recvBuf->subSys, recvBuf->cmdId);
+			LOG_WARN("Can only accept AREQ or SREQ for now...\n");
+			strLen = 0;
 			for (i = 0; i < recvBuf->len; i++)
 			{
-				fprintf(stderr, " 0x%02X", recvBuf->pData[i]);
+				snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, "%02X ", recvBuf->pData[i]);
+				strLen += 3;
 			}
-			fprintf(stderr, "\n");
+			LOG_DEBUG("Unknown:  (Total Len %d, Data Len %d, subSys 0x%02x, cmdId 0x%02x) PAYLOAD: %s\n", n, recvBuf->len, recvBuf->subSys, recvBuf->cmdId, tmpStr);
 
 			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INCOMPATIBLE_CMD_TYPE;
 			// Ignore error. It's not deadly
@@ -1310,7 +1345,7 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 	}
 	else
 	{
-		fprintf(stderr, "%s(): ERROR!  Received %d bytes when asked for %d (RPC_FRAME_HDR_SZ)\n", __FUNCTION__, n, RPC_FRAME_HDR_SZ);
+		LOG_ERROR("%s(): Received %d bytes when asked for %d (RPC_FRAME_HDR_SZ)\n", __FUNCTION__, n, RPC_FRAME_HDR_SZ);
 	}
 
 #if (defined __BIG_DEBUG__) && (__BIG_DEBUG__ == TRUE)
@@ -1320,11 +1355,11 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
 
 	if ((ret == (int)NPI_LNX_FAILURE) && (npi_ipc_errno == (int)NPI_LNX_ERROR_IPC_RECV_DATA_DISCONNECT))
 	{
-		debug_printf("Done with %d\n", connection);
+		LOG_DEBUG("Done with %d\n", connection);
 	}
 	else
 	{
-		debug_printf("!Done\n");
+		LOG_DEBUG("!Done\n");
 	}
 
 	return ret;
@@ -1350,7 +1385,7 @@ static int NPI_LNX_IPC_ConnectionHandle(int connection, npiMsgData_t *recvBuf)
  **************************************************************************************************/
 static int NPI_LNX_IPC_SendData(npiMsgData_t const *sendBuf, int connection)
 {
-	int bytesSent = 0, i, ret = NPI_LNX_SUCCESS;
+	int bytesSent = 0, ix=0, ret = NPI_LNX_SUCCESS;
 	int len = (int)(sendBuf->len) + RPC_FRAME_HDR_SZ;
 
 #ifdef __DEBUG_TIME__
@@ -1361,7 +1396,7 @@ static int NPI_LNX_IPC_SendData(npiMsgData_t const *sendBuf, int connection)
 		struct timespec currentTime;
 		clock_gettime(CLOCK_MONOTONIC, &currentTime);
 
-#ifdef __STRESS_TEST__
+	#ifdef __STRESS_TEST__
 		long int diffPrevMillisecs;
 		int      t;
 		if (currentTime.tv_nsec >= prevTimeSend.tv_nsec)
@@ -1385,21 +1420,21 @@ static int NPI_LNX_IPC_SendData(npiMsgData_t const *sendBuf, int connection)
 		{
 			time_t rawTime;
 			time(&rawTime);
-			printf("\nTiming Statistics as of %s:\n", ctime(&rawTime));
+			LOG_ALWAYS("Timing Statistics as of %s:\n", ctime(&rawTime));
 			fprintf(fpStressTestData, "\nTiming Statistics as of %s:\n", ctime(&rawTime));
-			for (i = 0; i < (TIMING_STATS_SIZE / TIMING_STATS_MS_DIV); i++ )
+			for (ix = 0; ix < (TIMING_STATS_SIZE / TIMING_STATS_MS_DIV); i++ )
 			{
-				printf(" %4d: \t %8d\n", i * TIMING_STATS_MS_DIV, timingStats[INDEX_SEND][i]);
-				fprintf(fpStressTestData, " %4d: \t %8d\n", i * TIMING_STATS_MS_DIV, timingStats[INDEX_SEND][i]);
+				LOG_ALWAYS(" %4d: \t %8d\n", ix * TIMING_STATS_MS_DIV, timingStats[INDEX_SEND][ix]);
+				fprintf(fpStressTestData, " %4d: \t %8d\n", ix * TIMING_STATS_MS_DIV, timingStats[INDEX_SEND][ix]);
 			}
-			printf(" More than %u: \t %8u\n", TIMING_STATS_SIZE, timingStats[INDEX_SEND][TIMING_STATS_SIZE]);
+			LOG_ALWAYS(" More than %u: \t %8u\n", TIMING_STATS_SIZE, timingStats[INDEX_SEND][TIMING_STATS_SIZE]);
 			fprintf(fpStressTestData, " More than %u: \t %8u\n", TIMING_STATS_SIZE, timingStats[INDEX_SEND][TIMING_STATS_SIZE]);
 
 			// Then clear statistics for next set.
 			memset(timingStats[INDEX_SEND], 0, (TIMING_STATS_SIZE / TIMING_STATS_MS_DIV) + 1);
 		}
 
-#endif //__STRESS_TEST__
+	#endif //__STRESS_TEST__
 
 		time_print_npi_ipc_buf("-->", sendBuf, &gStartTime, &currentTime, &prevTimeSend);
 	}
@@ -1408,40 +1443,40 @@ static int NPI_LNX_IPC_SendData(npiMsgData_t const *sendBuf, int connection)
 	if (connection < 0)
 	{
 #ifdef __BIG_DEBUG__
-		printf("Dispatch AREQ to all active connections: #%d", activeConnections.list[0]);
+		LOG_ALWAYS("Dispatch AREQ to all active connections: #%d", activeConnections.list[0]);
 		// Send data to all connections, except listener
-		for (i = 1; i < activeConnections.size; i++)
+		for (ix = 1; ix < activeConnections.size; ix++)
 		{
-			printf(", %d", activeConnections.list[i]);
+			LOG_ALWAYS(", %d", activeConnections.list[ix]);
 		}
-		printf(".\n");
+		LOG_ALWAYS(".\n");
 #endif //__BIG_DEBUG__
 		// Send data to all connections, except listener
-		for (i = 0; i < activeConnections.size; i++)
+		for (ix = 0; ix < activeConnections.size; ix++)
 		{
-			if (activeConnections.list[i] != sNPIlisten)
+			if (activeConnections.list[ix] != sNPIlisten)
 			{
-//   	      	fprintf(stderr, "[AREQ] Sending message...\n");
-				bytesSent = send(activeConnections.list[i], (char *)sendBuf, len, MSG_NOSIGNAL);
-//   	      	fprintf(stderr, "[AREQ] Sent %d bytes...\n", bytesSent);
-				
-				debug_printf("...sent %d bytes to Client #%d\n", bytesSent, activeConnections.list[i]);
-				
+//				LOG_DEBUG("[AREQ] Sending message...\n");
+				bytesSent = send(activeConnections.list[ix], (char *)sendBuf, len, MSG_NOSIGNAL);
+//				LOG_DEBUG("[AREQ] Sent %d bytes...\n", bytesSent);
+
+				LOG_DEBUG("...sent %d bytes to Client #%d\n", bytesSent, activeConnections.list[ix]);
+
 				if (bytesSent < 0)
 				{
 					if (errno != ENOTSOCK)
 					{
-						char *errorStr = (char *)malloc(30);
-						sprintf(errorStr, "send %d, %d", activeConnections.list[i], errno);
+						char errorStr[30];
+						snprintf(errorStr, sizeof(errorStr), "send %d, %d", activeConnections.list[ix], errno);
 						perror(errorStr);
 						// Remove from list if detected bad file descriptor, or broken pipe
 						if ( (errno == EBADF) || (errno == EPIPE) )
 						{
-							fprintf(stderr, "Removing connection #%d\n", activeConnections.list[i]);
-							close(activeConnections.list[i]);
+							LOG_ERROR("Send to all: Removing connection #%d (errno=%d)\n", activeConnections.list[ix], errno);
+							close(activeConnections.list[ix]);
 							// Connection closed. Remove from set
-							FD_CLR(activeConnections.list[i], &activeConnectionsFDs);
-							ret = removeFromActiveList(activeConnections.list[i]);
+							FD_CLR(activeConnections.list[ix], &activeConnectionsFDs);
+							ret = removeFromActiveList(activeConnections.list[ix]);
 						}
 						else
 						{
@@ -1452,7 +1487,7 @@ static int NPI_LNX_IPC_SendData(npiMsgData_t const *sendBuf, int connection)
 				}
 				else if (bytesSent != len)
 				{
-					fprintf(stderr, "[ERROR] Failed to send all %d bytes on socket\n", len);
+					LOG_ERROR("Failed to send all %d bytes on socket\n", len);
 				}
 			}
 		}
@@ -1460,11 +1495,11 @@ static int NPI_LNX_IPC_SendData(npiMsgData_t const *sendBuf, int connection)
 	else
 	{
 		// Send to specific connection only
-//      fprintf(stderr, "[AREQ] Sending message...\n");
+//		LOG_DEBUG("[AREQ] Sending message...\n");
 		bytesSent = send(connection, (char *)sendBuf, len, MSG_NOSIGNAL);
-//      fprintf(stderr, "[AREQ] Sent %d byte message...\n", bytesSent);
+//		LOG_DEBUIG("[AREQ] Sent %d byte message...\n", bytesSent);
 
-		debug_printf("...sent %d bytes to Client #%d\n", bytesSent, connection);
+		LOG_DEBUG("...sent %d bytes to Client #%d\n", bytesSent, connection);
 
 		if (bytesSent < 0)
 		{
@@ -1472,7 +1507,7 @@ static int NPI_LNX_IPC_SendData(npiMsgData_t const *sendBuf, int connection)
 			// Remove from list if detected bad file descriptor
 			if (errno == EBADF)
 			{
-				printf("Removing connection #%d\n", connection);
+				LOG_ERROR("Removing connection #%d\n", connection);
 				close(connection);
 				// Connection closed. Remove from set
 				FD_CLR(connection, &activeConnectionsFDs);
@@ -1520,14 +1555,16 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg)
 	int i;
 	//	int ret = NPI_LNX_SUCCESS;
 
-	debug_printf("[-->] %d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData:",
+	LOG_DEBUG("[-->] %d bytes, subSys 0x%.2X, cmdId 0x%.2X, pData:",
 			pMsg->len,
 			pMsg->subSys,
 			pMsg->cmdId);
 	for (i = 0; i < pMsg->len; i++)
 	{
-		debug_printf(" 0x%.2X", pMsg->pData[i]);
-	} debug_printf("\n");
+		LOG_DEBUG(" 0x%.2X", pMsg->pData[i]);
+	}
+	LOG_DEBUG("\n");
+
 
 #ifdef __STRESS_TEST__
 
@@ -1542,20 +1579,20 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg)
 			else
 				ST_Parameters_t[1].recErrors.errorInSeqNum++;
 
-			printf("\n [ERR] Sequence Number \t (==: %d, !=: %d)\n",
+			LOG_ALWAYS("[ERR] Sequence Number \t (==: %d, !=: %d)\n",
 					ST_Parameters_t[1].recErrors.seqNumIdentical,
 					ST_Parameters_t[1].recErrors.errorInSeqNum);
 			fprintf(fpStressTestData, " [ERR] Sequence Number \t (==: %d, !=: %d)\n",
 					ST_Parameters_t[1].recErrors.seqNumIdentical,
 					ST_Parameters_t[1].recErrors.errorInSeqNum);
 
-			printf("\tLast Sequence Number: (srcIdx: 0x%.2X) \t %d\n", pMsg->pData[0], ST_Parameters_t[1].currentSeqNumber[pMsg->pData[0]]);
+			LOG_ALWAYS("\tLast Sequence Number: (srcIdx: 0x%.2X) \t %d\n", pMsg->pData[0], ST_Parameters_t[1].currentSeqNumber[pMsg->pData[0]]);
 			fprintf(fpStressTestData, "\tLast Sequence Number: (srcIdx: 0x%.2X) \t %d\n", pMsg->pData[0], ST_Parameters_t[1].currentSeqNumber[pMsg->pData[0]]);
 
-			printf("\tNew \040 Sequence Number: (srcIdx: 0x%.2X) \t %d", pMsg->pData[0], *incomingSeqNum);
+			LOG_ALWAYS("\tNew \040 Sequence Number: (srcIdx: 0x%.2X) \t %d", pMsg->pData[0], *incomingSeqNum);
 			fprintf(fpStressTestData, "\tNew \040 Sequence Number: (srcIdx: 0x%.2X) \t %d", pMsg->pData[0], *incomingSeqNum);
 
-			printf("\n");
+			LOG_ALWAYS("\n");
 			fprintf(fpStressTestData, "\n");
 		}
 
@@ -1586,10 +1623,12 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg)
  */
 static void NPI_LNX_IPC_Exit(int ret, uint8 freeSerial)
 {
+	(void)freeSerial;
+
 	if (ret == (int)NPI_LNX_FAILURE)
 	{
 		// Don't even bother open a socket; device opening failed..
-		printf("Could not open device... exiting (%d)\n", npi_ipc_errno);
+		LOG_FATAL("Could not open device... exiting (%d)\n", npi_ipc_errno);
 
 		// Write error message to /dev/npiLnxLog
 		writeToNpiLnxLog("Could not open device");
@@ -1652,16 +1691,16 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg)
 	if (serialCfg.port == NULL)
 	{
 		// Fall back to default if port was not found in the configuration file
-		printf("Warning! Port not sent to NPI_LNX_IPC_NotifyError. Will use default port: %s", NPI_PORT);
-		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ret));
+		LOG_WARN("Port not sent to NPI_LNX_IPC_NotifyError. Will use default port: %s", NPI_PORT);
+		LOG_INFO("getaddrinfo: %s\n", gai_strerror(ret));
 		ret = NPI_LNX_ERROR_IPC_NOTIFY_ERR_GET_ADDR_INFO;
 	}
 	else
 	{
-		debug_printf("[NOTIFY_ERROR] Port: %s\n", serialCfg.port);
+		LOG_DEBUG("[NOTIFY_ERROR] Port: %s\n", serialCfg.port);
 		if ((ret = getaddrinfo(ipAddress, serialCfg.port, &hints, &resAddr)) != 0)
 		{
-			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ret));
+			LOG_INFO("getaddrinfo: %s\n", gai_strerror(ret));
 			ret = NPI_LNX_ERROR_IPC_NOTIFY_ERR_GET_ADDR_INFO;
 		}
 		else
@@ -1678,7 +1717,7 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg)
 	}
 #endif
 
-	debug_printf("[NOTIFY_ERROR] Trying to connect...\n");
+	LOG_DEBUG("[NOTIFY] Trying to connect...\n");
 
 #ifdef NPI_UNIX
 	remote.sun_family = AF_UNIX;
@@ -1698,7 +1737,7 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg)
 #endif
 
 	if (ret == NPI_LNX_SUCCESS)
-		debug_printf("[NOTIFY_ERROR] Connected.\n");
+		LOG_DEBUG("[NOTIFY] Connected.\n");
 
 
 	int no = 0;
@@ -1719,7 +1758,7 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg)
 	{
 		errorMsg = "Default msg. Requested msg too long.\n";
 		memcpy(msg.pData, errorMsg, strlen(errorMsg));
-		debug_printf("[NOTIFY_ERROR] Size of error message too long (%zd, max %d).\n",
+		LOG_WARN("[NOTIFY_ERROR] Size of error message too long (%zd, max %d).\n",
 				strlen(errorMsg),
 				AP_MAX_BUF_LEN);
 	}
@@ -1749,54 +1788,37 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 {
 	int ret = NPI_LNX_SUCCESS;
 
-	debug_printf("[NPI SERVER] Control: cmdId 0x%.2X\n", pNpi_ipc_buf->cmdId);
+	LOG_DEBUG("[NPI SERVER] Control: cmdId 0x%.2X\n", pNpi_ipc_buf->cmdId);
 
 	switch(pNpi_ipc_buf->cmdId)
 	{
 		case NPI_LNX_CMD_ID_CTRL_TIME_PRINT_REQ:
-			{
 		#ifdef __DEBUG_TIME__
-				__DEBUG_TIME_ACTIVE = pNpi_ipc_buf->pData[0];
-				if (__DEBUG_TIME_ACTIVE == FALSE)
-				{
-					printf("__DEBUG_TIME_ACTIVE set to FALSE\n");
-				}
-				else
-				{
-					printf("__DEBUG_TIME_ACTIVE set to TRUE\n");
-				}
-				// Set return status
-				pNpi_ipc_buf->len = 1;
-				pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
+			__DEBUG_TIME_ACTIVE = pNpi_ipc_buf->pData[0];
+			LOG_ALWAYS("__DEBUG_TIME_ACTIVE set to %d (%s)\n",__DEBUG_TIME_ACTIVE,  __DEBUG_TIME_ACTIVE ? "TRUE" : "FALSE");
+			// Set return status
+			pNpi_ipc_buf->len = 1;
+			pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
 		#else //__DEBUG_TIME__
-				printf("NPI_Server not compiled to support time stamps\n");
-				// Set return status
-				pNpi_ipc_buf->len = 1;
-				pNpi_ipc_buf->pData[0] = (uint8) NPI_LNX_FAILURE;
+			LOG_ALWAYS("NPI_Server not compiled to support time stamps\n");
+			// Set return status
+			pNpi_ipc_buf->len = 1;
+			pNpi_ipc_buf->pData[0] = (uint8) NPI_LNX_FAILURE;
 		#endif //__DEBUG_TIME__
-				pNpi_ipc_buf->subSys = RPC_SYS_SRV_CTRL;
-				ret = NPI_LNX_SUCCESS;
-		}
-		break;
+			pNpi_ipc_buf->subSys = RPC_SYS_SRV_CTRL;
+			ret = NPI_LNX_SUCCESS;
+			break;
+
 		case NPI_LNX_CMD_ID_CTRL_BIG_DEBUG_PRINT_REQ:
-		{
 			__BIG_DEBUG_ACTIVE = pNpi_ipc_buf->pData[0];
-			if (__BIG_DEBUG_ACTIVE == FALSE)
-			{
-				printf("__BIG_DEBUG_ACTIVE set to FALSE\n");
-			}
-			else
-			{
-				printf("__BIG_DEBUG_ACTIVE set to TRUE\n");
-			}
+			LOG_ALWAYS("__BIG_DEBUG_ACTIVE set to %d (%s). Current __APP_LOG_LEVEL=%d\n",__BIG_DEBUG_ACTIVE,  __BIG_DEBUG_ACTIVE? "TRUE" : "FALSE", __APP_LOG_LEVEL);
 			// Set return status
 			pNpi_ipc_buf->len = 1;
 			pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
 			ret = NPI_LNX_SUCCESS;
-		}
-		break;
+			break;
+
 		case NPI_LNX_CMD_ID_VERSION_REQ:
-		{
 			// Set return status
 			pNpi_ipc_buf->len = 4;
 			pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
@@ -1804,10 +1826,9 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 			pNpi_ipc_buf->pData[2] = NPI_LNX_MINOR_VERSION;
 			pNpi_ipc_buf->pData[3] = NPI_LNX_REVISION;
 			ret = NPI_LNX_SUCCESS;
-		}
-		break;
+			break;
+
 		case NPI_LNX_CMD_ID_GET_PARAM_REQ:
-		{
 			// Set return status
 			switch(pNpi_ipc_buf->pData[0])
 			{
@@ -1821,6 +1842,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 
 					ret = NPI_LNX_SUCCESS;
 					break;
+
 				case NPI_LNX_PARAM_DEVICE_USED:
 					pNpi_ipc_buf->len = 2;
 					pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
@@ -1834,11 +1856,10 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 					npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INVALID_GET_PARAM_CMD;
 					ret = NPI_LNX_FAILURE;
 					break;
-			}
-		}
-		break;
+			} // end inner switch
+			break;
+
 		case NPI_LNX_CMD_ID_RESET_DEVICE:
-		{
 			if (serialCfg.devIdx == NPI_SERVER_DEVICE_INDEX_SPI)
 			{
 				// Perform Reset of the RNP
@@ -1854,7 +1875,7 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 			}
 			else
 			{
-				printf("Resetting device upon request by client\n");
+				LOG_WARN("Resetting device upon request by client\n");
 				ret = HalGpioResetSet(FALSE);
 				usleep(1);
 				ret = HalGpioResetSet(TRUE);
@@ -1863,100 +1884,93 @@ static int npi_ServerCmdHandle(npiMsgData_t *pNpi_ipc_buf)
 			// If SRDY is shared with debug interface we need to re-init this GPIO.
 			if ( (ret == NPI_LNX_SUCCESS) && serialCfg.debugSupported)
 			{
-				debug_printf("Resetting SRDY pin\n");
+				LOG_DEBUG("Resetting SRDY pin\n");
 				// We may have left debug mode, so make sure DD data line is reset to input
 				ret = halGpioDDSetDirection(0);
 			}
-		}
-		break;
+			break;
+
 		case NPI_LNX_CMD_ID_DISCONNECT_DEVICE:
-		{
-			debug_printf("Trying to disconnect device %d\n", serialCfg.devIdx);
+			LOG_DEBUG("Trying to disconnect device %d\n", serialCfg.devIdx);
 			(NPI_CloseDeviceFnArr[serialCfg.devIdx])();
-			debug_printf("Preparing return message after disconnecting device %d\n", serialCfg.devIdx);
+			LOG_DEBUG("Preparing return message after disconnecting device %d\n", serialCfg.devIdx);
 			pNpi_ipc_buf->len = 1;
 			pNpi_ipc_buf->pData[0] = NPI_LNX_SUCCESS;
-		}
-		break;
+			break;
+
 		case NPI_LNX_CMD_ID_CONNECT_DEVICE:
-		{
-			debug_printf("Trying to connect to device %d, %s\n", serialCfg.devIdx, serialCfg.devPath);
+			LOG_DEBUG("Trying to connect to device %d, %s\n", serialCfg.devIdx, serialCfg.devPath);
 			switch(serialCfg.devIdx)
 			{
-			case NPI_SERVER_DEVICE_INDEX_UART_USB:
-				// Initialization of UART for USB is the same as for physical UART.
-				// Except for Reset GPIO
-			case NPI_SERVER_DEVICE_INDEX_UART:
-#if (defined NPI_UART) && (NPI_UART == TRUE)
-			{
-				ret = (NPI_OpenDeviceFnArr[NPI_SERVER_DEVICE_INDEX_UART])(serialCfg.devPath, (npiUartCfg_t *)&serialCfg.serial.npiUartCfg);
+				case NPI_SERVER_DEVICE_INDEX_UART_USB:
+					// Initialization of UART for USB is the same as for physical UART.
+					// Except for Reset GPIO
+				case NPI_SERVER_DEVICE_INDEX_UART:
+				#if (defined NPI_UART) && (NPI_UART == TRUE)
+					ret = (NPI_OpenDeviceFnArr[NPI_SERVER_DEVICE_INDEX_UART])(serialCfg.devPath, (npiUartCfg_t *)&serialCfg.serial.npiUartCfg);
 
-				// Now configure reset GPIO for physical UART
-				if (serialCfg.devIdx == NPI_SERVER_DEVICE_INDEX_UART)
-				{
-					if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit((halGpioCfg_t *)&serialCfg.gpioCfg[2])))
+					// Now configure reset GPIO for physical UART
+					if (serialCfg.devIdx == NPI_SERVER_DEVICE_INDEX_UART)
 					{
-						return ret;
+						if ( NPI_LNX_FAILURE == (ret = HalGpioResetInit((halGpioCfg_t *)&serialCfg.gpioCfg[2])))
+						{
+							return ret;
+						}
 					}
-				}
-			}
-#endif
-			break;
-			case NPI_SERVER_DEVICE_INDEX_SPI:
-#if (defined NPI_SPI) && (NPI_SPI == TRUE)
-			{
-				// Now open device for processing
-				ret = (NPI_OpenDeviceFnArr[serialCfg.devIdx])(serialCfg.devPath, (npiSpiCfg_t *) &serialCfg.serial.npiSpiCfg);
+				#endif
+					break;
 
-				// Must also reset and synch
+				case NPI_SERVER_DEVICE_INDEX_SPI:
+				#if (defined NPI_SPI) && (NPI_SPI == TRUE)
+					// Now open device for processing
+					ret = (NPI_OpenDeviceFnArr[serialCfg.devIdx])(serialCfg.devPath, (npiSpiCfg_t *) &serialCfg.serial.npiSpiCfg);
 
-				// Perform Reset of the RNP
-				(NPI_ResetSlaveFnArr[serialCfg.devIdx])();
+					// Must also reset and synch
 
-				// Do the Hw Handshake
-				(NPI_SynchSlaveFnArr[serialCfg.devIdx])();
+					// Perform Reset of the RNP
+					(NPI_ResetSlaveFnArr[serialCfg.devIdx])();
 
-//				// Since SPI does not indicate reset to host we should notify here
-//				// but there's no unified way of doing it for RNP and ZNP...
-//				// For RemoTI we can send RTI_ResetInd(). This message should just
-//				// be discarded by anything but RNP, so should be safe.
+					// Do the Hw Handshake
+					(NPI_SynchSlaveFnArr[serialCfg.devIdx])();
+
+//					// Since SPI does not indicate reset to host we should notify here
+//					// but there's no unified way of doing it for RNP and ZNP...
+//					// For RemoTI we can send RTI_ResetInd(). This message should just
+//					// be discarded by anything but RNP, so should be safe.
 //
-//				// We only need space for the header; there is no payload.
-//				resetBuf = malloc(sizeof(*resetBuf) - sizeof(resetBuf->pData));
-//				resetBuf->len = 0;
-//				resetBuf->subSys = 0x4A;
-//				resetBuf->cmdId = 0x0D;
-//				NPI_LNX_IPC_SendData(resetBuf, -1);
-//				free(resetBuf);
-			}
-#endif
-			break;
+//					// We only need space for the header; there is no payload.
+//					resetBuf = malloc(sizeof(*resetBuf) - sizeof(resetBuf->pData));
+//					resetBuf->len = 0;
+//					resetBuf->subSys = 0x4A;
+//					resetBuf->cmdId = 0x0D;
+//					NPI_LNX_IPC_SendData(resetBuf, -1);
+//					free(resetBuf);
+				#endif
+					break;
 
-			case NPI_SERVER_DEVICE_INDEX_I2C:
-#if (defined NPI_I2C) && (NPI_I2C == TRUE)
-			{
-				// Open the Device and perform a reset
-				ret = (NPI_OpenDeviceFnArr[serialCfg.devIdx])(serialCfg.devPath, (npiI2cCfg_t *) &serialCfg.serial.npiI2cCfg);
-			}
-#endif
-			break;
-			default:
-				ret = NPI_LNX_FAILURE;
-				break;
-			}
-			debug_printf("Preparing return message after connecting to device %d (ret == 0x%.2X, npi_ipc_errno == 0x%.2X)\n",
+				case NPI_SERVER_DEVICE_INDEX_I2C:
+				#if (defined NPI_I2C) && (NPI_I2C == TRUE)
+					// Open the Device and perform a reset
+					ret = (NPI_OpenDeviceFnArr[serialCfg.devIdx])(serialCfg.devPath, (npiI2cCfg_t *) &serialCfg.serial.npiI2cCfg);
+				#endif
+					break;
+
+				default:
+					ret = NPI_LNX_FAILURE;
+					break;
+			} // end inner switch
+
+			LOG_DEBUG("Preparing return message after connecting to device %d (ret == 0x%.2X, npi_ipc_errno == 0x%.2X)\n",
 					serialCfg.devIdx, ret, npi_ipc_errno);
 			pNpi_ipc_buf->len = 1;
 			pNpi_ipc_buf->pData[0] = ret;
-		}
-		break;
+			break; // End case NPI_LNX_CMD_ID_CONNECT_DEVICE
+
 		default:
-		{
 			npi_ipc_errno = NPI_LNX_ERROR_IPC_RECV_DATA_INVALID_SREQ;
 			ret = NPI_LNX_FAILURE;
 			break;
-		}
-	}
+	} // end outer switch
 	return ret;
 }
 
@@ -1976,23 +1990,23 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	printf("Listen port: %s\n", serialCfg->port);
+	LOG_INFO("Listen port: %s\n", serialCfg->port);
 
 	if ((status = getaddrinfo(NULL, serialCfg->port, &hints, &servinfo)) != 0)
 	{
-		fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+		LOG_ERROR("getaddrinfo error: %s\n", gai_strerror(status));
 		//                port = NPI_PORT;
 		strncpy(serialCfg->port, NPI_PORT, sizeof(serialCfg->port)-1);
-		printf("Trying default port: %s instead\n", serialCfg->port);
+		LOG_INFO("Trying default port: %s instead\n", serialCfg->port);
 		if ((status = getaddrinfo(NULL, serialCfg->port, &hints, &servinfo)) != 0)
 		{
-			fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+			LOG_ERROR("getaddrinfo error: %s\n", gai_strerror(status));
 			npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_GET_ADDRESS_INFO;
 			NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 		}
 	}
 
-	printf("Following IP addresses are available:\n\n");
+	LOG_DEBUG("Following IP addresses are available:\n\n");
 	{
 		struct ifaddrs * ifAddrStruct=NULL;
 		struct ifaddrs * ifa=NULL;
@@ -2010,7 +2024,7 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 					tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
 					char addressBuffer[INET_ADDRSTRLEN];
 					inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
-					printf(" IPv4: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
+					LOG_DEBUG(" IPv4: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
 				}
 				else if (ifa->ifa_addr->sa_family==AF_INET6)
 				{ // check it is IP6
@@ -2018,14 +2032,14 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 					tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
 					char addressBuffer[INET6_ADDRSTRLEN];
 					inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
-					printf(" IPv6: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
+					LOG_DEBUG(" IPv6: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
 				}
 			}
 		}
 		if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
 	}
 
-	printf("The socket will listen on the following IP addresses:\n\n");
+	LOG_DEBUG("The socket will listen on the following IP addresses:\n\n");
 
 	struct addrinfo *p;
 	char ipstr[INET6_ADDRSTRLEN];
@@ -2050,9 +2064,9 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 
 		// convert the IP to a string and print it:
 		inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr);
-		printf("  %s: %s\n", ipver, ipstr);
+		LOG_DEBUG("  %s: %s\n", ipver, ipstr);
 	}
-	printf("0.0.0.0 means it will listen to all available IP address\n\n");
+	LOG_DEBUG("0.0.0.0 means it will listen to all available IP address\n\n");
 #endif
 
 #ifdef NPI_UNIX
@@ -2068,7 +2082,7 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 	{
 		perror("bind");
 		writeToNpiLnxLog("Port is probably already in use, please select an available port\n");
-		debug_printf("Port is probably already in use, please select an available port\n");
+		LOG_ERROR("Port is probably already in use, please select an available port\n");
 		npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_BIND;
 		NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
 	}
@@ -2124,7 +2138,7 @@ static int configureDebugInterface()
 		ret = HalGpioDCInit((halGpioCfg_t *)&serialCfg.gpioCfg[4]);
 	}
 	else
-		printf("2 here\n");
+		LOG_ERROR("2 here\n");
 
 	// Now enter debug mode.
 	if ( ret == NPI_LNX_SUCCESS )
@@ -2132,7 +2146,7 @@ static int configureDebugInterface()
 		ret = Hal_debug_init();
 	}
 	else
-		printf("3 here\n");
+		LOG_ERROR("3 here\n");
 
 	if ( ret == NPI_LNX_SUCCESS )
 	{
@@ -2144,18 +2158,18 @@ static int configureDebugInterface()
 			if (npi_ipc_errno == NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DUP_READY)
 			{
 				// Device did not respond, it may be that it's not in debug mode anymore.
-				printf("Could not get chip ID, device not in debug mode as it failed to respond\n");						// This error should not be considered critical at this stage.
+				LOG_ERROR("Could not get chip ID, device not in debug mode as it failed to respond\n");						// This error should not be considered critical at this stage.
 				npi_ipc_errno = NPI_LNX_SUCCESS;
 				ret = NPI_LNX_SUCCESS;
 			}
 			else
 			{
-				printf("Could not get chip ID, an error occurred\n");
+				LOG_ERROR("Could not get chip ID, an error occurred\n");
 			}
 		}
 		else
 		{
-			printf("Chip ID: 0x%.2X\n", chipId);
+			LOG_INFO("Chip ID: 0x%.2X\n", chipId);
 		}
 	}
 

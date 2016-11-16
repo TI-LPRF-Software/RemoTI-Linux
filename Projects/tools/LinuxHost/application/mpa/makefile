@@ -19,7 +19,7 @@ LIBS_x86= -lpthread -lrt
 LIBS_armBeagleBoard= -lpthread
 LIBS_armBeagleBone= -lpthread
 
-#gprof profiling. To check the profile run (e.g): ~$ gprof RTI_lnx_x86_client gmon.out -p
+#gprof profiling. To check the profile run (e.g): ~$ gprof MPA_lnx_x86_client gmon.out -p
 #GPROF= -pg
 GPROF=
 #gcov profiling
@@ -28,6 +28,7 @@ GPROF=
 INCLUDES= \
 	-I ../common \
 	-I ../$(app) \
+	-I ../../common \
 	-I ../../ipclib/client \
 	-I ../../ipclib/client/gdp \
 	-I ../../ipclib/common \
@@ -57,9 +58,11 @@ MAINAPP_OBJS= \
 	$(OBJS)/$(app)_main.o \
 	$(OBJS)/$(app)_app.o \
 	$(OBJS)/timer.o \
+	$(OBJS)/time_printf.o \
 	$(OBJS)/configParser.o \
 	$(OBJS)/npi_rti.o \
 	$(OBJS)/npi_ipc_client.o \
+	$(OBJS)/tiLogging.o
 
 #by default, do not use the library.
 PROJ_OBJS=$(MAINAPP_OBJS)
@@ -143,6 +146,14 @@ $(OBJS)/$(app)_app.o: $(app)_app.c
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 
 $(OBJS)/timer.o: ../common/timer.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
+
+$(OBJS)/time_printf.o: ../../common/time_printf.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
+
+$(OBJS)/tiLogging.o: ../../common/tiLogging.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) $(COMPILO_FLAGS) -c -o $@  $<
 

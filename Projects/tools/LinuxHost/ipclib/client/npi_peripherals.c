@@ -6,7 +6,7 @@
   Description:    This file contains Linux platform specific SUB SYSTEM
                   Peripherals' implementation
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -51,8 +51,8 @@
 
 #include "npi_ipc_client.h"
 #include "npi_peripherals.h"
-#include "lprfLogging.h"
-
+#include "tiLogging.h"
+#include "rti_lnx.h" // for rStatus_t
 #ifdef NPI_CAPSENSE
 #include "npi_capSense.h"
 #endif
@@ -63,7 +63,6 @@
 
 //TO DO, To Rename or suppress
 #define RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT                0xFF
-typedef uint8 rStatus_t;
 
 #define msg_memcpy(src, dst, len)	memcpy(src, dst, len)
 

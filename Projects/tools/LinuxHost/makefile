@@ -17,6 +17,7 @@ LIBS_armBeagleBone= -lpthread -lrt
 
 #include path
 INCLUDES= -I application\
+	-I common \
 	-I ipclib/server \
 	-I ipclib/common
 
@@ -50,8 +51,10 @@ SERVER_OBJS= \
 	$(OBJS)/hal_gpio.o \
 	$(OBJS)/hal_i2c.o \
 	$(OBJS)/hal_spi.o \
+	$(OBJS)/tiLogging.o \
 	$(OBJS)/time_printf.o \
-	$(OBJS)/hal_dbg_ifc.o
+	$(OBJS)/hal_dbg_ifc.o \
+	$(OBJS)/OEM_NpiStartupHook.o
 
 
 #by default, do not use the library.
@@ -167,11 +170,18 @@ $(OBJS)/hal_gpio.o: ipclib/server/hal_gpio.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
-$(OBJS)/time_printf.o: ipclib/server/time_printf.c
-	@echo "Compiling" $< "..."
-	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
-
 $(OBJS)/hal_dbg_ifc.o: ipclib/server/hal_dbg_ifc.c
 	@echo "Compiling" $< "..."
 	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
 
+$(OBJS)/tiLogging.o: common/tiLogging.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+
+$(OBJS)/time_printf.o: common/time_printf.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<
+
+$(OBJS)/OEM_NpiStartupHook.o: ipclib/server/OEM_NpiStartupHook.c
+	@echo "Compiling" $< "..."
+	@$(COMPILO) -c -o $@ $(COMPILO_FLAGS) $<

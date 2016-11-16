@@ -66,14 +66,14 @@ int runLiveGraph(int numOfDataSeries, int port, int channel, int window)
 	{
 		char tmpStr[128] = "";
 		fputs("##|##\n", dataFile);
-		sprintf(tmpStr, "@Data from port %d - Channel %d\n", port, channel);
+		snprintf(tmpStr, sizeof(tmpStr), "@Data from port %d - Channel %d\n", port, channel);
 		fputs(tmpStr, dataFile);
 		int i = 0;
-		sprintf(tmpStr, "Data %d", i);
+		snprintf(tmpStr, sizeof(tmpStr), "Data %d", i);
 		fputs(tmpStr, dataFile);
 		for (i = 1; i < numOfDataSeries; i++)
 		{
-			sprintf(tmpStr, "|Data %d", i);
+			snprintf(tmpStr, sizeof(tmpStr), "|Data %d", i);
 			fputs(tmpStr, dataFile);
 		}
 		fputs("\n", dataFile);
@@ -106,51 +106,51 @@ void writeDataToLiveGraph(int size_t, int numOfChannels, int numOfValuesPerChann
 			if (size_t == sizeof(long))
 			{
 				long *pData = (long *)data;
-				sprintf(tmpStr, "%ld", pData[dataPointer]);
+				snprintf(tmpStr, sizeof(tmpStr), "%ld", pData[dataPointer]);
 				fputs(tmpStr, dataFile);
 				for (i = 1; i < numOfChannels; i++)
 				{
-					sprintf(tmpStr, "|%ld", pData[dataPointer + i]);
+					snprintf(tmpStr, sizeof(tmpStr), "|%ld", pData[dataPointer + i]);
 					fputs(tmpStr, dataFile);
 				}
 			}
 			else if (size_t == sizeof(int))
 			{
 				int *pData = (int *)data;
-				sprintf(tmpStr, "%d", pData[dataPointer]);
+				snprintf(tmpStr, sizeof(tmpStr), "%d", pData[dataPointer]);
 				fputs(tmpStr, dataFile);
 				for (i = 1; i < numOfChannels; i++)
 				{
-					sprintf(tmpStr, "|%d", pData[dataPointer + i]);
+					snprintf(tmpStr, sizeof(tmpStr), "|%d", pData[dataPointer + i]);
 					fputs(tmpStr, dataFile);
 				}
 			}
 			else if (size_t == sizeof(short))
 			{
 				short *pData = (short *)data;
-				sprintf(tmpStr, "%d", pData[dataPointer]);
+				snprintf(tmpStr, sizeof(tmpStr), "%d", pData[dataPointer]);
 				fputs(tmpStr, dataFile);
 				for (i = 1; i < numOfChannels; i++)
 				{
-					sprintf(tmpStr, "|%d", pData[dataPointer + i]);
+					snprintf(tmpStr, sizeof(tmpStr), "|%d", pData[dataPointer + i]);
 					fputs(tmpStr, dataFile);
 				}
 			}
 			else if (size_t == sizeof(char))
 			{
 				char *pData = (char *)data;
-				sprintf(tmpStr, "%d", pData[dataPointer]);
+				snprintf(tmpStr, sizeof(tmpStr), "%d", pData[dataPointer]);
 				fputs(tmpStr, dataFile);
 				for (i = 1; i < numOfChannels; i++)
 				{
-					sprintf(tmpStr, "|%d", pData[dataPointer + i]);
+					snprintf(tmpStr, sizeof(tmpStr), "|%d", pData[dataPointer + i]);
 					printf(":%d", pData[dataPointer + i]);
 					fputs(tmpStr, dataFile);
 				}
 			}
 			else
 			{
-				sprintf(tmpStr, "Unsupported type of size %d", size_t);
+				snprintf(tmpStr, sizeof(tmpStr), "Unsupported type of size %d", size_t);
 				fputs(tmpStr, dataFile);
 			}
 			fputs("\n", dataFile);
@@ -212,7 +212,7 @@ void setStartupSettings(const char *filePath, int updateFrequency)
 		strcpy(dataFilePath, filePath);
 		fputs("</entry>\n", outputFile);
 		fputs("<entry key=\"UpdateFrequency\">", outputFile);
-		sprintf(tmpStr, "%d", updateFrequency);
+		snprintf(tmpStr, sizeof(tmpStr), "%d", updateFrequency);
 		fputs(tmpStr, outputFile);
 		fputs("</entry>\n", outputFile);
 		fputs("<entry key=\"DoNotCacheData\">0</entry>\n", outputFile);
@@ -241,11 +241,11 @@ void setGraphSettings(int minY, int maxY, int minX, int maxX)
 		if (maxY == INT_MAX)
 		{
 			//		Auto
-			sprintf(tmpStr, "Auto");
+			snprintf(tmpStr, sizeof(tmpStr), "Auto");
 		}
 		else
 		{
-			sprintf(tmpStr, "%d", maxY);
+			snprintf(tmpStr, sizeof(tmpStr), "%d", maxY);
 		}
 		fputs(tmpStr, outputFile);
 		fputs("</entry>\n", outputFile);
@@ -253,11 +253,11 @@ void setGraphSettings(int minY, int maxY, int minX, int maxX)
 		if (maxX == INT_MAX)
 		{
 			//		Auto
-			sprintf(tmpStr, "Auto");
+			snprintf(tmpStr, sizeof(tmpStr), "Auto");
 		}
 		else
 		{
-			sprintf(tmpStr, "%d", maxX);
+			snprintf(tmpStr, sizeof(tmpStr), "%d", maxX);
 		}
 		fputs(tmpStr, outputFile);
 		fputs("</entry>\n", outputFile);
@@ -265,11 +265,11 @@ void setGraphSettings(int minY, int maxY, int minX, int maxX)
 		if (minY == INT_MIN)
 		{
 			//		Auto
-			sprintf(tmpStr, "Auto");
+			snprintf(tmpStr, sizeof(tmpStr), "Auto");
 		}
 		else
 		{
-			sprintf(tmpStr, "%d", minY);
+			snprintf(tmpStr, sizeof(tmpStr), "%d", minY);
 		}
 		fputs(tmpStr, outputFile);
 		fputs("</entry>\n", outputFile);
@@ -277,11 +277,11 @@ void setGraphSettings(int minY, int maxY, int minX, int maxX)
 		if (minX == INT_MIN)
 		{
 			//		Auto
-			sprintf(tmpStr, "Auto");
+			snprintf(tmpStr, sizeof(tmpStr), "Auto");
 		}
 		else
 		{
-			sprintf(tmpStr, "%d", minX);
+			snprintf(tmpStr, sizeof(tmpStr), "%d", minX);
 		}
 		fputs(tmpStr, outputFile);
 		fputs("</entry>\n", outputFile);
@@ -309,8 +309,8 @@ void setDataSeriesSettings(int numOfDataSeries)
 		fputs("<properties>\n", outputFile);
 		fputs("<comment>LiveGraph version 1.1.4. DataSeriesSettings.</comment>\n", outputFile);
 		fputs("<entry key=\"DescribedSeriesCount\">", outputFile);
-//		sprintf(tmpStr, "%d", numOfDataSeries);
-		sprintf(tmpStr, "%d", 0);
+//		snprintf(tmpStr, sizeof(tmpStr), "%d", numOfDataSeries);
+		snprintf(tmpStr, sizeof(tmpStr), "%d", 0);
 		fputs(tmpStr, outputFile);
 		fputs("</entry>\n", outputFile);
 		fputs("</properties>\n", outputFile);
@@ -363,8 +363,8 @@ void moveFileAndRestart(FILE *dataFile)
 	printf("7\n");
 	tmpTok = strtok(NULL, ".");
 	printf("8\n");
-//	sprintf(tmpTok - 1, "_%d-%d-%d_%d-%d-%d.dat", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-	sprintf(tmpTok - 1, "_%d.dat", fileCount++);
+//	snprintf(tmpTok - sizeof(tmpStr), 1, "_%d-%d-%d_%d-%d-%d.dat", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+	snprintf(tmpTok - sizeof(tmpStr), 1, "_%d.dat", fileCount++);
 	printf("9\n");
 	printf("Moving %s to %s\n", dataFilePath, tmpStr);
 	printf("10\n");

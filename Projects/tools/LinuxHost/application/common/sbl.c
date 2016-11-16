@@ -63,7 +63,7 @@
 #include "npi_lnx_ipc_rpc.h"
 #include "npi_lnx_error.h"
 
-#include "lprfLogging.h"
+#include "tiLogging.h"
 #include "rf4ceFirmware.h"
 
 // macros
@@ -90,10 +90,10 @@ extern unsigned char _binary_bin_RNP_bin_size;
 
 static char tmpStrForTimePrint[1024];
 
-//THREAD and MUTEX 
+//THREAD and MUTEX
 
-void SoftwareVersionToString(char *retStr, int maxStrLen, swVerExtended_t* swVerExtended);
-int sbExec(uint8 *pBuf, int length);
+static void SoftwareVersionToString(char *retStr, int maxStrLen, swVerExtended_t* swVerExtended);
+static int  sbExec(uint8 *pBuf, int length);
 
 #define SB_DST_ADDR_DIV                    4
 
@@ -167,7 +167,7 @@ int SBL_Init(const char *imagePath)
 		fread(sblImageBuf, 1, sblImageLen, imageFd);
 		fclose(imageFd);
 	}
-	else if (rf4ceFirmware_Length > 1)
+	else if (rf4ceFirmware_Length > 1) //empty file is 1 byte, so ensure >1
 	{
 		sblImageLen = (int)rf4ceFirmware_Length;
 		sblImageBuf = (uint8 *)rf4ceFirmware;
@@ -428,7 +428,7 @@ int SBL_IsDeviceInSBLMode()
  * @return      None.
  **************************************************************************************************
  */
-int sbExec(uint8 *pBuf, int length)
+static int sbExec(uint8 *pBuf, int length)
 {
 	uint8 returnVal = 0;
 	// Create a "blank page" that we can compare with later to find if source is an empty page
@@ -490,20 +490,18 @@ int sbExec(uint8 *pBuf, int length)
 	else
 	{
 		LOG_INFO("[SBL] SB loading...\n");
-
 	}
 
 	int consecutiveFailedReadAttempts = 0, consecutiveFailedWriteAttempts = 0;
 
-	LOG_INFO("[SBL] \n");
 	while (blkCnt != 0)
 	{
 		uint8 bufw[SB_RW_BUF_LEN];
 		uint8 bufr[SB_RW_BUF_LEN];
 		if (blkCnt % (SBL_FLASH_PAGE_SIZE / SB_RW_BUF_LEN) == 0)
 		{
-			// LOG_INFO("[SBL] block %d over %d (%d)\n", blkCnt, length / SB_RW_BUF_LEN, (length / SB_RW_BUF_LEN) - blkCnt);
 			LOG_INFO("[SBL] Block %u of %u (%u%%)\n", blkTotal - blkCnt, blkTotal, ((blkTotal-blkCnt) * 100) / blkTotal);
+			fflush(LOG_DESTINATION_FP);
 		}
 		memcpy(bufw, srcAddr, SB_RW_BUF_LEN);
 
@@ -538,10 +536,15 @@ int sbExec(uint8 *pBuf, int length)
 
 		returnVal = BOOT_WriteReq(bufw, SB_RW_BUF_LEN, dstAddr);
 
-
-		if (returnVal == SB_SUCCESS)
+		if ((returnVal == SB_SUCCESS) || (returnVal == SB_OUT_OF_SEQUENCE))
 		{
 			uint16 dstAddrCopy = dstAddr;
+
+			if (returnVal == SB_OUT_OF_SEQUENCE)
+			{
+				LOG_WARN("%s(): SB_OUT_OF_SEQUENCE @ 0x%04X. (Okay if aborted and restarted; will verify data.)\n", __FUNCTION__, dstAddrCopy);
+			}
+
 			returnVal = BOOT_ReadReq(bufr, SB_RW_BUF_LEN, &dstAddr);
 			readAddr = dstAddr;
 			dstAddr = dstAddrCopy;
@@ -598,9 +601,9 @@ int sbExec(uint8 *pBuf, int length)
 				}
 				else
 				{
-					LOG_WARN("[SBL] Compare failed (%d)\n", consecutiveFailedReadAttempts++);
+					LOG_WARN("[SBL] Compare failed (%d)\n", consecutiveFailedReadAttempts);
 
-					if (consecutiveFailedReadAttempts > 10)
+					if (++consecutiveFailedReadAttempts > 10)
 					{
 						break;
 					}
@@ -608,9 +611,9 @@ int sbExec(uint8 *pBuf, int length)
 			}
 			else
 			{
-				LOG_WARN("[SBL] Read failed (%d) -- Returned address 0x%.4X\n", consecutiveFailedReadAttempts++, readAddr);
+				LOG_WARN("[SBL] Read failed (%d) -- Returned address 0x%.4X\n", consecutiveFailedReadAttempts, readAddr);
 
-				if (consecutiveFailedReadAttempts > 10)
+				if (++consecutiveFailedReadAttempts > 10)
 				{
 					break;
 				}
@@ -619,9 +622,9 @@ int sbExec(uint8 *pBuf, int length)
 		}
 		else
 		{
-			LOG_ERROR("[SBL] Write failed (%d)\n", consecutiveFailedWriteAttempts++);
+			LOG_ERROR("[SBL] Write failed (%d)\n", consecutiveFailedWriteAttempts);
 
-			if (consecutiveFailedWriteAttempts > 10)
+			if (++consecutiveFailedWriteAttempts > 10)
 			{
 				break;
 			}
@@ -647,7 +650,7 @@ int sbExec(uint8 *pBuf, int length)
 		if (returnVal == SB_SUCCESS)
 		{
 			LOG_INFO("[SBL] SB success!, restart in 1.5 seconds\n");
-			usleep(1500000);
+			usleep(1500000); // Wait 1.5 seconds for RNP to restart itself
 			returnVal = 0;
 		}
 		else
@@ -665,56 +668,56 @@ int sbExec(uint8 *pBuf, int length)
 	return returnVal;
 }
 
-void SoftwareVersionToString(char *retStr, int maxStrLen, swVerExtended_t* swVerExtended)
+static void SoftwareVersionToString(char *retStr, int maxStrLen, swVerExtended_t* swVerExtended)
 {
 	static char tmpStr[1024];
-	sprintf(tmpStr, "Extended Software Version:\n");
-	sprintf(tmpStr, "%s\tMajor:\t%d\n", tmpStr, swVerExtended->major);
-	sprintf(tmpStr, "%s\tMinor:\t%d\n", tmpStr, swVerExtended->minor);
-	sprintf(tmpStr, "%s\tPatch:\t%d\n", tmpStr, swVerExtended->patch);
-	sprintf(tmpStr, "%s\tOptional:\t%d\n", tmpStr, swVerExtended->svnRev);
+	snprintf(tmpStr, sizeof(tmpStr), "Extended Software Version:\n");
+	snprintf(tmpStr, sizeof(tmpStr), "%s\tMajor:\t%d\n", tmpStr, swVerExtended->major);
+	snprintf(tmpStr, sizeof(tmpStr), "%s\tMinor:\t%d\n", tmpStr, swVerExtended->minor);
+	snprintf(tmpStr, sizeof(tmpStr), "%s\tPatch:\t%d\n", tmpStr, swVerExtended->patch);
+	snprintf(tmpStr, sizeof(tmpStr), "%s\tOptional:\t%d\n", tmpStr, swVerExtended->svnRev);
 	if (swVerExtended->stack.applies)
 	{
-		sprintf(tmpStr, "%s\tStack:\n", tmpStr);
-		sprintf(tmpStr, "%s\t\tInterface:\t%d\n", tmpStr, swVerExtended->stack.interface);
-		sprintf(tmpStr, "%s\t\tNode:\t\t%d\n", tmpStr, swVerExtended->stack.node);
+		snprintf(tmpStr, sizeof(tmpStr), "%s\tStack:\n", tmpStr);
+		snprintf(tmpStr, sizeof(tmpStr), "%s\t\tInterface:\t%d\n", tmpStr, swVerExtended->stack.interface);
+		snprintf(tmpStr, sizeof(tmpStr), "%s\t\tNode:\t\t%d\n", tmpStr, swVerExtended->stack.node);
 	}
 	else
 	{
-		sprintf(tmpStr, "%s\tStack field doesn't apply (0x%2X)\n", tmpStr,
+		snprintf(tmpStr, sizeof(tmpStr), "%s\tStack field doesn't apply (0x%2X)\n", tmpStr,
 				((uint8 *) swVerExtended)[offsetof(swVerExtended_t, stack)]);
 	}
 	if (swVerExtended->profiles.applies)
 	{
-		sprintf(tmpStr, "%s\tProfiles:\n", tmpStr);
+		snprintf(tmpStr, sizeof(tmpStr), "%s\tProfiles:\n", tmpStr);
 		if (swVerExtended->profiles.zrc11)
 		{
-			sprintf(tmpStr, "%s\t\t%s\n", tmpStr, "ZRC 1.1");
+			snprintf(tmpStr, sizeof(tmpStr), "%s\t\t%s\n", tmpStr, "ZRC 1.1");
 		}
 		if (swVerExtended->profiles.mso)
 		{
-			sprintf(tmpStr, "%s\t\t%s\n", tmpStr, "MSO");
+			snprintf(tmpStr, sizeof(tmpStr), "%s\t\t%s\n", tmpStr, "MSO");
 		}
 		if (swVerExtended->profiles.zrc20)
 		{
-			sprintf(tmpStr, "%s\t\t%s\n", tmpStr, "ZRC 2.0");
+			snprintf(tmpStr, sizeof(tmpStr), "%s\t\t%s\n", tmpStr, "ZRC 2.0");
 		}
 	}
 	else
 	{
-		sprintf(tmpStr, "%s\tProfiles field doesn't apply (0x%2X)\n", tmpStr,
+		snprintf(tmpStr, sizeof(tmpStr), "%s\tProfiles field doesn't apply (0x%2X)\n", tmpStr,
 				((uint8 *) swVerExtended)[offsetof(swVerExtended_t, profiles)]);
 	}
 	if (swVerExtended->serial.applies)
 	{
-		sprintf(tmpStr, "%s\tSerial:\n", tmpStr);
-		sprintf(tmpStr, "%s\t\tInterface:\t%d\n", tmpStr, swVerExtended->serial.interface);
-		sprintf(tmpStr, "%s\t\tPort:\t\t%d\n", tmpStr, swVerExtended->serial.port);
-		sprintf(tmpStr, "%s\t\tAlternative:\t%d\n", tmpStr, swVerExtended->serial.alternative);
+		snprintf(tmpStr, sizeof(tmpStr), "%s\tSerial:\n", tmpStr);
+		snprintf(tmpStr, sizeof(tmpStr), "%s\t\tInterface:\t%d\n", tmpStr, swVerExtended->serial.interface);
+		snprintf(tmpStr, sizeof(tmpStr), "%s\t\tPort:\t\t%d\n", tmpStr, swVerExtended->serial.port);
+		snprintf(tmpStr, sizeof(tmpStr), "%s\t\tAlternative:\t%d\n", tmpStr, swVerExtended->serial.alternative);
 	}
 	else
 	{
-		sprintf(tmpStr, "%s\tSerial Interface field doesn't apply (0x%2X)\n",
+		snprintf(tmpStr, sizeof(tmpStr), "%s\tSerial Interface field doesn't apply (0x%2X)\n",
 				tmpStr, ((uint8 *) swVerExtended)[offsetof(swVerExtended_t, serial)]);
 	}
 

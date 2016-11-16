@@ -51,17 +51,12 @@
 
 #include "npi_ipc_client.h"
 #include "npi_capSense.h"
+#include "rti_lnx.h" // for rStatus_t
 
 //TO DO, To Rename or suppress
 #define RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT                0xFF
-typedef uint8 rStatus_t;
 
 
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-#define debug_printf(fmt, ...)
-#endif
 
 #define msg_memcpy(src, dst, len)	memcpy(src, dst, len)
 

@@ -307,7 +307,7 @@ extern "C"
    **************************************************************************************************/
 
 #define NPI_SERVER_CONNECT_RETRY_SECONDS  2
-#define NPI_SERVER_CONNECT_ATTEMPTS_MAX    ((300 + (NPI_SERVER_CONNECT_RETRY_SECONDS-1)) / NPI_SERVER_CONNECT_RETRY_SECONDS) // Give up after 5 minutes (macro rounds up, so minimum of 5 minutes)
+#define NPI_SERVER_CONNECT_ATTEMPTS_MAX    ((60 + (NPI_SERVER_CONNECT_RETRY_SECONDS-1)) / NPI_SERVER_CONNECT_RETRY_SECONDS) // Give up after 1 minute (macro rounds up, so minimum of 1 minute)
 
 #define NPI_IPC_CLIENT_SYNCH_TIMEOUT					2	// 1 second timeout on synchronous request
 

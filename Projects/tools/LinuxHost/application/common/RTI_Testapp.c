@@ -45,7 +45,7 @@
 #include <sys/time.h>
 
 #include "RTI_Testapp.h"
-#include "lprfLogging.h"
+#include "tiLogging.h"
 
 // Application test mode state variable
 static uint8 appTestModeState;
@@ -267,7 +267,6 @@ void RTI_TestModeSendDataCnf(rStatus_t status)
 
 void TestappOpenReportFile(uint8 srcIndex)
 {
-	char suffix[256] = "RTI_test_report_";
 	time_t currentTime;
 	struct tm *local;
 	char filename1[256];
@@ -278,15 +277,14 @@ void TestappOpenReportFile(uint8 srcIndex)
 	local = localtime(&currentTime);
 	//filename1 =  ctime(&currentTime);
 	strftime(filename1, 255, "Test_report_%Y_%b_%d_%Hh%M_%S", local);
-	sprintf(suffix, "_idx%d", srcIndex);
-	strcat(filename1, suffix);
+	snprintf(filename1, sizeof(filename1), "%s_idx%d", filename1, srcIndex);
 
 	//Open the file
 	fp = fopen(filename1, "w");
 
 	//Set the file descriptor to the global variable
 	if (fp == NULL) {
-		LOG_ERROR("can't create test file");
+		LOG_FATAL("can't create test file");
 		exit(-1);
 	}
 
@@ -584,21 +582,21 @@ void appTestModeProcessReport(uint8 srcIdx, uint8* pData, uint8 len)
 		LOG_ERROR("Invalid Report Length (%d != 63)\n", len);
 	}
 
-	printf("\n**************************************************\n");
-	printf("*\t    Current test counters\n");
-	printf("*\t\t      run count: \t\t\t\t %d (/%d)\n", appTestModeRunCount[srcIdx].currentCount, appTestModeRunCount[srcIdx].goal);
-	printf("*\t\t      received packet count: \t\t\t %d \n", appTestModeReceivedPacketCnt[srcIdx]);
-	printf("*\t\t      received packet count accumulated: \t %d \n", appTestModeReceivedPacketCntAcc[srcIdx]);
-//	printf("*\t\t      received packet bin[0] accumulated: \t %d \n",appTestModeReceivedBinAcc[srcIdx][0]);
-	printf("*\t\t      Payload Accumulated: \t %d \n", appTestModeReceivedcumulativePayload[srcIdx]);
-//	printf("*\t\t      Latency Accumulated: \t %d \n",appTestModeReceivedcumulativeLatency[srcIdx];
-	printf("*\t\t      Average Latency \t %.2fms \n", appTestModeReceivedaverageLatency[srcIdx]);
-	printf("*\t\t      Min Latency: \t %dms \n", appTestModeReceivedminLatency[srcIdx]);
-	printf("*\t\t      Max Latency: \t %dms \n", appTestModeReceivedmaxLatency[srcIdx]);
-	printf("*\t\t      Average RSSI \t %.2fdBm \n", appTestModeReceivedaverageRSSI[srcIdx]);
-	printf("*\t\t      Min RSSI: \t %ddBm \n", appTestModeReceivedminRSSI[srcIdx]);
-	printf("*\t\t      Max RSSI: \t %ddBm \n", appTestModeReceivedmaxRSSI[srcIdx]);
-	printf("*\t\t      Throughput: \t %.2fbps \n", appTestModeReceivedThroughput[srcIdx]);
+	fprintf(LOG_DESTINATION_FP, "\n**************************************************\n");
+	fprintf(LOG_DESTINATION_FP, "*\t    Current test counters\n");
+	fprintf(LOG_DESTINATION_FP, "*\t\t      run count: \t\t\t\t %d (/%d)\n", appTestModeRunCount[srcIdx].currentCount, appTestModeRunCount[srcIdx].goal);
+	fprintf(LOG_DESTINATION_FP, "*\t\t      received packet count: \t\t\t %d \n", appTestModeReceivedPacketCnt[srcIdx]);
+	fprintf(LOG_DESTINATION_FP, "*\t\t      received packet count accumulated: \t %d \n", appTestModeReceivedPacketCntAcc[srcIdx]);
+//	fprintf(LOG_DESTINATION_FP, "*\t\t      received packet bin[0] accumulated: \t %d \n",appTestModeReceivedBinAcc[srcIdx][0]);
+	fprintf(LOG_DESTINATION_FP, "*\t\t      Payload Accumulated: \t %d \n", appTestModeReceivedcumulativePayload[srcIdx]);
+//	fprintf(LOG_DESTINATION_FP, "*\t\t      Latency Accumulated: \t %d \n",appTestModeReceivedcumulativeLatency[srcIdx];
+	fprintf(LOG_DESTINATION_FP, "*\t\t      Average Latency \t %.2fms \n", appTestModeReceivedaverageLatency[srcIdx]);
+	fprintf(LOG_DESTINATION_FP, "*\t\t      Min Latency: \t %dms \n", appTestModeReceivedminLatency[srcIdx]);
+	fprintf(LOG_DESTINATION_FP, "*\t\t      Max Latency: \t %dms \n", appTestModeReceivedmaxLatency[srcIdx]);
+	fprintf(LOG_DESTINATION_FP, "*\t\t      Average RSSI \t %.2fdBm \n", appTestModeReceivedaverageRSSI[srcIdx]);
+	fprintf(LOG_DESTINATION_FP, "*\t\t      Min RSSI: \t %ddBm \n", appTestModeReceivedminRSSI[srcIdx]);
+	fprintf(LOG_DESTINATION_FP, "*\t\t      Max RSSI: \t %ddBm \n", appTestModeReceivedmaxRSSI[srcIdx]);
+	fprintf(LOG_DESTINATION_FP, "*\t\t      Throughput: \t %.2fbps \n", appTestModeReceivedThroughput[srcIdx]);
 
 	if (appTestFileSave && (appTestModeReceivedFilep[srcIdx]))
 	{
@@ -661,21 +659,21 @@ void appTestModeProcessReport(uint8 srcIdx, uint8* pData, uint8 len)
 				appTestModeReceivedPacketCntAcc[srcIdx],
 				appTestModeVersion[srcIdx]);
 
-		printf("\n**************************************************\n");
-		printf("*\t    Current test counters\n");
-		printf("*\t\t      run count: \t\t\t\t %d (/%d)\n", appTestModeRunCount[srcIdx].currentCount, appTestModeRunCount[srcIdx].goal);
-		printf("*\t\t      received packet count: \t\t\t %d \n", appTestModeReceivedPacketCnt[srcIdx]);
-		printf("*\t\t      received packet count accumulated: \t %d \n", appTestModeReceivedPacketCntAcc[srcIdx]);
-		//	printf("*\t\t      received packet bin[0] accumulated: \t %d \n",appTestModeReceivedBinAcc[srcIdx][0]);
-		printf("*\t\t      Payload Accumulated: \t %d \n", appTestModeReceivedcumulativePayload[srcIdx]);
-		//	printf("*\t\t      Latency Accumulated: \t %d \n",appTestModeReceivedcumulativeLatency[srcIdx];
-		printf("*\t\t      Average Latency \t %.2fms \n", appTestModeReceivedaverageLatency[srcIdx]);
-		printf("*\t\t      Min Latency: \t %dms \n", appTestModeReceivedminLatency[srcIdx]);
-		printf("*\t\t      Max Latency: \t %dms \n", appTestModeReceivedmaxLatency[srcIdx]);
-		printf("*\t\t      Average RSSI \t %.2fdBm \n", appTestModeReceivedaverageRSSI[srcIdx]);
-		printf("*\t\t      Min RSSI: \t %ddBm \n", appTestModeReceivedminRSSI[srcIdx]);
-		printf("*\t\t      Max RSSI: \t %ddBm \n", appTestModeReceivedmaxRSSI[srcIdx]);
-		printf("*\t\t      Throughput: \t %.2fbps \n", appTestModeReceivedThroughput[srcIdx]);
+		fprintf(LOG_DESTINATION_FP, "\n**************************************************\n");
+		fprintf(LOG_DESTINATION_FP, "*\t    Current test counters\n");
+		fprintf(LOG_DESTINATION_FP, "*\t\t      run count: \t\t\t\t %d (/%d)\n", appTestModeRunCount[srcIdx].currentCount, appTestModeRunCount[srcIdx].goal);
+		fprintf(LOG_DESTINATION_FP, "*\t\t      received packet count: \t\t\t %d \n", appTestModeReceivedPacketCnt[srcIdx]);
+		fprintf(LOG_DESTINATION_FP, "*\t\t      received packet count accumulated: \t %d \n", appTestModeReceivedPacketCntAcc[srcIdx]);
+		//	fprintf(LOG_DESTINATION_FP, "*\t\t      received packet bin[0] accumulated: \t %d \n",appTestModeReceivedBinAcc[srcIdx][0]);
+		fprintf(LOG_DESTINATION_FP, "*\t\t      Payload Accumulated: \t %d \n", appTestModeReceivedcumulativePayload[srcIdx]);
+		//	fprintf(LOG_DESTINATION_FP, "*\t\t      Latency Accumulated: \t %d \n",appTestModeReceivedcumulativeLatency[srcIdx];
+		fprintf(LOG_DESTINATION_FP, "*\t\t      Average Latency \t %.2fms \n", appTestModeReceivedaverageLatency[srcIdx]);
+		fprintf(LOG_DESTINATION_FP, "*\t\t      Min Latency: \t %dms \n", appTestModeReceivedminLatency[srcIdx]);
+		fprintf(LOG_DESTINATION_FP, "*\t\t      Max Latency: \t %dms \n", appTestModeReceivedmaxLatency[srcIdx]);
+		fprintf(LOG_DESTINATION_FP, "*\t\t      Average RSSI \t %.2fdBm \n", appTestModeReceivedaverageRSSI[srcIdx]);
+		fprintf(LOG_DESTINATION_FP, "*\t\t      Min RSSI: \t %ddBm \n", appTestModeReceivedminRSSI[srcIdx]);
+		fprintf(LOG_DESTINATION_FP, "*\t\t      Max RSSI: \t %ddBm \n", appTestModeReceivedmaxRSSI[srcIdx]);
+		fprintf(LOG_DESTINATION_FP, "*\t\t      Throughput: \t %.2fbps \n", appTestModeReceivedThroughput[srcIdx]);
 		if (appTestFileSave && (appTestModeReceivedFilep[srcIdx]))
 		{
 			fprintf(appTestModeReceivedFilep[srcIdx], "*\t    Current test counters\n");
@@ -1420,138 +1418,138 @@ void appTestModeSendTestSettings(uint8 destIdx)
 
 void DispTestModeMenuInit(uint8 destIdx)
 {
-	printf("------------------------------------------------------\n");
-	printf("- Test Mode MENU:\n");
-	printf("- \t Current destination index: 0x%.2X\n", destIdx);
-	printf("------------------------------------------------------\n");
-	printf("r- Return to Main Menu\n");
-	printf("s- Start Test\n");
-	printf("1- Configure Destination Index\n");
-	printf("2- Configure Start Condition\n");
-	printf("3- Configure Tx POWER\n");
-	printf("4- Configure Payload Size\n");
-	printf("5- Configure Number of Packets\n");
-	printf("6- Configure Maximum Addition Delay\n");
-	printf("7- Set Number of Automatic Test Runs\n");
-	printf("8- Load Predefined Throughput Test\n");
-	printf("9- Load Predefined Latency Test\n");
-	printf("f- Toggle whether or not to save reports to file (default off)\n");
-	printf("l- List current configuration\n");
-	printf("m- Show This Menu\n");
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "- Test Mode MENU:\n");
+	fprintf(LOG_DESTINATION_FP, "- \t Current destination index: 0x%.2X\n", destIdx);
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "r- Return to Main Menu\n");
+	fprintf(LOG_DESTINATION_FP, "s- Start Test\n");
+	fprintf(LOG_DESTINATION_FP, "1- Configure Destination Index\n");
+	fprintf(LOG_DESTINATION_FP, "2- Configure Start Condition\n");
+	fprintf(LOG_DESTINATION_FP, "3- Configure Tx POWER\n");
+	fprintf(LOG_DESTINATION_FP, "4- Configure Payload Size\n");
+	fprintf(LOG_DESTINATION_FP, "5- Configure Number of Packets\n");
+	fprintf(LOG_DESTINATION_FP, "6- Configure Maximum Addition Delay\n");
+	fprintf(LOG_DESTINATION_FP, "7- Set Number of Automatic Test Runs\n");
+	fprintf(LOG_DESTINATION_FP, "8- Load Predefined Throughput Test\n");
+	fprintf(LOG_DESTINATION_FP, "9- Load Predefined Latency Test\n");
+	fprintf(LOG_DESTINATION_FP, "f- Toggle whether or not to save reports to file (default off)\n");
+	fprintf(LOG_DESTINATION_FP, "l- List current configuration\n");
+	fprintf(LOG_DESTINATION_FP, "m- Show This Menu\n");
 }
 
 void DispTestModeCurrentCfg(rrtTestReq_t testReq, uint8 destIdx, uint8 appTestModeVersion, uint8 numOfCycles, bool boolFileSave )
 {
-	printf("------------------------------------------------------\n");
-	printf("- Current Test Mode Configuration:\n");
-	printf("- \t Current destination index: 0x%.2X\n", destIdx);
-	printf("------------------------------------------------------\n");
-	printf("- \t Start condition: \t %s [0x%.2X]\n",
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "- Current Test Mode Configuration:\n");
+	fprintf(LOG_DESTINATION_FP, "- \t Current destination index: 0x%.2X\n", destIdx);
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "- \t Start condition: \t %s [0x%.2X]\n",
 			testMode_startCondition_list[testReq.startCondition],
 			testReq.startCondition);
-	printf("- \t Test Type: \t \t %s [0x%.2X]\n",
+	fprintf(LOG_DESTINATION_FP, "- \t Test Type: \t \t %s [0x%.2X]\n",
 			testMode_testType_list[testReq.testType],
 			testReq.testType);
-	printf("- \t Tx Options: \t \t \t 0x%.2X\n",testReq.txOptions);
-	printf("- \t Tx Power: \t \t \t%s\n",testMode_txPower_list[(-(testReq.txPower - 7))]);
-	printf("- \t Payload size: \t \t \t %.2d \tbytes\n",testReq.userDataSize);
-	printf("- \t Number of packets: \t  %4s \040%.5d \n","", testReq.numPackets);
-	printf("- \t Number of tests to run:  %d\n", numOfCycles );
-	printf("- \t Max Duration between packets:  %d\n", testReq.maxBackoffDuration );
+	fprintf(LOG_DESTINATION_FP, "- \t Tx Options: \t \t \t 0x%.2X\n",testReq.txOptions);
+	fprintf(LOG_DESTINATION_FP, "- \t Tx Power: \t \t \t%s\n",testMode_txPower_list[(-(testReq.txPower - 7))]);
+	fprintf(LOG_DESTINATION_FP, "- \t Payload size: \t \t \t %.2d \tbytes\n",testReq.userDataSize);
+	fprintf(LOG_DESTINATION_FP, "- \t Number of packets: \t  %4s \040%.5d \n","", testReq.numPackets);
+	fprintf(LOG_DESTINATION_FP, "- \t Number of tests to run:  %d\n", numOfCycles );
+	fprintf(LOG_DESTINATION_FP, "- \t Max Duration between packets:  %d\n", testReq.maxBackoffDuration );
 	if(boolFileSave)
-		printf("- \t All test will be saved to file, path: .\\RTI_Test_result\\date\\ \n");
+		fprintf(LOG_DESTINATION_FP, "- \t All test will be saved to file, path: .\\RTI_Test_result\\date\\ \n");
 	else
-		printf("- \t test not saved to file\n");
+		fprintf(LOG_DESTINATION_FP, "- \t test not saved to file\n");
 
 
-	printf("------------------------------------------------------\n");
-	printf("m- Display Main Menu\n");
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "m- Display Main Menu\n");
 
 
 }
 
 void DispTestModeCFGDestinationIndexMenuInit ( void )
 {
-	printf("------------------------------------------------------\n");
-	printf("Test Mode Configuration - Select Destination Index(s):\n");
-	printf("- \tEnter as string of bytes separated by any of \n");
-	printf("- \tthese delimiters: ' ' , ; : - |\n");
-	printf("- \tA valid destination index is in the range 0 - 0x%.2X\n", RCN_CAP_PAIR_TABLE_SIZE - 1);
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "Test Mode Configuration - Select Destination Index(s):\n");
+	fprintf(LOG_DESTINATION_FP, "- \tEnter as string of bytes separated by any of \n");
+	fprintf(LOG_DESTINATION_FP, "- \tthese delimiters: ' ' , ; : - |\n");
+	fprintf(LOG_DESTINATION_FP, "- \tA valid destination index is in the range 0 - 0x%.2X\n", RCN_CAP_PAIR_TABLE_SIZE - 1);
 }
 
 void DispTestModeCFGStartConditionMenuInit (void )
 {
-	printf("------------------------------------------------------\n");
-	printf("Test Mode Configuration - Select Start Condition:\n");
-	printf("1- Immediate\n");
-	printf("2- On Button\n");
-	printf("m- Show This Menu\n");
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "Test Mode Configuration - Select Start Condition:\n");
+	fprintf(LOG_DESTINATION_FP, "1- Immediate\n");
+	fprintf(LOG_DESTINATION_FP, "2- On Button\n");
+	fprintf(LOG_DESTINATION_FP, "m- Show This Menu\n");
 }
 
 void DispTestModeCFGTxPowerMenuInit( void )
 {
-	printf("------------------------------------------------------\n");
-	printf("Test Mode Configuration - Select Tx Power:\n");
-	printf("1- \t %2s 7\tdBm\n", "");
-	printf("2- \t %2s 4.5\tdBm\n", "");
-	printf("3- \t %2s 0\tdBm\n", "");
-	printf("4- \t %1s -5.9\tdBm\n", "");
-	printf("5- \t %1s -9.9\tdBm\n", "");
-	printf("6- \t-14.9\tdBm\n");
-	printf("7- \t-18.7\tdBm\n");
-	printf("m- Show This Menu\n");
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "Test Mode Configuration - Select Tx Power:\n");
+	fprintf(LOG_DESTINATION_FP, "1- \t %2s 7\tdBm\n", "");
+	fprintf(LOG_DESTINATION_FP, "2- \t %2s 4.5\tdBm\n", "");
+	fprintf(LOG_DESTINATION_FP, "3- \t %2s 0\tdBm\n", "");
+	fprintf(LOG_DESTINATION_FP, "4- \t %1s -5.9\tdBm\n", "");
+	fprintf(LOG_DESTINATION_FP, "5- \t %1s -9.9\tdBm\n", "");
+	fprintf(LOG_DESTINATION_FP, "6- \t-14.9\tdBm\n");
+	fprintf(LOG_DESTINATION_FP, "7- \t-18.7\tdBm\n");
+	fprintf(LOG_DESTINATION_FP, "m- Show This Menu\n");
 }
 
 void DispTestModeCFGPayloadSizeMenuInit ( void )
 {
-	printf("------------------------------------------------------\n");
-	printf("Test Mode Configuration - Select Payload size:\n");
-	printf("6 - 96 \n");
-	printf("m- Show This Menu\n");
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "Test Mode Configuration - Select Payload size:\n");
+	fprintf(LOG_DESTINATION_FP, "6 - 96 \n");
+	fprintf(LOG_DESTINATION_FP, "m- Show This Menu\n");
 }
 
 void DispTestModeCFGTxOptions ( void )
 {
-	printf("------------------------------------------------------\n");
-	printf("Test Mode Configuration - Select Tx Options:\n");
-	printf("Do it yourself!!! \n");
-	printf("example: \n");
-	printf("ACK: add/sub 0x4 (4)\n");
-	printf("SEC: add/sub 0x8 (8)\n");
-	printf("SIngle channel: add/sub (0x10) (16)\n");
-	printf("Vendor Spec: add/sub  (0x40) (64)\n");
-	printf("ack + sec + vendor = 0x4C (76) \n");
-	printf("Nack + vendor + single = 0x50 (80) \n");
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "Test Mode Configuration - Select Tx Options:\n");
+	fprintf(LOG_DESTINATION_FP, "Do it yourself!!! \n");
+	fprintf(LOG_DESTINATION_FP, "example: \n");
+	fprintf(LOG_DESTINATION_FP, "ACK: add/sub 0x4 (4)\n");
+	fprintf(LOG_DESTINATION_FP, "SEC: add/sub 0x8 (8)\n");
+	fprintf(LOG_DESTINATION_FP, "SIngle channel: add/sub (0x10) (16)\n");
+	fprintf(LOG_DESTINATION_FP, "Vendor Spec: add/sub  (0x40) (64)\n");
+	fprintf(LOG_DESTINATION_FP, "ack + sec + vendor = 0x4C (76) \n");
+	fprintf(LOG_DESTINATION_FP, "Nack + vendor + single = 0x50 (80) \n");
 
 }
 
 void DispTestModeSetNumOfRunsMenuInit ( void )
 {
-	printf("------------------------------------------------------\n");
-	printf("Test Mode Configuration - Set Number of Runs:\n");
-	printf("Choose a value < 256\n");
-	printf("m- Show This Menu\n");
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "Test Mode Configuration - Set Number of Runs:\n");
+	fprintf(LOG_DESTINATION_FP, "Choose a value < 256\n");
+	fprintf(LOG_DESTINATION_FP, "m- Show This Menu\n");
 }
 
 void DispTestModeCFGNumOfPacketsMenuInit ()
 {
 	uint8 i;
-	printf("------------------------------------------------------\n");
-	printf("Test Mode Configuration - Select number of packets:\n");
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "Test Mode Configuration - Select number of packets:\n");
 	for (i = 0; i < 10; i++)
 	{
-//		printf("%i - %.5d\n", i, nofPacketsArray[i]);
+//		fprintf(LOG_DESTINATION_FP, "%i - %.5d\n", i, nofPacketsArray[i]);
 	}
-	printf("m- Show This Menu\n");
+	fprintf(LOG_DESTINATION_FP, "m- Show This Menu\n");
 }
 
 void DispTestModeCFGMaxAdditionalDelayMenuInit (uint16 appTestModeVersion)
 {
 	// Can only take 1 byte as input, so this is rather useless for now.
-	printf("------------------------------------------------------\n");
-	printf("Test Mode Configuration - Set Maximum Additional Random Delay:\n");
-	printf("Enter maximum random delay in number of milliseconds.\n");
-	printf("Press any key to return\n");
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "Test Mode Configuration - Set Maximum Additional Random Delay:\n");
+	fprintf(LOG_DESTINATION_FP, "Enter maximum random delay in number of milliseconds.\n");
+	fprintf(LOG_DESTINATION_FP, "Press any key to return\n");
 }
 
 static const char * const binStr[29] =
@@ -1598,22 +1596,22 @@ void DispTestModeReport(uint8 srcIdx,
 {
 	uint8 i;
 
-	printf("------------------------------------------------------\n");
-	printf("- Test Mode Report, Index 0x%.2X\n", srcIdx);
-	printf("- \tRun #%.3d\n", runNumber + 1);
-	printf("------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
+	fprintf(LOG_DESTINATION_FP, "- Test Mode Report, Index 0x%.2X\n", srcIdx);
+	fprintf(LOG_DESTINATION_FP, "- \tRun #%.3d\n", runNumber + 1);
+	fprintf(LOG_DESTINATION_FP, "------------------------------------------------------\n");
 
 	if (PER == -1)
 	{
 		if (runNumber == -1)
-			printf("-\tPER: %.2f\%% (sent %d + not sent %d = %d != received %d)\n",
+			fprintf(LOG_DESTINATION_FP, "-\tPER: %.2f\%% (sent %d + not sent %d = %d != received %d)\n",
 					PER,
 					numOfSentPackets,
 					((uint32*)bin)[28],
 					numOfSentPackets + ((uint32*)bin)[25],
 					numReceivedPackets);
 		else
-			printf("-\tPER: %.2f\%% (sent %d + not sent %d = %d != received %d)\n",
+			fprintf(LOG_DESTINATION_FP, "-\tPER: %.2f\%% (sent %d + not sent %d = %d != received %d)\n",
 					PER,
 					numOfSentPackets,
 					((uint16*)bin)[28],
@@ -1622,16 +1620,16 @@ void DispTestModeReport(uint8 srcIdx,
 	}
 	else
 	{
-		printf("-\tPER: %.2f\%% (%d/%d)\n", PER, numOfSentPackets, numReceivedPackets);
+		fprintf(LOG_DESTINATION_FP, "-\tPER: %.2f\%% (%d/%d)\n", PER, numOfSentPackets, numReceivedPackets);
 	}
-	printf("-\tTx Power: \t \t \t%s\n", testMode_txPower_list[(-(txPower - 7))]);
+	fprintf(LOG_DESTINATION_FP, "-\tTx Power: \t \t \t%s\n", testMode_txPower_list[(-(txPower - 7))]);
 	for (i = 0; i < 28; i++)
 	{
 		if (runNumber == -1)
-			printf("-%s %d\n", binStr[i],
+			fprintf(LOG_DESTINATION_FP, "-%s %d\n", binStr[i],
 					((uint32 *)bin)[i]);
 		else
-			printf("-%s %d\n", binStr[i],
+			fprintf(LOG_DESTINATION_FP, "-%s %d\n", binStr[i],
 					((uint16*)bin)[i]);
 	}
 }

@@ -49,7 +49,7 @@
 
 #include "common_app.h"
 #include "timer.h"
-#include "lprfLogging.h"
+#include "tiLogging.h"
 
 #ifndef RTI_TESTMODE
 #define RTI_TESTMODE
@@ -101,7 +101,7 @@ uint8 appRNPpowerState = SIMPLE_APP_RNP_POWER_STATE_ACTIVE;
 
 rcnNwkPairingEntry_t pEntryForRecovery;
 
-//THREAD and MUTEX 
+//THREAD and MUTEX
 static pthread_mutex_t appThreadMutex;
 static pthread_mutex_t appInitMutex;
 
@@ -305,6 +305,13 @@ static void appInitSyncRes(void);
 void appDisplayPairingTable(void);
 void appClearPairingTable(void);
 
+// STUBS so can link with npi_rti.o built to also work with the MSO app
+void RTI_PairInd( uint8 status, uint8 srcIndex, uint8 devType) {(void)status; (void)srcIndex; (void)devType;}
+void RTI_StartValidationInd( uint8 srcIndex ) {(void)srcIndex;}
+void RTI_GetValidationStatusInd( uint8 srcIndex, uint8 control ) {(void)srcIndex; (void)control;}
+void RTI_BindingParamsInd( uint8 *ieeeAddr, uint8* msoUserString ) {(void)ieeeAddr; (void)msoUserString;}
+void RTI_UpdateBackupPairingEntry() {}
+
 
 int SimpleAppInit(int mode, char threadId)
 {
@@ -314,7 +321,7 @@ int SimpleAppInit(int mode, char threadId)
 	uint8 value[2];
 	SIMPLE_App_threadId = threadId;
 
-	LOG_INFO("-------------------- START TOGGLE DEBUG TRACES on SERVER/DAEMON SIDE-------------------\n");
+	LOG_INFO("%s", "-------------------- START TOGGLE DEBUG TRACES on SERVER/DAEMON SIDE-------------------\n");
 	npiMsgData_t pMsg;
 	pMsg.len = 1;
 	pMsg.subSys = RPC_SYS_SRV_CTRL | RPC_CMD_SREQ;
@@ -431,7 +438,7 @@ int SimpleAppInit(int mode, char threadId)
 	// TODO: it is ideal to make this thread higher priority
 	// but linux does not allow realtime of FIFO scheduling policy for
 	// non-priviledged threads.
-	if (pthread_create(&AppThreadId, NULL, appThreadFunc, NULL)) 
+	if (pthread_create(&AppThreadId, NULL, appThreadFunc, NULL))
 	{
 		// thread creation failed
 		LOG_ERROR("Failed to create app thread\n");
@@ -479,7 +486,7 @@ static void *appThreadFunc(void *ptr)
 	DispMenuInit();
 
 	/* thread loop */
-	while (!appThreadTerminate) 
+	while (!appThreadTerminate)
 	{
 		// Wait for event
 		sem_wait(&eventSem);
@@ -1019,7 +1026,7 @@ void appClearPairingTable()
  *
  * @return  void
  */
-void appDisplayPairingTable() 
+void appDisplayPairingTable()
 {
 	rcnNwkPairingEntry_t *pEntry;
 	// Allocate memory for one pairing entry
@@ -1049,7 +1056,7 @@ void appDisplayPairingTable()
 		}
 	}
 
-	if (atLeastOneEntryFound != 0) 
+	if (atLeastOneEntryFound != 0)
 	{
 		LOG_INFO("*************************************\n");
 	}
@@ -1078,9 +1085,9 @@ void appDisplayPairingTable()
  *
  * @return  void
  */
-void RTI_InitCnf(rStatus_t status) 
+void RTI_InitCnf(rStatus_t status)
 {
-	if (status == RTI_SUCCESS) 
+	if (status == RTI_SUCCESS)
 	{
 		LOG_INFO("RTI_InitCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 
@@ -1133,7 +1140,7 @@ void RTI_InitCnf(rStatus_t status)
  * @param   devType  - Pairing table index device type, or invalid.
  * @return  void
  */
-void RTI_PairCnf(rStatus_t status, uint8 dstIndex, uint8 devType) 
+void RTI_PairCnf(rStatus_t status, uint8 dstIndex, uint8 devType)
 {
 	// Return to READY STATE
 	appState = AP_STATE_READY;
@@ -1168,7 +1175,7 @@ void RTI_PairCnf(rStatus_t status, uint8 dstIndex, uint8 devType)
  *
  * @return  void
  */
-void RTI_AllowPairCnf(rStatus_t status, uint8 dstIndex, uint8 devType) 
+void RTI_AllowPairCnf(rStatus_t status, uint8 dstIndex, uint8 devType)
 {
 	// set paring reference (destination index)
 	destIdx = dstIndex;
@@ -1200,7 +1207,7 @@ void RTI_AllowPairCnf(rStatus_t status, uint8 dstIndex, uint8 devType)
  *
  * @return  void
  */
-void RTI_SendDataCnf(rStatus_t status) 
+void RTI_SendDataCnf(rStatus_t status)
 {
 	if (appState == AP_STATE_READY)
 	{
@@ -2485,11 +2492,11 @@ static void appReturnFromSubmodule()
 void appAttenuatorControlProcessKey (char* strIn)
 {
 
-//	printf("------------------------------------------------------\n");
-//	printf("Control Attenuator MENU:\n");
-//	printf("r- Return to Main Menu\n");
-//	printf("Attenuator 1, Attenuator 2\n");
-//	printf("m- Show This Menu\n");
+//	LOG_INFO("------------------------------------------------------\n");
+//	LOG_INFO("Control Attenuator MENU:\n");
+//	LOG_INFO("r- Return to Main Menu\n");
+//	LOG_INFO("Attenuator 1, Attenuator 2\n");
+//	LOG_INFO("m- Show This Menu\n");
 
 	char* pStr;
 	uint8 att0 = 0, att1 = 0, retVal;
@@ -2687,51 +2694,51 @@ static int getAndPrintExtendedSoftwareVersion(uint8 timePrint)
 	retVal = RTI_ReadItem(RTI_CONST_ITEM_EXTENDED_SW_VERSION, 8, (uint8*)&swVerExtended);
 	if (RTI_SUCCESS == retVal)
 	{
-		sprintf(tmpStrForTimePrint, "[Initialization][INFO]- Extended Software Version:\n");
-		sprintf(tmpStrForTimePrint, "%s\tMajor:\t%d\n", tmpStrForTimePrint, swVerExtended.major);
-		sprintf(tmpStrForTimePrint, "%s\tMinor:\t%d\n", tmpStrForTimePrint, swVerExtended.minor);
-		sprintf(tmpStrForTimePrint, "%s\tPatch:\t%d\n", tmpStrForTimePrint, swVerExtended.patch);
-		sprintf(tmpStrForTimePrint, "%s\tOptional:\t%d\n", tmpStrForTimePrint, swVerExtended.svnRev);
+		snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "[Initialization][INFO]- Extended Software Version:\n");
+		snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tMajor:\t%d\n", tmpStrForTimePrint, swVerExtended.major);
+		snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tMinor:\t%d\n", tmpStrForTimePrint, swVerExtended.minor);
+		snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tPatch:\t%d\n", tmpStrForTimePrint, swVerExtended.patch);
+		snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tOptional:\t%d\n", tmpStrForTimePrint, swVerExtended.svnRev);
 		if (swVerExtended.stack.applies)
 		{
-			sprintf(tmpStrForTimePrint, "%s\tStack:\n", tmpStrForTimePrint);
-			sprintf(tmpStrForTimePrint, "%s\t\tInterface:\t%d\n", tmpStrForTimePrint, swVerExtended.stack.interface);
-			sprintf(tmpStrForTimePrint, "%s\t\tNode:\t\t%d\n", tmpStrForTimePrint, swVerExtended.stack.node);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tStack:\n", tmpStrForTimePrint);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\tInterface:\t%d\n", tmpStrForTimePrint, swVerExtended.stack.interface);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\tNode:\t\t%d\n", tmpStrForTimePrint, swVerExtended.stack.node);
 		}
 		else
 		{
-			sprintf(tmpStrForTimePrint, "%s\tStack field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, stack)]);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tStack field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, stack)]);
 		}
 		if (swVerExtended.profiles.applies)
 		{
-			sprintf(tmpStrForTimePrint, "%s\tProfiles:\n", tmpStrForTimePrint);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tProfiles:\n", tmpStrForTimePrint);
 			if (swVerExtended.profiles.zrc11)
 			{
-				sprintf(tmpStrForTimePrint, "%s\t\t%s\n", tmpStrForTimePrint, "ZRC 1.1");
+				snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\t%s\n", tmpStrForTimePrint, "ZRC 1.1");
 			}
 			if (swVerExtended.profiles.mso)
 			{
-				sprintf(tmpStrForTimePrint, "%s\t\t%s\n", tmpStrForTimePrint, "MSO");
+				snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\t%s\n", tmpStrForTimePrint, "MSO");
 			}
 			if (swVerExtended.profiles.zrc20)
 			{
-				sprintf(tmpStrForTimePrint, "%s\t\t%s\n", tmpStrForTimePrint, "ZRC 2.0");
+				snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\t%s\n", tmpStrForTimePrint, "ZRC 2.0");
 			}
 		}
 		else
 		{
-			sprintf(tmpStrForTimePrint, "%s\tProfiles field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, profiles)]);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tProfiles field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, profiles)]);
 		}
 		if (swVerExtended.serial.applies)
 		{
-			sprintf(tmpStrForTimePrint, "%s\tSerial:\n", tmpStrForTimePrint);
-			sprintf(tmpStrForTimePrint, "%s\t\tInterface:\t%d\n", tmpStrForTimePrint, swVerExtended.serial.interface);
-			sprintf(tmpStrForTimePrint, "%s\t\tPort:\t\t%d\n", tmpStrForTimePrint, swVerExtended.serial.port);
-			sprintf(tmpStrForTimePrint, "%s\t\tAlternative:\t%d\n", tmpStrForTimePrint, swVerExtended.serial.alternative);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tSerial:\n", tmpStrForTimePrint);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\tInterface:\t%d\n", tmpStrForTimePrint, swVerExtended.serial.interface);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\tPort:\t\t%d\n", tmpStrForTimePrint, swVerExtended.serial.port);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\tAlternative:\t%d\n", tmpStrForTimePrint, swVerExtended.serial.alternative);
 		}
 		else
 		{
-			sprintf(tmpStrForTimePrint, "%s\tSerial Interface field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, serial)]);
+			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tSerial Interface field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, serial)]);
 		}
 		if (timePrint)
 		{

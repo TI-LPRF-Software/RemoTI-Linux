@@ -6,7 +6,7 @@
   Description:    This file contains Linux platform specific SYS CAPSENSE
                   Surrogate implementation
 
-  Copyright (C) {2012} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
 
 
    Redistribution and use in source and binary forms, with or without
@@ -52,11 +52,11 @@
 #include "npi_ipc_client.h"
 #include "npi_peripherals.h"
 #include "npi_attenuator.h"
-#include "lprfLogging.h"
+#include "rti_lnx.h" // For rStatus_t
+#include "tiLogging.h"
 
 //TO DO, To Rename or suppress
 #define RTI_ERROR_SYNCHRONOUS_NPI_TIMEOUT                0xFF
-typedef uint8 rStatus_t;
 
 #define msg_memcpy(src, dst, len)	memcpy(src, dst, len)
 

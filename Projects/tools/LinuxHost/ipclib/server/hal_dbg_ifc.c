@@ -53,13 +53,13 @@
 #include <sys/poll.h>
 
 //#include  "hal_board.h"
-#include "hal_types.h"
-#include "hal_rpc.h"
-#include "hal_dbg_ifc.h"
-#include "hal_dbg_ifc_rpc.h"
-#include "time_printf.h"
+#include  "hal_types.h"
+#include  "hal_rpc.h"
+#include  "hal_dbg_ifc.h"
+#include  "hal_dbg_ifc_rpc.h"
 
 #include "npi_lnx_error.h"
+#include "tiLogging.h"
 
 #ifdef __STRESS_TEST__
 #include <sys/time.h>
@@ -74,12 +74,6 @@
 /**************************************************************************************************
  *                                              MACROS
  **************************************************************************************************/
-
-#ifdef __BIG_DEBUG__
-#define debug_printf(fmt, ...) printf( fmt, ##__VA_ARGS__)
-#else
-#define debug_printf(fmt, ...) st (if (__BIG_DEBUG_ACTIVE == TRUE) printf( fmt, ##__VA_ARGS__);)
-#endif
 
 #define HAL_GPIO_DC_CFG(x) st (x = HalGpioDCInit(0);)
 #define HAL_GPIO_DC_CLR(x) st (x = halGpioDCSet(0);)
@@ -412,8 +406,8 @@ int Hal_EnterDebugModeReq(void)
     uint8 i;
     int ret = NPI_LNX_SUCCESS;
 
-    printf("[DEBUG INTERFACE] Entering Debug Mode");
-    fflush(stdout);
+    LOG_ALWAYS("[DEBUG INTERFACE] Entering Debug Mode");
+    fflush(LOG_DESTINATION_FP);
 
     // Send two flanks on DC while keeping RESET_N low
 //    P0 = 0x00;                  // All low (incl. RESET_N)
@@ -421,16 +415,16 @@ int Hal_EnterDebugModeReq(void)
 	{
 		HAL_GPIO_DC_CLR(ret);
 	}
-    printf(" .");
-    fflush(stdout);
+    LOG_ALWAYS(" .");
+    fflush(LOG_DESTINATION_FP);
 	if ( ret == NPI_LNX_SUCCESS )
 	{
 		ret = HalGpioResetSet(!RESET_N);
 	}
 	for (i = 0; i < 0xFF; i++);   // Wait
 	//    P0 = DC;                    // DC high
-    printf(" .");
-    fflush(stdout);
+    LOG_ALWAYS(" .");
+    fflush(LOG_DESTINATION_FP);
 	if ( ret == NPI_LNX_SUCCESS )
 	{
 		HAL_GPIO_DC_SET(ret);
@@ -440,8 +434,8 @@ int Hal_EnterDebugModeReq(void)
 	{
 		HAL_GPIO_DC_CLR(ret);
 	}
-    printf(" .");
-    fflush(stdout);
+    LOG_ALWAYS(" .");
+    fflush(LOG_DESTINATION_FP);
 	//    P0 = DC;                    // DC high
 	if ( ret == NPI_LNX_SUCCESS )
 	{
@@ -452,17 +446,17 @@ int Hal_EnterDebugModeReq(void)
 	{
 		HAL_GPIO_DC_CLR(ret);
 	}
-    printf(" .");
-    fflush(stdout);
+    LOG_ALWAYS(" .");
+    fflush(LOG_DESTINATION_FP);
 	for (i = 0; i < 0xFF; i++);   // Wait
 	//    P0 = RESET_N;               // Release RESET_N
-    printf(" .");
-    fflush(stdout);
+    LOG_ALWAYS(" .");
+    fflush(LOG_DESTINATION_FP);
 	if ( ret == NPI_LNX_SUCCESS )
 	{
 		ret = HalGpioResetSet(RESET_N);
 	}
-	printf(" Entered Debug Mode (ret = %d)\n", ret);
+	LOG_ALWAYS(" Entered Debug Mode (ret = %d)\n", ret);
 
 	return ret;
 }
@@ -569,7 +563,7 @@ int Hal_wait_dup_ready(void)
     // DUP pulls DD low when ready
     uint8 count = 0, byte, res;
 //    while (P0 & DD && count < 16)
-	debug_printf("[DEBUG INTERFACE] Wait for DUP begin\n");
+	LOG_DEBUG("[DEBUG INTERFACE] Wait for DUP begin\n");
     ret = HalGpioDDCheck(DD, &res);
 	while ( (count < 16) && (ret == NPI_LNX_SUCCESS) && (res == 1))
     {
@@ -590,11 +584,11 @@ int Hal_wait_dup_ready(void)
 
 	if (count == 16)
 	{
-		debug_printf("Failed response from DUP\n");
+		LOG_DEBUG("Failed response from DUP\n");
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DUP_READY;
 		return NPI_LNX_FAILURE;
 	}
-	debug_printf("[DEBUG INTERFACE] Wait for DUP done\n");
+	LOG_DEBUG("[DEBUG INTERFACE] Wait for DUP done\n");
 
 	return ret;
 }
@@ -730,7 +724,7 @@ int Hal_read_chip_id(uint8 *chipId)
     	SET_DD_OUTPUT(ret);
     }
 
-    debug_printf("[DEBUG INTERFACE] Chip ID read 0x%.2X (ret = %d)\n", *chipId, ret);
+    LOG_DEBUG("[DEBUG INTERFACE] Chip ID read 0x%.2X (ret = %d)\n", *chipId, ret);
     return ret;
 }
 
@@ -756,10 +750,10 @@ int Hal_read_flash_size(uint8 *chipId, uint32 *returnVal)
 	if (*chipId == 0x00)
 	{
 		Hal_read_chip_id(chipId);
-		printf("Chip ID was not provided. Read from chip: 0x%.2X\n", *chipId);
+		LOG_WARN("Chip ID was not provided. Read from chip: 0x%.2X\n", *chipId);
 	}
 
-	debug_printf("Flash REG: 0x%.2X\n", flashSizeReg);
+	LOG_DEBUG("Flash REG: 0x%.2X\n", flashSizeReg);
 
 	if ((flashSizeReg & 0x70) == 0x10)
 		returnVal[0] = (32*1024);
@@ -855,7 +849,7 @@ int Hal_program_bufferReq()
 
 	if ( ret == NPI_LNX_SUCCESS )
 	{
-	    debug_printf("[DEBUG INTERFACE] Begin writing the image to the chip, @0x%.6X\n",
+	    LOG_DEBUG("[DEBUG INTERFACE] Begin writing the image to the chip, @0x%.6X\n",
 	    		bufferCfg.startAddress);
 		// Program the buffer. This may take a while...
 		uint32 address = bufferCfg.startAddress;
@@ -866,16 +860,16 @@ int Hal_program_bufferReq()
 		if ( (address == 0) && (bufferCfg.size == flashSize) && (ret == NPI_LNX_SUCCESS) )
 		{
 //			debug_
-			printf("[DEBUG INTERFACE] Erase chip\n");
+			LOG_ALWAYS("[DEBUG INTERFACE] Erase chip\n");
 			ret = Hal_chip_erase();
 			if (ret == NPI_LNX_SUCCESS )
 			{
-				debug_printf("[DEBUG INTERFACE] Chip erase successful\n");
+				LOG_DEBUG("[DEBUG INTERFACE] Chip erase successful\n");
 			}
 			else
 			{
 //				debug_
-				printf("[DEBUG INTERFACE] Chip erase reported error, chip may still be erased\n");
+				LOG_ALWAYS("[DEBUG INTERFACE] Chip erase reported error, chip may still be erased\n");
 				pMsg.pData[0] = DEBUG_FLASH_FAILED_TO_WAIT_FOR_RESPONSE;
 			}
 
@@ -888,13 +882,13 @@ int Hal_program_bufferReq()
 				for (; address < bufferCfg.size; address += DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE)
 				{
 //					debug_
-					printf("[DEBUG INTERFACE] Write page %u: \t", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
+					LOG_ALWAYS("[DEBUG INTERFACE] Write page %u: \t", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
 					uint32 tmpAdd = address;
 					for (; tmpAdd < (address + 32); tmpAdd++)
 					{
-						debug_printf("%.2X", flashBuffer[tmpAdd]);
+						LOG_DEBUG("%.2X", flashBuffer[tmpAdd]);
 					}
-					debug_printf("\n");
+					LOG_DEBUG("\n");
 
 					if ( ret == NPI_LNX_SUCCESS )
 					{
@@ -914,7 +908,7 @@ int Hal_program_bufferReq()
 			for (; address < (bufferCfg.size + bufferCfg.startAddress); address += DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE)
 			{
 				// Erase page before writing it.
-				debug_printf("[DEBUG INTERFACE] Erase page %u\n", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
+				LOG_DEBUG("[DEBUG INTERFACE] Erase page %u\n", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
 
 				if ( ret == NPI_LNX_SUCCESS )
 				{
@@ -962,13 +956,13 @@ int Hal_program_bufferReq()
 		    		break;
 		    	}
 
-			    debug_printf("[DEBUG INTERFACE] Write page %u: \t", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
+			    LOG_DEBUG("[DEBUG INTERFACE] Write page %u: \t", address/DEBUG_FLASH_PROGRAM_BUFFER_BLOCK_SIZE);
 				uint32 tmpAdd = address;
 				for (; tmpAdd < (address + 32); tmpAdd++)
 				{
-					debug_printf("%.2X", flashBuffer[tmpAdd]);
+					LOG_DEBUG("%.2X", flashBuffer[tmpAdd]);
 				}
-				debug_printf("\n");
+				LOG_DEBUG("\n");
 
 		    	if ( ret == NPI_LNX_SUCCESS )
 		    	{
@@ -1034,7 +1028,7 @@ int Hal_read_from_chip_to_bufferReq()
 
 	if (ret == NPI_LNX_SUCCESS)
 	{
-	    debug_printf("[DEBUG INTERFACE] Begin reading from chip to buffer\n");
+	    LOG_DEBUG("[DEBUG INTERFACE] Begin reading from chip to buffer\n");
 		// Program the buffer. This may take a while...
 		uint32 address = bufferCfg.startAddress;
 		uint32 flashSize = 0;
@@ -1051,15 +1045,15 @@ int Hal_read_from_chip_to_bufferReq()
 		}
 
 		// In case the wanted area crosses Bank boundaries we need to read in two steps.
-		uint16 readSize = MIN (bufferCfg.size, (0x10000 - xdataAddress - 1));
+		uint16 readSize = MIN (bufferCfg.size, (uint16)(0x10000 - xdataAddress - 1));
 		int bytesLeftToRead = bufferCfg.size - readSize;
 		bufferCfg.numOfBytesWritten = 0;
 		do
 		{
-		    debug_printf("[DEBUG INTERFACE] Reading %d bytes from @0x%.4X, bank %d\n",
-		    		readSize,
-		    		xdataAddress,
-		    		bank);
+			LOG_DEBUG("[DEBUG INTERFACE] Reading %d bytes from @0x%.4X, bank %d\n",
+					readSize,
+					xdataAddress,
+					bank);
 
 			if ( ret == NPI_LNX_SUCCESS )
 			{
@@ -1084,25 +1078,25 @@ int Hal_read_from_chip_to_bufferReq()
 			bytesLeftToRead = bytesLeftToRead - readSize;
 		} while (readSize > 0);
 
-	    debug_printf("[DEBUG INTERFACE] Now in buffer, from @0x%.6X - @0x%.6X\n",
-	    		bufferCfg.startAddress,
-	    		bufferCfg.startAddress + bufferCfg.size);
-	    uint16 k, j;
-	    // Write 16 bytes per row
-	    for (k = 0; k < (bufferCfg.size>>4); k++)
-	    {
-	    	// Tabulate line
-	    	debug_printf("@0x%.6X \t", address+(k*16));
-	    	for (j = 0; j < 16; j+=2)
-	    	{
-	    		// Write 16 bit at a time
-		    	debug_printf("%.2X%.2X ",
-		    			flashBuffer[address+(k*16)+j],
-		    			flashBuffer[address+(k*16)+j+1]);
-	    	}
-	    	// New line
-	    	debug_printf("\n");
-	    }
+	    LOG_DEBUG("[DEBUG INTERFACE] Now in buffer, from @0x%.6X - @0x%.6X\n",
+				bufferCfg.startAddress,
+				bufferCfg.startAddress + bufferCfg.size);
+		uint16 k, j;
+		// Write 16 bytes per row
+		for (k = 0; k < (bufferCfg.size>>4); k++)
+		{
+			// Tabulate line
+			LOG_DEBUG("@0x%.6X \t", address+(k*16));
+			for (j = 0; j < 16; j+=2)
+			{
+				// Write 16 bit at a time
+				LOG_DEBUG("%.2X%.2X ",
+						flashBuffer[address+(k*16)+j],
+						flashBuffer[address+(k*16)+j+1]);
+			}
+			// New line
+			LOG_DEBUG("\n");
+		}
 	}
 
 	// Send the asynchronous response back
@@ -1125,13 +1119,13 @@ int Hal_write_buffer_memory_block(uint32 address, uint32 *values, uint16 num_byt
 	memcpy((uint8 *)&flashBuffer[address], (uint8 *)values, num_bytes);
 	bufferCfg.numOfBytesWritten += num_bytes;
 
-	debug_printf("[DEBUG INTERFACE] Write buffer block %u: \t", address/num_bytes);
+	LOG_DEBUG("[DEBUG INTERFACE] Write buffer block %u: \t", address/num_bytes);
 	uint32 tmpAdd = 0;
 	for (; tmpAdd < num_bytes; tmpAdd++)
 	{
-		debug_printf("%.2X", flashBuffer[tmpAdd + address]);
+		LOG_DEBUG("%.2X", flashBuffer[tmpAdd + address]);
 	}
-	debug_printf("\n");
+	LOG_DEBUG("\n");
 
 	return NPI_LNX_SUCCESS;
 }
@@ -1147,7 +1141,7 @@ int Hal_write_buffer_memory_block(uint32 address, uint32 *values, uint16 num_byt
 ******************************************************************************/
 int Hal_read_buffer_memory_block(uint32 address, uint32 *values, uint16 num_bytes)
 {
-	printf("Reading %d bytes from buffer @0x%.6X\n", num_bytes, address);
+	LOG_DEBUG("Reading %d bytes from buffer @0x%.6X\n", num_bytes, address);
 	memcpy((uint8 *)values, &flashBuffer[address], num_bytes);
 	return NPI_LNX_SUCCESS;
 }
@@ -1238,18 +1232,18 @@ int Hal_chip_erase(void)
 			ret = Hal_debug_command(CMD_READ_STATUS, &status, 1);
 			if (ret != NPI_LNX_SUCCESS)
 			{
-				debug_printf("[DEBUG INTERFACE] Erase chip; couldn't read status\n");
+				LOG_DEBUG("[DEBUG INTERFACE] Erase chip; couldn't read status\n");
 			}
 		} while((status & STATUS_CHIP_ERASE_BUSY_BM));
 	}
 	else
 	{
-		debug_printf("[DEBUG INTERFACE] Failed to send chip erase command\n");
+		LOG_DEBUG("[DEBUG INTERFACE] Failed to send chip erase command\n");
 	}
 
 	if ((!(status & STATUS_CHIP_ERASE_BUSY_BM)) && (ret == NPI_LNX_SUCCESS) )
 	{
-		debug_printf("[DEBUG INTERFACE] Erase chip; chip erase no longer busy\n");
+		LOG_DEBUG("[DEBUG INTERFACE] Erase chip; chip erase no longer busy\n");
 	}
 
 	return ret;
@@ -1275,12 +1269,12 @@ int Hal_write_xdata_memory_block(uint16 address, uint8 *values, uint16 num_bytes
     instr[1] = HIBYTE(address);
     instr[2] = LOBYTE(address);
     ret = Hal_debug_command(CMD_DEBUG_INSTR_3B, instr, 3);
-	debug_printf("Write XDATA address @%.2X%.2X", instr[1], instr[2]);
+	LOG_DEBUG("Write XDATA address @%.2X%.2X", instr[1], instr[2]);
 
-	debug_printf("Write ");
+	LOG_DEBUG("Write ");
     for (i = 0; i < num_bytes; i++)
     {
-    	debug_printf(" %.2X", values[i]);
+    	LOG_DEBUG(" %.2X", values[i]);
     	// MOV A, values[i]
     	instr[0] = 0x74;
     	instr[1] = values[i];
@@ -1303,8 +1297,8 @@ int Hal_write_xdata_memory_block(uint16 address, uint8 *values, uint16 num_bytes
     		ret = Hal_debug_command(CMD_DEBUG_INSTR_1B, instr, 1);
     	}
     }
-    debug_printf("\n");
-	debug_printf("to @0x.%4X\n", address);
+    LOG_DEBUG("\n");
+	LOG_DEBUG("to @0x.%4X\n", address);
 
     return ret;
 }
@@ -1408,16 +1402,16 @@ int Hal_read_xdata_memory(uint16 address, uint8 *byte)
     	if (ret == NPI_LNX_SUCCESS)
     	{
     		*byte = instr[0];
-    		debug_printf("[DEBUG INTERFACE] Read XDATA memory, SUCCESS\n");
+    		LOG_DEBUG("[DEBUG INTERFACE] Read XDATA memory, SUCCESS\n");
     	}
     	else
 		{
-			debug_printf("[DEBUG INTERFACE] Read XDATA memory, failed CMD_DEBUG_INSTR_1B\n");
+			LOG_DEBUG("[DEBUG INTERFACE] Read XDATA memory, failed CMD_DEBUG_INSTR_1B\n");
 		}
     }
 	else
 	{
-		debug_printf("[DEBUG INTERFACE] Read XDATA memory, failed CMD_DEBUG_INSTR_3B\n");
+		LOG_DEBUG("[DEBUG INTERFACE] Read XDATA memory, failed CMD_DEBUG_INSTR_3B\n");
 	}
 
     return ret;
@@ -1545,13 +1539,13 @@ int Hal_write_flash_memory_block(uint8 *src, uint32 start_addr,
     	ret = Hal_write_xdata_memory(DUP_DMAARM, CH_DBG_TO_BUF0);
     }
 
-    debug_printf("[DEBUG INTERFACE] Burst write from @%p to @0x%.4X\t", src, start_addr>>2);
+    LOG_DEBUG("[DEBUG INTERFACE] Burst write from @%p to @0x%.4X\t", src, start_addr>>2);
     uint32 tmpAdd;
     for (tmpAdd = 0; tmpAdd < 32; tmpAdd++)
     {
-    	debug_printf("%.2X", src[tmpAdd]);
+    	LOG_DEBUG("%.2X", src[tmpAdd]);
     }
-    debug_printf("\n");
+    LOG_DEBUG("\n");
     if (ret == NPI_LNX_SUCCESS)
     {
     	ret = Hal_burst_write_block(src, num_bytes);
@@ -1595,7 +1589,7 @@ int Hal_write_flash_memory_block(uint8 *src, uint32 start_addr,
  **************************************************************************************************/
 void HalGpioDDClose(void)
 {
-	printf("dd close\n");
+	LOG_ALWAYS("dd close\n");
 	close(gpioDDFd_val);
 	if (gpioDDFd_level_val_exists == TRUE)
 	{
@@ -1615,7 +1609,7 @@ void HalGpioDDClose(void)
  **************************************************************************************************/
 void HalGpioDCClose(void)
 {
-	printf("dc close\n");
+	LOG_ALWAYS("dc close\n");
 	close(gpioDCFd);
 }
 
@@ -1634,11 +1628,11 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 	memcpy(ddGpioCfg.gpio.value,
 			gpioCfg->gpio.value,
 			strlen(gpioCfg->gpio.value));
-	debug_printf("[GPIO]ddGpioCfg.gpio.value = '%s'\n", ddGpioCfg.gpio.value);
+	LOG_DEBUG("[GPIO]ddGpioCfg.gpio.value = '%s'\n", ddGpioCfg.gpio.value);
 	memcpy(ddGpioCfg.gpio.direction,
 			gpioCfg->gpio.direction,
 			strlen(gpioCfg->gpio.direction));
-	debug_printf("[GPIO]ddGpioCfg.gpio.direction = '%s'\n", ddGpioCfg.gpio.direction);
+	LOG_DEBUG("[GPIO]ddGpioCfg.gpio.direction = '%s'\n", ddGpioCfg.gpio.direction);
 
 	ddGpioCfg.gpio.active_high_low = gpioCfg->gpio.active_high_low;
 
@@ -1646,7 +1640,7 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 	memcpy(ddGpioCfg.gpio.edge,
 			gpioCfg->gpio.edge,
 			strlen(gpioCfg->gpio.edge));
-	debug_printf("[GPIO]ddGpioCfg.gpio.edge = '%s'\n", ddGpioCfg.gpio.edge);
+	LOG_DEBUG("[GPIO]ddGpioCfg.gpio.edge = '%s'\n", ddGpioCfg.gpio.edge);
 #endif
 
 	if ( ( gpioCfg->levelshifter.value) &&
@@ -1657,19 +1651,19 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 		memcpy(ddGpioCfg.levelshifter.value,
 				gpioCfg->levelshifter.value,
 				strlen(gpioCfg->levelshifter.value));
-		debug_printf("[GPIO]ddGpioCfg.levelshifter.value = '%s'\n", ddGpioCfg.levelshifter.value);
+		LOG_DEBUG("[GPIO]ddGpioCfg.levelshifter.value = '%s'\n", ddGpioCfg.levelshifter.value);
 		memcpy(ddGpioCfg.levelshifter.direction,
 				gpioCfg->levelshifter.direction,
 				strlen(gpioCfg->levelshifter.direction));
 		ddGpioCfg.levelshifter.active_high_low = gpioCfg->levelshifter.active_high_low;
-		debug_printf("[GPIO]ddGpioCfg.levelshifter.direction = '%s'\n", ddGpioCfg.levelshifter.direction);
+		LOG_DEBUG("[GPIO]ddGpioCfg.levelshifter.direction = '%s'\n", ddGpioCfg.levelshifter.direction);
 
 		//open the GPIO DIR file for the level shifter direction signal
 		gpioDDFd_level_val = open(ddGpioCfg.levelshifter.direction, O_RDWR);
 		if(gpioDDFd_level_val == 0)
 		{
 			perror(ddGpioCfg.levelshifter.direction);
-			debug_printf("\n[GPIO]%s open failed\n",ddGpioCfg.levelshifter.direction);
+			LOG_DEBUG("[GPIO]%s open failed\n",ddGpioCfg.levelshifter.direction);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_LVLSHFT_DIR_OPEN;
 			return NPI_LNX_FAILURE;
 		}
@@ -1678,7 +1672,7 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 		if (ERROR == write(gpioDDFd_level_val, "out", 3))
 		{
 			perror(ddGpioCfg.levelshifter.direction);
-			debug_printf("\n[GPIO]can't write in %s \n",ddGpioCfg.levelshifter.direction);
+			LOG_DEBUG("[GPIO]can't write in %s \n",ddGpioCfg.levelshifter.direction);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_LVLSHFT_DIR_WRITE;
 			return NPI_LNX_FAILURE;
 		}
@@ -1690,7 +1684,7 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 		if(gpioDDFd_level_val == 0)
 		{
 			perror(ddGpioCfg.levelshifter.value);
-			debug_printf("[GPIO]%s open failed\n",ddGpioCfg.levelshifter.value);
+			LOG_DEBUG("[GPIO]%s open failed\n",ddGpioCfg.levelshifter.value);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_LVLSHFT_VAL_OPEN;
 			return NPI_LNX_FAILURE;
 		}
@@ -1700,7 +1694,7 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 		if (ERROR == write(gpioDDFd_val, "1", 1))
 		{
 			perror(ddGpioCfg.levelshifter.value);
-			debug_printf("\n[GPIO]can't write in %s \n",ddGpioCfg.levelshifter.value);
+			LOG_DEBUG("[GPIO]can't write in %s \n",ddGpioCfg.levelshifter.value);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_LVLSHFT_VAL_WRITE;
 			return NPI_LNX_FAILURE;
 		}
@@ -1709,11 +1703,11 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 	}
 	else
 	{
-		debug_printf("WARNING: Wrong Configuration File, one of the  following Key value are missing for DD.Level Shifter definition: '\n");
-		debug_printf("value: %s\n", ddGpioCfg.gpio.value);
-		debug_printf("direction: %s\n", ddGpioCfg.gpio.direction);
-		debug_printf("active_high_low: %d\n", ddGpioCfg.gpio.active_high_low);
-		debug_printf("Level Shifter is optional, please check if you need it or not before continuing...\n");
+		LOG_DEBUG("WARNING: Wrong Configuration File, one of the  following Key value are missing for DD.Level Shifter definition: '\n");
+		LOG_DEBUG("value: %s\n", ddGpioCfg.gpio.value);
+		LOG_DEBUG("direction: %s\n", ddGpioCfg.gpio.direction);
+		LOG_DEBUG("active_high_low: %d\n", ddGpioCfg.gpio.active_high_low);
+		LOG_DEBUG("Level Shifter is optional, please check if you need it or not before continuing...\n");
 		gpioDDFd_level_val_exists = FALSE;
 	}
 	//TODO: Lock the shift register GPIO.
@@ -1723,7 +1717,7 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 	if(gpioDDFd_gpio_dir == 0)
 	{
 		perror(ddGpioCfg.gpio.direction);
-		debug_printf("[GPIO]%s open failed\n",ddGpioCfg.gpio.direction);
+		LOG_DEBUG("[GPIO]%s open failed\n",ddGpioCfg.gpio.direction);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_DIR_OPEN;
 	    return NPI_LNX_FAILURE;
 	}
@@ -1732,7 +1726,7 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 	if(ERROR == write(gpioDDFd_gpio_dir, "out", 3))
 	{
 		perror(ddGpioCfg.gpio.direction);
-		debug_printf("\n[GPIO]can't write in %s \n",ddGpioCfg.gpio.direction);
+		LOG_DEBUG("[GPIO]can't write in %s \n",ddGpioCfg.gpio.direction);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_DIR_WRITE;
 	    return NPI_LNX_FAILURE;
 	}
@@ -1743,7 +1737,7 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 	if(gpioDDFd_val == 0)
 	{
 		perror(ddGpioCfg.gpio.value);
-		debug_printf("%s open failed\n",ddGpioCfg.gpio.value);
+		LOG_DEBUG("%s open failed\n",ddGpioCfg.gpio.value);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_VAL_OPEN;
 	    return NPI_LNX_FAILURE;
 	}
@@ -1753,7 +1747,7 @@ int HalGpioDDInit(halGpioCfg_t *gpioCfg)
 	if (ERROR == write(gpioDDFd_val, "0", 1))
 	{
 		perror(ddGpioCfg.gpio.value);
-		debug_printf("\n[GPIO]can't write in %s \n",ddGpioCfg.gpio.value);
+		LOG_DEBUG("[GPIO]can't write in %s \n",ddGpioCfg.gpio.value);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_VAL_WRITE;
 	    return NPI_LNX_FAILURE;
 	}
@@ -1775,14 +1769,14 @@ int halGpioDDSetDirection(uint8 direction)
 	if(gpioDDFd_gpio_dir == 0)
 	{
 		perror(ddGpioCfg.gpio.direction);
-		debug_printf("[GPIO]%s not open\n",ddGpioCfg.gpio.direction);
+		LOG_DEBUG("[GPIO]%s not open\n",ddGpioCfg.gpio.direction);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_DIR_OPEN;
 	    return NPI_LNX_FAILURE;
 	}
 	if( (gpioDDFd_level_val == 0) && (gpioDDFd_level_val_exists == TRUE))
 	{
 		perror(ddGpioCfg.levelshifter.value);
-		debug_printf("[GPIO]%s not open\n",ddGpioCfg.levelshifter.value);
+		LOG_DEBUG("[GPIO]%s not open\n",ddGpioCfg.levelshifter.value);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_DIR_OPEN;
 	    return NPI_LNX_FAILURE;
 	}
@@ -1793,7 +1787,7 @@ int halGpioDDSetDirection(uint8 direction)
 		if(ERROR == write(gpioDDFd_gpio_dir, "in", 2))
 		{
 			perror(ddGpioCfg.gpio.direction);
-			debug_printf("\n[GPIO]can't write in %s \n",ddGpioCfg.gpio.direction);
+			LOG_DEBUG("[GPIO]can't write in %s \n",ddGpioCfg.gpio.direction);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_DIR_WRITE;
 			return NPI_LNX_FAILURE;
 		}
@@ -1802,13 +1796,13 @@ int halGpioDDSetDirection(uint8 direction)
 			if(ERROR == write(gpioDDFd_level_val, "0", 1))
 			{
 				perror(ddGpioCfg.levelshifter.value);
-				debug_printf("\n[GPIO]can't write in %s \n",ddGpioCfg.levelshifter.value);
+				LOG_DEBUG("[GPIO]can't write in %s \n",ddGpioCfg.levelshifter.value);
 				npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_DIR_WRITE;
 				return NPI_LNX_FAILURE;
 			}
 		}
 
-		debug_printf("Direction set successfully for DD to IN\n");
+		LOG_DEBUG("Direction set successfully for DD to IN\n");
 	}
 	else
 	{
@@ -1816,7 +1810,7 @@ int halGpioDDSetDirection(uint8 direction)
 		if(ERROR == write(gpioDDFd_gpio_dir, "out", 3))
 		{
 			perror(ddGpioCfg.gpio.direction);
-			debug_printf("\n[GPIO]can't write in %s \n",ddGpioCfg.gpio.direction);
+			LOG_DEBUG("[GPIO]can't write in %s \n",ddGpioCfg.gpio.direction);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_DIR_WRITE;
 			return NPI_LNX_FAILURE;
 		}
@@ -1825,13 +1819,13 @@ int halGpioDDSetDirection(uint8 direction)
 			if(ERROR == write(gpioDDFd_level_val, "1", 1))
 			{
 				perror(ddGpioCfg.levelshifter.value);
-				debug_printf("\n[GPIO]can't write in %s \n",ddGpioCfg.levelshifter.value);
+				LOG_DEBUG("[GPIO]can't write in %s \n",ddGpioCfg.levelshifter.value);
 				npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_DIR_WRITE;
 				return NPI_LNX_FAILURE;
 			}
 		}
 
-		debug_printf("Direction set successfully for DD to OUT\n");
+		LOG_DEBUG("Direction set successfully for DD to OUT\n");
 	}
 
 	return NPI_LNX_SUCCESS;
@@ -1852,11 +1846,11 @@ int HalGpioDCInit(halGpioCfg_t *gpioCfg)
 	memcpy(dcGpioCfg.gpio.value,
 			gpioCfg->gpio.value,
 			strlen(gpioCfg->gpio.value));
-	debug_printf("[GPIO]dcGpioCfg.gpio.value = '%s'\n", dcGpioCfg.gpio.value);
+	LOG_DEBUG("[GPIO]dcGpioCfg.gpio.value = '%s'\n", dcGpioCfg.gpio.value);
 	memcpy(dcGpioCfg.gpio.direction,
 			gpioCfg->gpio.direction,
 			strlen(gpioCfg->gpio.direction));
-	debug_printf("[GPIO]dcGpioCfg.gpio.direction = '%s'\n", dcGpioCfg.gpio.direction);
+	LOG_DEBUG("[GPIO]dcGpioCfg.gpio.direction = '%s'\n", dcGpioCfg.gpio.direction);
 	dcGpioCfg.gpio.active_high_low = gpioCfg->gpio.active_high_low;
 
 	if ( ( gpioCfg->levelshifter.value) &&
@@ -1866,19 +1860,19 @@ int HalGpioDCInit(halGpioCfg_t *gpioCfg)
 		memcpy(dcGpioCfg.levelshifter.value,
 				gpioCfg->levelshifter.value,
 				strlen(gpioCfg->levelshifter.value));
-		debug_printf("[GPIO]dcGpioCfg.levelshifter.value = '%s'\n", dcGpioCfg.levelshifter.value);
+		LOG_DEBUG("[GPIO]dcGpioCfg.levelshifter.value = '%s'\n", dcGpioCfg.levelshifter.value);
 		memcpy(dcGpioCfg.levelshifter.direction,
 				gpioCfg->levelshifter.direction,
 				strlen(gpioCfg->levelshifter.direction));
 		dcGpioCfg.levelshifter.active_high_low = gpioCfg->levelshifter.active_high_low;
-		debug_printf("[GPIO]dcGpioCfg.levelshifter.direction = '%s'\n", dcGpioCfg.levelshifter.direction);
+		LOG_DEBUG("[GPIO]dcGpioCfg.levelshifter.direction = '%s'\n", dcGpioCfg.levelshifter.direction);
 
 		//open the GPIO DIR file for the level shifter direction signal
 		gpioDCFd = open(dcGpioCfg.levelshifter.direction, O_RDWR);
 		if(gpioDCFd == 0)
 		{
 			perror(dcGpioCfg.levelshifter.direction);
-			debug_printf("[GPIO]%s open failed\n",dcGpioCfg.levelshifter.direction);
+			LOG_DEBUG("[GPIO]%s open failed\n",dcGpioCfg.levelshifter.direction);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_LVLSHFT_DIR_OPEN;
 			return NPI_LNX_FAILURE;
 		}
@@ -1887,7 +1881,7 @@ int HalGpioDCInit(halGpioCfg_t *gpioCfg)
 		if(ERROR == write(gpioDCFd, "out", 3))
 		{
 			perror(dcGpioCfg.levelshifter.direction);
-			debug_printf("\n[GPIO]can't write in %s \n",dcGpioCfg.levelshifter.direction);
+			LOG_DEBUG("[GPIO]can't write in %s \n",dcGpioCfg.levelshifter.direction);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_LVLSHFT_DIR_WRITE;
 			return NPI_LNX_FAILURE;
 		}
@@ -1899,7 +1893,7 @@ int HalGpioDCInit(halGpioCfg_t *gpioCfg)
 		if(gpioDCFd == 0)
 		{
 			perror(dcGpioCfg.levelshifter.value);
-			debug_printf("[GPIO]%s open failed\n",dcGpioCfg.levelshifter.value);
+			LOG_DEBUG("[GPIO]%s open failed\n",dcGpioCfg.levelshifter.value);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_LVLSHFT_VAL_OPEN;
 			return NPI_LNX_FAILURE;
 		}
@@ -1908,7 +1902,7 @@ int HalGpioDCInit(halGpioCfg_t *gpioCfg)
 		if(ERROR == write(gpioDCFd, "1", 1))
 		{
 			perror(dcGpioCfg.levelshifter.value);
-			debug_printf("\n[GPIO]can't write in %s \n",dcGpioCfg.levelshifter.value);
+			LOG_DEBUG("[GPIO]can't write in %s \n",dcGpioCfg.levelshifter.value);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_LVLSHFT_VAL_WRITE;
 			return NPI_LNX_FAILURE;
 		}
@@ -1917,11 +1911,11 @@ int HalGpioDCInit(halGpioCfg_t *gpioCfg)
 	}
 	else
 	{
-		debug_printf("WARNING: Wrong Configuration File, one of the  following Key value are missing for DC.Level Shifter definition: '\n");
-		debug_printf("value: %s\n", dcGpioCfg.gpio.value);
-		debug_printf("direction: %s\n", dcGpioCfg.gpio.direction);
-		debug_printf("active_high_low: %d\n", dcGpioCfg.gpio.active_high_low);
-		debug_printf("Level Shifter is optional, please check if you need it or not before continuing...\n");
+		LOG_DEBUG("WARNING: Wrong Configuration File, one of the  following Key value are missing for DC.Level Shifter definition: '\n");
+		LOG_DEBUG("value: %s\n", dcGpioCfg.gpio.value);
+		LOG_DEBUG("direction: %s\n", dcGpioCfg.gpio.direction);
+		LOG_DEBUG("active_high_low: %d\n", dcGpioCfg.gpio.active_high_low);
+		LOG_DEBUG("Level Shifter is optional, please check if you need it or not before continuing...\n");
 	}
 
 	//open the DC GPIO DIR file
@@ -1929,7 +1923,7 @@ int HalGpioDCInit(halGpioCfg_t *gpioCfg)
 	if(gpioDCFd == 0)
 	{
 		perror(dcGpioCfg.gpio.direction);
-		debug_printf("[GPIO]%s open failed\n",dcGpioCfg.gpio.direction);
+		LOG_DEBUG("[GPIO]%s open failed\n",dcGpioCfg.gpio.direction);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_GPIO_DIR_OPEN;
 	    return NPI_LNX_FAILURE;
 	}
@@ -1938,7 +1932,7 @@ int HalGpioDCInit(halGpioCfg_t *gpioCfg)
 	if(ERROR == write(gpioDCFd, "out", 3))
 	{
 		perror(dcGpioCfg.gpio.direction);
-		debug_printf("\n[GPIO]can't write in %s \n",dcGpioCfg.gpio.direction);
+		LOG_DEBUG("[GPIO]can't write in %s \n",dcGpioCfg.gpio.direction);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_GPIO_DIR_WRITE;
 	    return NPI_LNX_FAILURE;
 	}
@@ -1950,7 +1944,7 @@ int HalGpioDCInit(halGpioCfg_t *gpioCfg)
 	if(gpioDCFd == 0)
 	{
 		perror(dcGpioCfg.gpio.value);
-		debug_printf("[GPIO]%s open failed\n",dcGpioCfg.gpio.value);
+		LOG_DEBUG("[GPIO]%s open failed\n",dcGpioCfg.gpio.value);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_GPIO_VAL_OPEN;
 	    return NPI_LNX_FAILURE;
 	}
@@ -1960,7 +1954,7 @@ int HalGpioDCInit(halGpioCfg_t *gpioCfg)
 	if (ERROR == write(gpioDCFd, "0", 1))
 	{
 		perror(dcGpioCfg.gpio.value);
-		debug_printf("\n[GPIO]can't write in %s \n",dcGpioCfg.gpio.value);
+		LOG_DEBUG("[GPIO]can't write in %s \n",dcGpioCfg.gpio.value);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_GPIO_VAL_WRITE;
 	    return NPI_LNX_FAILURE;
 	}
@@ -1982,22 +1976,22 @@ int halGpioDCSet(uint8 state)
 {
 	if(state == 0)
 	{
-		debug_printf("[GPIO]DC set to low\n");
+		LOG_DEBUG("[GPIO]DC set to low\n");
 		if (ERROR == write(gpioDCFd, "0", 1))
 		{
 			perror(dcGpioCfg.gpio.value);
-			debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",dcGpioCfg.gpio.value);
+			LOG_DEBUG("[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",dcGpioCfg.gpio.value);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_GPIO_VAL_WRITE_SET_LOW;
 		    return NPI_LNX_FAILURE;
 		}
 	}
 	else
 	{
-		debug_printf("[GPIO]DC set to High\n");
+		LOG_DEBUG("[GPIO]DC set to High\n");
     	if(ERROR == write(gpioDCFd, "1", 1))
 		{
 			perror(dcGpioCfg.gpio.value);
-			debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",dcGpioCfg.gpio.value);
+			LOG_DEBUG("[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",dcGpioCfg.gpio.value);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_GPIO_VAL_WRITE_SET_HIGH;
 			return NPI_LNX_FAILURE;
 		}
@@ -2024,16 +2018,16 @@ int HalGpioDCCheck(uint8 state, uint8 *match)
 	if(ERROR == read(gpioDCFd,&dc, 1))
 	{
 		perror(dcGpioCfg.gpio.value);
-		debug_printf("\ncan't read in %s , is something already accessing it? abort everything for debug purpose...\n",dcGpioCfg.gpio.value);
+		LOG_DEBUG("can't read in %s , is something already accessing it? abort everything for debug purpose...\n",dcGpioCfg.gpio.value);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DC_GPIO_VAL_READ;
 		return NPI_LNX_FAILURE;
 	}
 
-	debug_printf("[GPIO]===>check DC: %c  (%d) \n", dc, state);
+	LOG_DEBUG("[GPIO]===>check DC: %c  (%d) \n", dc, state);
 
 	*match = (state == ((dc == '1') ? 1 : 0));
 
-	debug_printf("[GPIO] match %d\n", *match);
+	LOG_DEBUG("[GPIO] match %d\n", *match);
 
 	return NPI_LNX_SUCCESS;
 }
@@ -2052,22 +2046,22 @@ int halGpioDDSet(uint8 state)
 {
 	if(state == 0)
 	{
-		debug_printf("[GPIO]DD set to low\n");
+		LOG_DEBUG("[GPIO]DD set to low\n");
 		if (ERROR == write(gpioDDFd_val, "0", 1))
 		{
 			perror(ddGpioCfg.gpio.value);
-			debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",ddGpioCfg.gpio.value);
+			LOG_DEBUG("[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",ddGpioCfg.gpio.value);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_VAL_WRITE_SET_LOW;
 		    return NPI_LNX_FAILURE;
 		}
 	}
 	else
 	{
-		debug_printf("[GPIO]DD set to High\n");
+		LOG_DEBUG("[GPIO]DD set to High\n");
     	if(ERROR == write(gpioDDFd_val, "1", 1))
 		{
 			perror(ddGpioCfg.gpio.value);
-			debug_printf("\n[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",ddGpioCfg.gpio.value);
+			LOG_DEBUG("[GPIO]can't write in %s , is something already accessing it? abort everything for debug purpose...\n",ddGpioCfg.gpio.value);
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_VAL_WRITE_SET_HIGH;
 			return NPI_LNX_FAILURE;
 		}
@@ -2095,16 +2089,16 @@ int HalGpioDDCheck(uint8 state, uint8 *match)
 	if(ERROR == read(gpioDDFd_val,&dd, 1))
 	{
 		perror(ddGpioCfg.gpio.value);
-		debug_printf("\n[GPIO]can't read in %s , is something already accessing it? abort everything for debug purpose...\n",ddGpioCfg.gpio.value);
+		LOG_DEBUG("[GPIO]can't read in %s , is something already accessing it? abort everything for debug purpose...\n",ddGpioCfg.gpio.value);
 		npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_DD_GPIO_VAL_READ_FAILED;
 		return NPI_LNX_FAILURE;
 	}
 
-	debug_printf("[GPIO]===>check dd: %c  (%d) \n", dd, state);
+	LOG_DEBUG("[GPIO]===>check dd: %c  (%d) \n", dd, state);
 
 	*match = (state == ((dd == '1') ? 1 : 0));
 
-	debug_printf("[GPIO] match %d\n", *match);
+	LOG_DEBUG("[GPIO] match %d\n", *match);
 
 	return NPI_LNX_SUCCESS;
 }
@@ -2130,7 +2124,7 @@ int HalGpioWaitDDClr(void)
 	char dd= '1';
 	int ret = NPI_LNX_SUCCESS;
 
-	debug_printf("[GPIO]Wait DD Low, \n");
+	LOG_DEBUG("[GPIO]Wait DD Low, \n");
 
 	struct pollfd ufds[1];
 	int pollRet;
@@ -2139,7 +2133,8 @@ int HalGpioWaitDDClr(void)
 //	ufds[0].events = POLLPRI;
 
 #ifdef __DEBUG_TIME__
-	time_printf("DD: wait to go Low\n");
+	clock_gettime(CLOCK_MONOTONIC, &currentTime);
+	time_printf_always_localized(NULL, &currentTime, &previousTime, "%s\n", "DD: wait to go Low");
 #endif //(defined __DEBUG_TIME__)
 
 	while(dd == '1')
@@ -2153,7 +2148,7 @@ int HalGpioWaitDDClr(void)
 		else if (pollRet == 0)
 		{
 			// Timeout
-			printf("[GPIO][WARNING] Waiting for DD to go low timed out.\n");
+			LOG_WARN("[GPIO] Waiting for DD to go low timed out.\n");
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DD_CLEAR_POLL_TIMEDOUT;
 			ret = NPI_LNX_FAILURE;
 			break;
@@ -2167,30 +2162,31 @@ int HalGpioWaitDDClr(void)
 				if(ERROR == read(gpioDDFd_val,&dd, 1))
 				{
 					perror(ddGpioCfg.gpio.value);
-					debug_printf("\n[GPIO]can't read in %s , is something already accessing it? abort everything for debug purpose...\n",ddGpioCfg.gpio.value);
+					LOG_DEBUG("[GPIO]can't read in %s , is something already accessing it? abort everything for debug purpose...\n",ddGpioCfg.gpio.value);
 					npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DD_CLEAR_READ_FAILED;
 					return NPI_LNX_FAILURE;
 				}
-				debug_printf("[0x%.2X , %c(0x%.2X)]", atoi(&dd), dd, (unsigned int)dd);
+				LOG_DEBUG("[0x%.2X , %c(0x%.2X)]", atoi(&dd), dd, (unsigned int)dd);
 			}
 			else
 			{
-				printf("[GPIO](%d)", ufds[0].revents);
+				LOG_INFO("[GPIO](%d)", ufds[0].revents);
 			}
 		}
 	}
 #ifdef __DEBUG_TIME__
-	char tmpStr[100];
-	snprintf(tmpStr, sizeof(tmpStr), "dd: %c  (0x%02X)\n", dd, (unsigned int)dd);
-	time_printf(tmpStr);
+	clock_gettime(CLOCK_MONOTONIC, &currentTime);
+	time_printf_always_localized(NULL, &currentTime, &previousTime, "dd: %c  (0x%02X)\n", dd, (unsigned int)dd);
 #endif //(defined __DEBUG_TIME__)
 
 
 #ifdef __STRESS_TEST__
-	time_printf("DD Low\n");
+  //	debug_
+	clock_gettime(CLOCK_MONOTONIC, &currentTime);
+	time_printf_always_localized(NULL, &currentTime, &prevTimeI2C, "%s\n", "DD Low"); // TORBJORN: Is this right?  Using prevTimeI2C here?!
 #endif //__STRESS_TEST__
 
-  debug_printf("[GPIO]==>dd change to : %c  (0x%02X)\n", dd, (unsigned int)dd);
+  LOG_DEBUG("[GPIO]==>dd change to : %c  (0x%02X)\n", dd, (unsigned int)dd);
 
   return ret;
 }
@@ -2218,7 +2214,7 @@ int HalGpioWaitDDSet()
 
 	int ret = NPI_LNX_SUCCESS;
 
-	debug_printf("[GPIO]Wait DD High, \n");
+	LOG_DEBUG("[GPIO]Wait DD High, \n");
 
 	struct pollfd ufds[1];
 	int pollRet;
@@ -2226,7 +2222,8 @@ int HalGpioWaitDDSet()
 	ufds[0].events = POLLIN | POLLPRI;
 
 #ifdef __DEBUG_TIME__
-	time_printf("DD: wait to go High\n");
+	clock_gettime(CLOCK_MONOTONIC, &currentTime);
+	time_printf_always_localized(NULL, &currentTime, &previousTime, "%s\n", "DD: wait to go High");
 #endif //(defined __DEBUG_TIME__)
 
 	while( (dd == '0') )
@@ -2240,7 +2237,7 @@ int HalGpioWaitDDSet()
 		else if (pollRet == 0)
 		{
 			// Timeout
-			printf("[GPIO][WARNING] Waiting for DD to go high timed out.\n");
+			LOG_WARN("[GPIO] Waiting for DD to go high timed out.\n");
 			npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DD_SET_POLL_TIMEDOUT;
 			ret = NPI_LNX_FAILURE;
 			break;
@@ -2253,25 +2250,24 @@ int HalGpioWaitDDSet()
 				if(ERROR == read(gpioDDFd_val,&dd, 1))
 				{
 					perror(ddGpioCfg.gpio.value);
-					debug_printf("\n[GPIO]can't read in %s , is something already accessing it? abort everything for debug purpose...\n",ddGpioCfg.gpio.value);
+					LOG_DEBUG("[GPIO]can't read in %s , is something already accessing it? abort everything for debug purpose...\n",ddGpioCfg.gpio.value);
 					npi_ipc_errno = NPI_LNX_ERROR_HAL_DBG_IFC_WAIT_DD_SET_READ_FAILED;
 					return NPI_LNX_FAILURE;
 				}
 			}
 			else
 			{
-				printf("[GPIO](%d)", ufds[0].revents);
+				LOG_INFO("[GPIO](%d)", ufds[0].revents);
 			}
 		}
 	}
 
 #ifdef __DEBUG_TIME__
-	char tmpStr[100];
-	snprintf(tmpStr, sizeof(tmpStr), "DD: %c  (0x%02X)\n", dd, (unsigned int)dd);
-	time_printf(tmpStr);
+	clock_gettime(CLOCK_MONOTONIC, &currentTime);
+	time_printf_always_localized(NULL, &currentTime, &previousTime, "DD: %c  (0x%02X)\n", dd, (unsigned int)dd);
 #endif //__DEBUG_TIME__
 
-	debug_printf("[GPIO]==>DD change to : %c  (0x%02X) \n", dd, (unsigned int)dd);
+	LOG_DEBUG("[GPIO]==>DD change to : %c  (0x%02X) \n", dd, (unsigned int)dd);
 
 	return ret;
 }

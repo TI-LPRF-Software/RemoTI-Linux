@@ -71,7 +71,7 @@ int NPI_LNX_IPC_NotifyError(uint16 source, const char* errorMsg);
  * 6-7:	Module (natural parent module)	 (Example: Serial Interface)
  */
 #define NPI_LNX_SUCCESS												0x00000000
-#define NPI_LNX_FAILURE												0xFFFFFFFF
+#define NPI_LNX_FAILURE												(int)0xFFFFFFFF // Cast to int because just about everywere its put into an int and this avoids warnings about comparing signed/unsigned.
 #define NPI_LNX_UINT8_ERROR											0xFF
 // Reserved error code. This must not be used as it is a valid return value.
 #define NPI_LNX_ERROR_RESERVED										0x00000001

@@ -35,11 +35,11 @@
    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 **************************************************************************************************/
-
+#include "unistd.h"
 #include "configParser.h"
 #include "pthread.h"
 #include "common_app.h"
-#include "lprfLogging.h"
+#include "tiLogging.h"
 
 static FILE *configFileFd;
 static FILE *shadowFileFd;
@@ -132,6 +132,10 @@ void ConfigParserClose()
 	}
 	if (shadowFileFd)
 	{
+		// Flush stream
+		fflush(shadowFileFd);
+		// Immediately commit changes to disk.
+		fsync(fileno(shadowFileFd));
 		// Close previous file descriptor if it exist.
 		fclose(shadowFileFd);
 		shadowFileFd = NULL;
@@ -172,7 +176,7 @@ int ConfigParserGetBaseSettings(appBaseSetting_s *baseSettings)
 			{
 				baseSettings->debug.app = strtol(strBuf, NULL, 10);
 				__APP_LOG_LEVEL = baseSettings->debug.app;
-				LOG_TRACE("[CFG_PRS] baseSettings->debug.app = 0x%.2X\n", baseSettings->debug.app);
+				LOG_ALWAYS("[CFG_PRS] Updated logging level - baseSettings->debug.app = 0x%.2X\n", baseSettings->debug.app);
 			}
 			else
 			{
@@ -516,7 +520,7 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 					resString[strlen(resString) - 1] = '\0';
 
 					LOG_TRACE2("[CFG_PRS]Found line < 2048 bytes");
-					fflush(stdout);
+					fflush(LOG_DESTINATION_FP);
 					if (resString[0] == '[')
 					{
 						LOG_TRACE2("[CFG_PRS]Found section %s\n", resString);
