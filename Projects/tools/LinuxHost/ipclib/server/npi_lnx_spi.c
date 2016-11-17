@@ -802,7 +802,7 @@ int NPI_SPI_SendSynchData( npiMsgData_t *pMsg )
 									snprintf(tmpStr, sizeof(tmpStr) - strIndex, " 0x%.2X", pMsg->pData[i]);
 									strIndex += 5;
 								}
-								snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "%s \n", tmpStr);
+								snprintf(tmpStr + strIndex, sizeof(tmpStr) - strIndex, "\n");
 								time_printf(tmpStr);
 							}
 						}

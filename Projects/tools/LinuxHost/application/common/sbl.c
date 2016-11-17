@@ -670,55 +670,74 @@ static int sbExec(uint8 *pBuf, int length)
 
 static void SoftwareVersionToString(char *retStr, int maxStrLen, swVerExtended_t* swVerExtended)
 {
-	static char tmpStr[1024];
-	snprintf(tmpStr, sizeof(tmpStr), "Extended Software Version:\n");
-	snprintf(tmpStr, sizeof(tmpStr), "%s\tMajor:\t%d\n", tmpStr, swVerExtended->major);
-	snprintf(tmpStr, sizeof(tmpStr), "%s\tMinor:\t%d\n", tmpStr, swVerExtended->minor);
-	snprintf(tmpStr, sizeof(tmpStr), "%s\tPatch:\t%d\n", tmpStr, swVerExtended->patch);
-	snprintf(tmpStr, sizeof(tmpStr), "%s\tOptional:\t%d\n", tmpStr, swVerExtended->svnRev);
+	static char   tmpStr[1024];
+	static size_t curLen = 0;
+
+	snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "Extended Software Version:\n");
+	curLen=strlen(tmpStr);
+	snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tMajor:    %d\n", swVerExtended->major);
+	curLen=strlen(tmpStr);
+	snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tMinor:    %d\n", swVerExtended->minor);
+	curLen=strlen(tmpStr);
+	snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tPatch:    %d\n", swVerExtended->patch);
+	curLen=strlen(tmpStr);
+	snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tOptional: %d\n", swVerExtended->svnRev);
+	curLen=strlen(tmpStr);
 	if (swVerExtended->stack.applies)
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "%s\tStack:\n", tmpStr);
-		snprintf(tmpStr, sizeof(tmpStr), "%s\t\tInterface:\t%d\n", tmpStr, swVerExtended->stack.interface);
-		snprintf(tmpStr, sizeof(tmpStr), "%s\t\tNode:\t\t%d\n", tmpStr, swVerExtended->stack.node);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tStack:\n");
+		curLen=strlen(tmpStr);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tInterface:\t%d\n", swVerExtended->stack.interface);
+		curLen=strlen(tmpStr);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tNode:\t\t%d\n", swVerExtended->stack.node);
+		curLen=strlen(tmpStr);
 	}
 	else
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "%s\tStack field doesn't apply (0x%2X)\n", tmpStr,
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tStack field doesn't apply (0x%02X)\n",
 				((uint8 *) swVerExtended)[offsetof(swVerExtended_t, stack)]);
+		curLen=strlen(tmpStr);
 	}
 	if (swVerExtended->profiles.applies)
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "%s\tProfiles:\n", tmpStr);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tProfiles:\n");
+		curLen=strlen(tmpStr);
 		if (swVerExtended->profiles.zrc11)
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "%s\t\t%s\n", tmpStr, "ZRC 1.1");
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "ZRC 1.1");
+			curLen=strlen(tmpStr);
 		}
 		if (swVerExtended->profiles.mso)
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "%s\t\t%s\n", tmpStr, "MSO");
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "MSO");
+			curLen=strlen(tmpStr);
 		}
 		if (swVerExtended->profiles.zrc20)
 		{
-			snprintf(tmpStr, sizeof(tmpStr), "%s\t\t%s\n", tmpStr, "ZRC 2.0");
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "ZRC 2.0");
+			curLen=strlen(tmpStr);
 		}
 	}
 	else
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "%s\tProfiles field doesn't apply (0x%2X)\n", tmpStr,
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tProfiles field doesn't apply (0x%02X)\n",
 				((uint8 *) swVerExtended)[offsetof(swVerExtended_t, profiles)]);
+		curLen=strlen(tmpStr);
 	}
 	if (swVerExtended->serial.applies)
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "%s\tSerial:\n", tmpStr);
-		snprintf(tmpStr, sizeof(tmpStr), "%s\t\tInterface:\t%d\n", tmpStr, swVerExtended->serial.interface);
-		snprintf(tmpStr, sizeof(tmpStr), "%s\t\tPort:\t\t%d\n", tmpStr, swVerExtended->serial.port);
-		snprintf(tmpStr, sizeof(tmpStr), "%s\t\tAlternative:\t%d\n", tmpStr, swVerExtended->serial.alternative);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tSerial:\n");
+		curLen=strlen(tmpStr);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tInterface:\t%d\n", swVerExtended->serial.interface);
+		curLen=strlen(tmpStr);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tPort:\t\t%d\n", swVerExtended->serial.port);
+		curLen=strlen(tmpStr);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tAlternative:\t%d\n", swVerExtended->serial.alternative);
 	}
 	else
 	{
-		snprintf(tmpStr, sizeof(tmpStr), "%s\tSerial Interface field doesn't apply (0x%2X)\n",
-				tmpStr, ((uint8 *) swVerExtended)[offsetof(swVerExtended_t, serial)]);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tSerial Interface field doesn't apply (0x%02X)\n",
+				((uint8 *) swVerExtended)[offsetof(swVerExtended_t, serial)]);
 	}
 
 	strncpy(retStr, tmpStr, maxStrLen);

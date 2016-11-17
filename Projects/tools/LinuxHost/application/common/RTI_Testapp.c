@@ -270,6 +270,7 @@ void TestappOpenReportFile(uint8 srcIndex)
 	time_t currentTime;
 	struct tm *local;
 	char filename1[256];
+	size_t len;
 	FILE* fp;
 
 	//First Create filename
@@ -277,7 +278,8 @@ void TestappOpenReportFile(uint8 srcIndex)
 	local = localtime(&currentTime);
 	//filename1 =  ctime(&currentTime);
 	strftime(filename1, 255, "Test_report_%Y_%b_%d_%Hh%M_%S", local);
-	snprintf(filename1, sizeof(filename1), "%s_idx%d", filename1, srcIndex);
+	len = strlen(filename1);
+	snprintf(filename1+len, sizeof(filename1)-len, "_idx%d", srcIndex);
 
 	//Open the file
 	fp = fopen(filename1, "w");

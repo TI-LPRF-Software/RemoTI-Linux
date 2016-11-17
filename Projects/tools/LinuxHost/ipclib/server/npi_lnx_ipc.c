@@ -382,10 +382,9 @@ static void writeToNpiLnxLog(const char* str)
 		if (inStr[ix] == '\n')
 			inStr[ix] = 0;
 	}
-	snprintf(fullStr, kStrSize, "%s] %s", fullStr, inStr);
-
-	// Add global error code
-	snprintf(fullStr, kStrSize, "%s. Error: %.8X\n", fullStr, npi_ipc_errno);
+	// Concatenate and add global error code
+	ix = strlen(fullStr);
+	snprintf(fullStr+ix, kStrSize-ix, "] %s. Error: %.8X\n", inStr, npi_ipc_errno);
 
 	// Write error message to /dev/npiLnxLog
 	if (*serialCfg.logPath)

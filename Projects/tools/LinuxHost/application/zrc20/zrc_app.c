@@ -179,6 +179,7 @@ bool zrcMsgQueue_isEmpty( void );
 static int zrcAppInitSyncRes(void);
 
 int zrcAppGetAndPrintExtendedSoftwareVersion(swVerExtended_t *swVerExtended);
+static int zrcAppGetAndPrintSoftwareVersions(uint8 *baseVersion, swVerExtended_t *swVerExtended);
 static void zrcAppReturnFromSubmodule(void);
 
 // The following file includes a large set of string defines used for verbose logging.
@@ -254,8 +255,9 @@ int ZRC_AppInit(int mode, char threadId)
 
     LOG_INFO("[Initialization]-------------------- START SOFTWARE VERSION READING-------------------\n");
 
+	uint8           rnpSwVerBase;
     swVerExtended_t rnpSwVerExtended;
-    uint8 readSoftwareVersionStatus = zrcAppGetAndPrintExtendedSoftwareVersion(&rnpSwVerExtended);
+    int readSoftwareVersionStatus = zrcAppGetAndPrintSoftwareVersions(&rnpSwVerBase, &rnpSwVerExtended);
     if (RTI_SUCCESS != readSoftwareVersionStatus)
     {
 //            LOG_ERROR("[Initialization] Failed to read software version. Checking if the chip was reset into Serial Bootloader mode.\n");
@@ -689,24 +691,11 @@ static void *zrcAppThreadFunc(void *ptr)
             }
             else if (ch == '4')
             {
-                uint8 value[1];
-                LOG_INFO("-------------------- START SOFTWARE VERSION READING-------------------\n");
-                if (RTI_SUCCESS != RTI_ReadItem(RTI_CONST_ITEM_SW_VERSION, 1, value))
-                {
-                    LOG_ERROR("Failed to read Software Version.\n");
-                    swVerExtended_t rnpSwVerExtended;
-                    zrcAppGetAndPrintExtendedSoftwareVersion(&rnpSwVerExtended);
-                }
-                else
-                {
-                    LOG_INFO("Software Version = 0x%x\n", value[0]);
+                uint8           baseVersion;
+                swVerExtended_t rnpSwVerExtended;
 
-                    if (value[0] > 0x2D)
-                    {
-                        swVerExtended_t rnpSwVerExtended;
-                        zrcAppGetAndPrintExtendedSoftwareVersion(&rnpSwVerExtended);
-                    }
-                }
+                LOG_INFO("-------------------- START SOFTWARE VERSION READING-------------------\n");
+                zrcAppGetAndPrintSoftwareVersions(&baseVersion, &rnpSwVerExtended);
                 LOG_INFO("-------------------- END SOFTWARE VERSION READING-------------------\n");
 
                 DispMenuReady();
@@ -994,11 +983,14 @@ uint8 ZRCApp_SendDataReq( uint8 dstIndex, uint8 profileId, uint16 vendorId, uint
         // Setup callback
         zrcAppSendDataCnfCb = cBack;
         char responseStr[512];
+        size_t strLen;
         snprintf(responseStr, sizeof(responseStr), "%.2X", pData[0]);
+        strLen = 2;
         int i;
         for (i = 1; i < len; i++)
         {
-            snprintf(responseStr, sizeof(responseStr), "%s %.2X", responseStr, pData[i]);
+            snprintf(responseStr+strLen, sizeof(responseStr)-strLen, " %.2X", pData[i]);
+        strLen += 3;
         }
         LOG_DEBUG("[Data] Calling RTI_SendDataReq (Profile %d, Data: %s)\n", profileId, responseStr);
         // Send Data
@@ -2283,54 +2275,73 @@ bool zrcMsgQueue_isEmpty( void )
 static void SoftwareVersionToString(char *retStr, int maxStrLen, swVerExtended_t* swVerExtended)
 {
     static char tmpStr[1024];
-    snprintf(tmpStr, sizeof(tmpStr), "Extended Software Version:\n");
-    snprintf(tmpStr, sizeof(tmpStr), "%s\tMajor:\t%d\n", tmpStr, swVerExtended->major);
-    snprintf(tmpStr, sizeof(tmpStr), "%s\tMinor:\t%d\n", tmpStr, swVerExtended->minor);
-    snprintf(tmpStr, sizeof(tmpStr), "%s\tPatch:\t%d\n", tmpStr, swVerExtended->patch);
-    snprintf(tmpStr, sizeof(tmpStr), "%s\tOptional:\t%d\n", tmpStr, swVerExtended->svnRev);
+    size_t      curLen = 0;
+
+    snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "Extended Software Version:\n");
+    curLen = strlen(tmpStr);
+    snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tMajor:    %d\n", swVerExtended->major);
+    curLen = strlen(tmpStr);
+    snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tMinor:    %d\n", swVerExtended->minor);
+    curLen = strlen(tmpStr);
+    snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tPatch:    %d\n", swVerExtended->patch);
+    curLen = strlen(tmpStr);
+    snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tOptional: %d\n", swVerExtended->svnRev);
+    curLen = strlen(tmpStr);
     if (swVerExtended->stack.applies)
     {
-        snprintf(tmpStr, sizeof(tmpStr), "%s\tStack:\n", tmpStr);
-        snprintf(tmpStr, sizeof(tmpStr), "%s\t\tInterface:\t%d\n", tmpStr, swVerExtended->stack.interface);
-        snprintf(tmpStr, sizeof(tmpStr), "%s\t\tNode:\t\t%d\n", tmpStr, swVerExtended->stack.node);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tStack:\n");
+        curLen = strlen(tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tInterface:\t%d\n", swVerExtended->stack.interface);
+        curLen = strlen(tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tNode:\t\t%d\n", swVerExtended->stack.node);
+        curLen = strlen(tmpStr);
     }
     else
     {
-        snprintf(tmpStr, sizeof(tmpStr), "%s\tStack field doesn't apply (0x%2X)\n", tmpStr,
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tStack field doesn't apply (0x%02X)\n",
                 ((uint8 *) swVerExtended)[offsetof(swVerExtended_t, stack)]);
+        curLen = strlen(tmpStr);
     }
     if (swVerExtended->profiles.applies)
     {
-        snprintf(tmpStr, sizeof(tmpStr), "%s\tProfiles:\n", tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tProfiles:\n");
+        curLen = strlen(tmpStr);
         if (swVerExtended->profiles.zrc11)
         {
-            snprintf(tmpStr, sizeof(tmpStr), "%s\t\t%s\n", tmpStr, "ZRC 1.1");
+            snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "ZRC 1.1");
+            curLen = strlen(tmpStr);
         }
         if (swVerExtended->profiles.mso)
         {
-            snprintf(tmpStr, sizeof(tmpStr), "%s\t\t%s\n", tmpStr, "MSO");
+            snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "MSO");
+            curLen = strlen(tmpStr);
         }
         if (swVerExtended->profiles.zrc20)
         {
-            snprintf(tmpStr, sizeof(tmpStr), "%s\t\t%s\n", tmpStr, "ZRC 2.0");
+            snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "ZRC 2.0");
+            curLen = strlen(tmpStr);
         }
     }
     else
     {
-        snprintf(tmpStr, sizeof(tmpStr), "%s\tProfiles field doesn't apply (0x%2X)\n", tmpStr,
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tProfiles field doesn't apply (0x%02X)\n",
                 ((uint8 *) swVerExtended)[offsetof(swVerExtended_t, profiles)]);
+        curLen = strlen(tmpStr);
     }
     if (swVerExtended->serial.applies)
     {
-        snprintf(tmpStr, sizeof(tmpStr), "%s\tSerial:\n", tmpStr);
-        snprintf(tmpStr, sizeof(tmpStr), "%s\t\tInterface:\t%d\n", tmpStr, swVerExtended->serial.interface);
-        snprintf(tmpStr, sizeof(tmpStr), "%s\t\tPort:\t\t%d\n", tmpStr, swVerExtended->serial.port);
-        snprintf(tmpStr, sizeof(tmpStr), "%s\t\tAlternative:\t%d\n", tmpStr, swVerExtended->serial.alternative);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tSerial:\n");
+        curLen = strlen(tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tInterface:\t%d\n", swVerExtended->serial.interface);
+        curLen = strlen(tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tPort:\t\t%d\n", swVerExtended->serial.port);
+        curLen = strlen(tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tAlternative:\t%d\n", swVerExtended->serial.alternative);
     }
     else
     {
-        snprintf(tmpStr, sizeof(tmpStr), "%s\tSerial Interface field doesn't apply (0x%2X)\n",
-                tmpStr, ((uint8 *) swVerExtended)[offsetof(swVerExtended_t, serial)]);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tSerial Interface field doesn't apply (0x%02X)\n",
+                ((uint8 *) swVerExtended)[offsetof(swVerExtended_t, serial)]);
     }
 
     strncpy(retStr, tmpStr, maxStrLen);
@@ -2354,6 +2365,33 @@ int zrcAppGetAndPrintExtendedSoftwareVersion(swVerExtended_t *swVerExtended)
     LOG_INFO("PAN ID:\t\t 0x%4X\n", panId);
 
     return retVal;
+}
+
+static int zrcAppGetAndPrintSoftwareVersions(uint8 *baseVersion, swVerExtended_t *swVerExtended)
+{
+    int result;
+
+    if (RTI_SUCCESS != (result = RTI_ReadItem(RTI_CONST_ITEM_SW_VERSION, 1, baseVersion)))
+    {
+        *baseVersion = 0;
+        LOG_ERROR("Failed to read Base Software Version.\n");
+    }
+    else
+    {
+        LOG_INFO("Base Software Version = %u.%u.%u (0x%02x)\n",
+                    (*baseVersion & 0xE0) >> 5,
+                    (*baseVersion & 0x1C) >> 2,
+                    (*baseVersion & 0x03),
+                    *baseVersion);
+    }
+
+    if ((*baseVersion <= 0x2D) ||
+        (RTI_SUCCESS != (result = zrcAppGetAndPrintExtendedSoftwareVersion(swVerExtended))))
+    {
+        memset(swVerExtended, 0, sizeof(*swVerExtended));
+    }
+
+    return result;
 }
 
 #ifdef RTI_TESTMODE

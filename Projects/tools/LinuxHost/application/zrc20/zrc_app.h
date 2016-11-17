@@ -79,30 +79,30 @@ extern "C" {
 #define ZRC_APP_EVT_NONE                               0x00000000 // No event
 #define ZRC_APP_EVT_INIT                               0x00000001 // Initial Boot up Event
 #define ZRC_APP_EVT_DATA_RCV                           0x00000002 // Data Receive Event
-#define ZRC_APP_EVT_OAD_KO                          0x00000004 // OAD unsuccessful
-#define ZRC_APP_EVT_OAD_OK                          0x00000008 // OAD successful
-#define ZRC_APP_EVT_OAD_REBOOT                      0x00000010 // OAD rebooting
-#define ZRC_APP_EVT_OAD_TIMEOUT                     0x00000020 // OAD timed out
-#define ZRC_APP_EVT_TOAD_SAFE_NORMAL_TOAD_WINDOW    0x00000040 // TOAD Safe Normal Operation Window expired
-#define ZRC_APP_EVT_TEST_RECEIVE_TIMEOUT            0x00000080 // It's been more than 100 ms since we last received a message. This is unusual. Stop the synchronous request test.
-#define ZRC_APP_EVT_TEST_RX_ENABLE_TIMEOUT            0x00000100 // Rx is no longer enabled. Return to Idle test state.
-#define ZRC_APP_EVT_STRESS_TEST_SYNCH_REQ            0x00000200 // During heavy traffic try to randomly read from RNP, hence testing SREQ
-#define ZRC_APP_EVT_PAIRING_TEST                    0x00000400 // Pairing test
-#define ZRC_APP_EVT_RESET                            0x00008000 // Reset event
+#define ZRC_APP_EVT_OAD_KO                             0x00000004 // OAD unsuccessful
+#define ZRC_APP_EVT_OAD_OK                             0x00000008 // OAD successful
+#define ZRC_APP_EVT_OAD_REBOOT                         0x00000010 // OAD rebooting
+#define ZRC_APP_EVT_OAD_TIMEOUT                        0x00000020 // OAD timed out
+#define ZRC_APP_EVT_TOAD_SAFE_NORMAL_TOAD_WINDOW       0x00000040 // TOAD Safe Normal Operation Window expired
+#define ZRC_APP_EVT_TEST_RECEIVE_TIMEOUT               0x00000080 // It's been more than 100 ms since we last received a message. This is unusual. Stop the synchronous request test.
+#define ZRC_APP_EVT_TEST_RX_ENABLE_TIMEOUT             0x00000100 // Rx is no longer enabled. Return to Idle test state.
+#define ZRC_APP_EVT_STRESS_TEST_SYNCH_REQ              0x00000200 // During heavy traffic try to randomly read from RNP, hence testing SREQ
+#define ZRC_APP_EVT_PAIRING_TEST                       0x00000400 // Pairing test
+#define ZRC_APP_EVT_RESET                              0x00008000 // Reset event
 #define ZRC_APP_EVT_STORE_TO_NV                        0x00010000 // Event to postpone NV storage
-#define ZRC_APP_EVT_SEND_VOICE_EVENTS                0x00080000
+#define ZRC_APP_EVT_SEND_VOICE_EVENTS                  0x00080000
 
-#define ZRC_APP_EVT_SEND_SET_GET_ATTR_RESPONSE        0x00100000 // Event to send Set/Get Attributes Response
+#define ZRC_APP_EVT_SEND_SET_GET_ATTR_RESPONSE         0x00100000 // Event to send Set/Get Attributes Response
 
-#define ZRC_APP_EVT_KEY_RELEASE_LOST_MASK            0xFF000000 // The upper 8 events are reserved for tracking lost key presses
-#define ZRC_APP_EVT_KEY_RELEASE_LOST(key)            (1 << (24 + key))
+#define ZRC_APP_EVT_KEY_RELEASE_LOST_MASK              0xFF000000 // The upper 8 events are reserved for tracking lost key presses
+#define ZRC_APP_EVT_KEY_RELEASE_LOST(key)              (1 << (24 + key))
 
-#define ZRC_APP_SEND_GET_ATTR_RESPONSE_WAIT_TIME              1 // Set to 1ms because of delays in serial communication. Wait 20ms before transmitting the response
-#define ZRC_APP_SEND_SET_ATTR_RESPONSE_WAIT_TIME            20 // Wait 20ms before transmitting the response
-#define ZRC_APP_SEND_RESPONSE_IDLE_TIME                         10 // Set to 10ms because of delays in serial communication. Wait 50ms before transmitting the response
-#define ZRC_APP_STORE_TO_NV_TIMEOUT_SLOW                  5000 // Wait 5 seconds after a keypress before updating NV
-#define ZRC_APP_STORE_TO_NV_TIMEOUT_FAST            (3 * aplcMaxResponseWaitTime) // Wait after receiving a Set Attributes Request before updating NV. This way a bundle of updates can be grouped together
-#define ZRC_APP_KEY_RELEASE_LOST_TIMEOUT            (aplcMaxKeyRepeatInterval * 2)
+#define ZRC_APP_SEND_GET_ATTR_RESPONSE_WAIT_TIME       1 // Set to 1ms because of delays in serial communication. Wait 20ms before transmitting the response
+#define ZRC_APP_SEND_SET_ATTR_RESPONSE_WAIT_TIME       20 // Wait 20ms before transmitting the response
+#define ZRC_APP_SEND_RESPONSE_IDLE_TIME                10 // Set to 10ms because of delays in serial communication. Wait 50ms before transmitting the response
+#define ZRC_APP_STORE_TO_NV_TIMEOUT_SLOW               5000 // Wait 5 seconds after a keypress before updating NV
+#define ZRC_APP_STORE_TO_NV_TIMEOUT_FAST               (3 * aplcMaxResponseWaitTime) // Wait after receiving a Set Attributes Request before updating NV. This way a bundle of updates can be grouped together
+#define ZRC_APP_KEY_RELEASE_LOST_TIMEOUT               (aplcMaxKeyRepeatInterval * 2)
 // Value of ZRC_APP_FREE_DISC_USER_STRING_LL_TIMEOUT must be higher than
 // ZRC_ITEM_VALIDATION_INITIAL_WATCHDOG_TIME + (ZRC_ITEM_VALIDATION_SUBSEQUENT_WATCHDOG_TIME * zrcAppNumFailedValidationAttemptsMax) + pairing margin (~2 seconds)
 // Default values would mean 8s + 5s * 10 + 2 = 60 seconds.
@@ -131,11 +131,11 @@ enum {
 // Send Data States
 enum {
     APP_SEND_DATA_STATE_INIT,        // Initial Application Sub State for Configuration of data to send
-    APP_SEND_DATA_STATE_PAYLOAD,    // Sub state for configuration of payload
-    APP_SEND_DATA_STATE_RATE,    // Sub state for sending ZID Keyboard commands directly
-    APP_SEND_DATA_STATE_LATENCY,        // Sub state for sending ZID Mouse commands directly
-    APP_SEND_DATA_STATE_THROUGHPUT,    // Sub state for sending ZID Mouse commands directly
-    APP_SEND_DATA_STATE_PACKET,    // Sub state for sending ZID Keyboard commands directly
+    APP_SEND_DATA_STATE_PAYLOAD,     // Sub state for configuration of payload
+    APP_SEND_DATA_STATE_RATE,        // Sub state for sending ZID Keyboard commands directly
+    APP_SEND_DATA_STATE_LATENCY,     // Sub state for sending ZID Mouse commands directly
+    APP_SEND_DATA_STATE_THROUGHPUT,  // Sub state for sending ZID Mouse commands directly
+    APP_SEND_DATA_STATE_PACKET,      // Sub state for sending ZID Keyboard commands directly
 
 };
 
@@ -152,10 +152,10 @@ enum {
 #define ZRC_APP_RNP_POWER_STATE_STANDBY_BIT            BV(0)
 #define ZRC_APP_RNP_POWER_STATE_NPI_BIT                BV(1)
 // RNP sleep modes in order of current consumption
-#define ZRC_APP_RNP_POWER_STATE_ACTIVE                0
-#define ZRC_APP_RNP_POWER_STATE_NPI_SLEEP            (ZRC_APP_RNP_POWER_STATE_NPI_BIT)
+#define ZRC_APP_RNP_POWER_STATE_ACTIVE                 0
+#define ZRC_APP_RNP_POWER_STATE_NPI_SLEEP             (ZRC_APP_RNP_POWER_STATE_NPI_BIT)
 #define ZRC_APP_RNP_POWER_STATE_STANDBY_ACTIVE        (ZRC_APP_RNP_POWER_STATE_STANDBY_BIT)
-#define ZRC_APP_RNP_POWER_STATE_STANDBY_SLEEP        (ZRC_APP_RNP_POWER_STATE_STANDBY_BIT | ZRC_APP_RNP_POWER_STATE_NPI_BIT)
+#define ZRC_APP_RNP_POWER_STATE_STANDBY_SLEEP         (ZRC_APP_RNP_POWER_STATE_STANDBY_BIT | ZRC_APP_RNP_POWER_STATE_NPI_BIT)
 
 #define ZRC_APP_LQI_TO_DBM_CONVERSION(LQI)            ((LQI - 0xFF) >> 1)
 
@@ -208,14 +208,14 @@ typedef struct ATTR_PACKED
 
 typedef struct ATTR_PACKED
 {
-      uint8 nodeCapabilities;
-      uint16 vendorId;
-      uint8 vendorString[RCN_VENDOR_STRING_LENGTH];
-      uint8 appCapabilities;
-      uint8 userString[RCN_USER_STRING_LENGTH];
-      uint8 devTypeList[RCN_MAX_NUM_DEV_TYPES];
-      uint8 profileIdList[RCN_MAX_NUM_PROFILE_IDS];
-      uint8 tgtTypeList[RTI_MAX_NUM_SUPPORTED_TGT_TYPES];
+    uint8 nodeCapabilities;
+    uint16 vendorId;
+    uint8 vendorString[RCN_VENDOR_STRING_LENGTH];
+    uint8 appCapabilities;
+    uint8 userString[RCN_USER_STRING_LENGTH];
+    uint8 devTypeList[RCN_MAX_NUM_DEV_TYPES];
+    uint8 profileIdList[RCN_MAX_NUM_PROFILE_IDS];
+    uint8 tgtTypeList[RTI_MAX_NUM_SUPPORTED_TGT_TYPES];
 } appDevInfo_t;
 
 // Configuration specific

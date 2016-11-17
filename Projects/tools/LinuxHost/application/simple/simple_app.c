@@ -2689,65 +2689,84 @@ void appSendDataProcessKey (char* strIn)
 static int getAndPrintExtendedSoftwareVersion(uint8 timePrint)
 {
 	int retVal = RTI_SUCCESS;
-	char tmpStrForTimePrint[1024];
+	char tmpStr[1024];
 	swVerExtended_t swVerExtended = {0};
+	size_t curLen = 0;
 	retVal = RTI_ReadItem(RTI_CONST_ITEM_EXTENDED_SW_VERSION, 8, (uint8*)&swVerExtended);
 	if (RTI_SUCCESS == retVal)
 	{
-		snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "[Initialization][INFO]- Extended Software Version:\n");
-		snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tMajor:\t%d\n", tmpStrForTimePrint, swVerExtended.major);
-		snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tMinor:\t%d\n", tmpStrForTimePrint, swVerExtended.minor);
-		snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tPatch:\t%d\n", tmpStrForTimePrint, swVerExtended.patch);
-		snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tOptional:\t%d\n", tmpStrForTimePrint, swVerExtended.svnRev);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "[Initialization][INFO]- Extended Software Version:\n");
+		curLen = strlen(tmpStr);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tMajor:    %d\n", swVerExtended.major);
+		curLen = strlen(tmpStr);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tMinor:    %d\n", swVerExtended.minor);
+		curLen = strlen(tmpStr);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tPatch:    %d\n", swVerExtended.patch);
+		curLen = strlen(tmpStr);
+		snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tOptional: %d\n", swVerExtended.svnRev);
+		curLen = strlen(tmpStr);
 		if (swVerExtended.stack.applies)
 		{
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tStack:\n", tmpStrForTimePrint);
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\tInterface:\t%d\n", tmpStrForTimePrint, swVerExtended.stack.interface);
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\tNode:\t\t%d\n", tmpStrForTimePrint, swVerExtended.stack.node);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tStack:\n");
+			curLen = strlen(tmpStr);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tInterface:\t%d\n", swVerExtended.stack.interface);
+			curLen = strlen(tmpStr);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tNode:\t\t%d\n", swVerExtended.stack.node);
+			curLen = strlen(tmpStr);
 		}
 		else
 		{
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tStack field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, stack)]);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tStack field doesn't apply (0x%02X)\n",  ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, stack)]);
+			curLen = strlen(tmpStr);
 		}
 		if (swVerExtended.profiles.applies)
 		{
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tProfiles:\n", tmpStrForTimePrint);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tProfiles:\n");
+			curLen = strlen(tmpStr);
 			if (swVerExtended.profiles.zrc11)
 			{
-				snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\t%s\n", tmpStrForTimePrint, "ZRC 1.1");
+				snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "ZRC 1.1");
+				curLen = strlen(tmpStr);
 			}
 			if (swVerExtended.profiles.mso)
 			{
-				snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\t%s\n", tmpStrForTimePrint, "MSO");
+				snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "MSO");
+				curLen = strlen(tmpStr);
 			}
 			if (swVerExtended.profiles.zrc20)
 			{
-				snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\t%s\n", tmpStrForTimePrint, "ZRC 2.0");
+				snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "ZRC 2.0");
+				curLen = strlen(tmpStr);
 			}
 		}
 		else
 		{
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tProfiles field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, profiles)]);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tProfiles field doesn't apply (0x%02X)\n", ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, profiles)]);
+			curLen = strlen(tmpStr);
 		}
 		if (swVerExtended.serial.applies)
 		{
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tSerial:\n", tmpStrForTimePrint);
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\tInterface:\t%d\n", tmpStrForTimePrint, swVerExtended.serial.interface);
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\tPort:\t\t%d\n", tmpStrForTimePrint, swVerExtended.serial.port);
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\t\tAlternative:\t%d\n", tmpStrForTimePrint, swVerExtended.serial.alternative);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tSerial:\n");
+			curLen = strlen(tmpStr);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tInterface:\t%d\n", swVerExtended.serial.interface);
+			curLen = strlen(tmpStr);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tPort:\t\t%d\n", swVerExtended.serial.port);
+			curLen = strlen(tmpStr);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tAlternative:\t%d\n", swVerExtended.serial.alternative);
 		}
 		else
 		{
-			snprintf(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), "%s\tSerial Interface field doesn't apply (0x%2X)\n", tmpStrForTimePrint, ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, serial)]);
+			snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tSerial Interface field doesn't apply (0x%02X)\n", ((uint8 *)&swVerExtended)[offsetof(swVerExtended_t, serial)]);
 		}
+
 		if (timePrint)
 		{
-//			time_printf(tmpStrForTimePrint);
-			LOG_INFO("%s", tmpStrForTimePrint);
+//			time_printf(tmpStr);
+			LOG_INFO("%s", tmpStr);
 		}
 		else
 		{
-			LOG_INFO("%s", tmpStrForTimePrint);
+			LOG_INFO("%s", tmpStr);
 		}
 	}
 

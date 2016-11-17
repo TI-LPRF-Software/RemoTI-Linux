@@ -134,6 +134,7 @@ void zrcCfgRestoreFromNV(void);
 
 void zrcCfgPostPairingProcessing(uint8 index);
 void zrcCfgClearPairingTable(void);
+void zrcCfgClearPairingTableEntry(uint8 index);
 void zrcCfgDisplayPairingTable(void);
 void zrcCfgAddDiscoveredZRCUserstringToLinkedList( uint8 *ieeeAddr, uint8* zrcUserString );
 uint8* zrcCfgGetDiscoveredZRCUserstringFromLinkedList( uint8 *ieeeAddr);
