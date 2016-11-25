@@ -37,6 +37,7 @@
 **************************************************************************************************/
 
 #include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
@@ -68,6 +69,7 @@
 
 // Application state variable
 uint8 appState;
+uint8 supportIndexedAPI = FALSE;
 
 struct timeval curTime, startTime, prevTimeSend, prevTimeRec, prevTime;
 
@@ -141,6 +143,8 @@ int appConfigureMassProductionTable(void);
 int appRestorePairingTable(void);
 int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index);
 void appDisplayPairingTable();
+int appGetAndPrintExtendedSoftwareVersion(swVerExtended_t *swVerExtended);
+static int appGetAndPrintSoftwareVersions(uint8 *baseVersion, swVerExtended_t *swVerExtended);
 
 void RTI_IrInd( uint8 irData ) {}
 
@@ -149,7 +153,6 @@ int appInit(int mode, char threadId)
 	appThreadTerminate = 0;
 	appInitSyncRes();
 
-	uint8 value[2];
 	MPA_App_threadId = threadId;
 
 	baseSettings.ip_addr = NULL;
@@ -205,20 +208,22 @@ int appInit(int mode, char threadId)
 	}
 	LOG_DEBUG("\n-------------------- END TURN ON DEBUG TRACES -------------------\n\n");
 
-	LOG_DEBUG("\n-------------------- START SOFTWARE VERSION READING-------------------\n");
+  LOG_INFO("[Initialization]-------------------- START SOFTWARE VERSION READING-------------------\n");
 
-	if (RTI_SUCCESS != RTI_ReadItem(RTI_CONST_ITEM_SW_VERSION, 1, value))
-	{
-		fprintf(stderr, "Failed to read Software Version.\n");
+	uint8           rnpSwVerBase;
+	swVerExtended_t rnpSwVerExtended;
+	appGetAndPrintSoftwareVersions(&rnpSwVerBase, &rnpSwVerExtended);
 
-		fprintf(stderr, " Please check connection.\n");
-		exit(-1);
-	}
-	else
+	// Check if software version is greater than or equal to RemoTI-1.4.0
+	if ((rnpSwVerExtended.major > 1) ||
+	    ((rnpSwVerExtended.major == 1) && (rnpSwVerExtended.minor >= 4)))
 	{
-		LOG_DEBUG("- Software Version = 0x%x\n", value[0]);
-		LOG_DEBUG("-------------------- END SOFTWARE VERSION READING-------------------\n");
+	  supportIndexedAPI = TRUE;
 	}
+  LOG_INFO("supportIndexedAPI == %s major-%d minor-%d\n",
+      (supportIndexedAPI == TRUE) ? "TRUE" : "FALSE", rnpSwVerExtended.major, rnpSwVerExtended.minor);
+
+	LOG_INFO("-------------------- END SOFTWARE VERSION READING-------------------\n");
 
 	// Setup default configuration
 	appInitConfigParam();
@@ -653,7 +658,7 @@ void RTI_SendDataCnf(rStatus_t status)
 		{
 			// Return to Ready state
 			appState = AP_STATE_READY;
-			LOG_DEBUG("RTI_SendDataCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
+			LOG_INFO("RTI_SendDataCnf(0x%.2X - %s)\n", status, rtiStatus_list[status]);
 			timer_set_event(MPA_App_threadId, MASSPRODUCTION_APP_EVT_EXIT);
 		}
 	}
@@ -905,19 +910,37 @@ int appConfigureMassProductionTable()
 		if ( fakePentryTable[i].pairingRef != 0xFF)
 		{
 			LOG_DEBUG("writing fake pairing entry to index 0x%.2X\n", fakePentryTable[i].pairingRef);
-			// Set current pairing entry
-			RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_PT_CURRENT_ENTRY_INDEX, 1,
-					(uint8 *) &fakePentryTable[i].pairingRef);
-			// Save original entry first
-			RTI_ReadItemEx(RTI_PROFILE_RTI,
-					RTI_SA_ITEM_PT_CURRENT_ENTRY,
-					sizeof(rcnNwkPairingEntry_t),
-					(uint8 *) &originalPairingTable[i]);
-			// Try to write back
-			RTI_WriteItemEx(RTI_PROFILE_RTI,
-					RTI_SA_ITEM_PT_CURRENT_ENTRY,
-					sizeof(rcnNwkPairingEntry_t),
-					(uint8 *) &fakePentryTable[i]);
+      if (supportIndexedAPI == TRUE)
+      {
+        // Save original entry first
+        RTI_ReadIndexedItem(RTI_PROFILE_RTI,
+            RTI_SA_ITEM_PAIRING_TABLE_ENTRY,
+            fakePentryTable[i].pairingRef,
+            sizeof(rcnNwkPairingEntry_t),
+            (uint8 *) &originalPairingTable[i]);
+        // Try to write back
+        RTI_WriteIndexedItem(RTI_PROFILE_RTI,
+            RTI_SA_ITEM_PAIRING_TABLE_ENTRY,
+            i,
+            sizeof(rcnNwkPairingEntry_t),
+            (uint8 *) &fakePentryTable[i]);
+      }
+      else
+      {
+        // Set current pairing entry
+        RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_PT_CURRENT_ENTRY_INDEX, 1,
+            (uint8 *) &fakePentryTable[i].pairingRef);
+        // Save original entry first
+        RTI_ReadItemEx(RTI_PROFILE_RTI,
+            RTI_SA_ITEM_PT_CURRENT_ENTRY,
+            sizeof(rcnNwkPairingEntry_t),
+            (uint8 *) &originalPairingTable[i]);
+        // Try to write back
+        RTI_WriteItemEx(RTI_PROFILE_RTI,
+            RTI_SA_ITEM_PT_CURRENT_ENTRY,
+            sizeof(rcnNwkPairingEntry_t),
+            (uint8 *) &fakePentryTable[i]);
+      }
 		}
 	}
 
@@ -988,14 +1011,26 @@ int appRestorePairingTable()
 		if ( fakePentryTable[i].pairingRef != 0xFF)
 		{
 			LOG_DEBUG("writing back original pairing entry to index 0x%.2X\n", fakePentryTable[i].pairingRef);
-			// Set current pairing entry
-			RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_PT_CURRENT_ENTRY_INDEX, 1,
-					(uint8 *) &fakePentryTable[i].pairingRef);
-			// Restore original entry
-			RTI_WriteItemEx(RTI_PROFILE_RTI,
-					RTI_SA_ITEM_PT_CURRENT_ENTRY,
-					sizeof(rcnNwkPairingEntry_t),
-					(uint8 *) &originalPairingTable[i]);
+			if (supportIndexedAPI == TRUE)
+			{
+			  // Restore original entry
+			  RTI_WriteIndexedItem(RTI_PROFILE_RTI,
+			      RTI_SA_ITEM_PAIRING_TABLE_ENTRY,
+			      fakePentryTable[i].pairingRef,
+			      sizeof(rcnNwkPairingEntry_t),
+			      (uint8 *) &originalPairingTable[i]);
+			}
+			else
+			{
+        // Set current pairing entry
+        RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_PT_CURRENT_ENTRY_INDEX, 1,
+            (uint8 *) &fakePentryTable[i].pairingRef);
+        // Restore original entry
+        RTI_WriteItemEx(RTI_PROFILE_RTI,
+            RTI_SA_ITEM_PT_CURRENT_ENTRY,
+            sizeof(rcnNwkPairingEntry_t),
+            (uint8 *) &originalPairingTable[i]);
+			}
 		}
 	}
 
@@ -1026,7 +1061,7 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 	LOG_DEBUG("\n------------------------- READ PAIRING ENTRY %d FROM CFG -------------------------\n", index);
 	char tmpStr[128];
 	int strLen = 0;
-	uint8 j;
+	int j;
 	char *strTmp0 = (char*) malloc(128);
 	memset(strTmp0, 0, 128);
 	snprintf(strTmp0, 128, "IDX%d_PAIRINGREF", index);
@@ -1062,7 +1097,6 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		LOG_DEBUG("ERROR: %s not defined in configuration file\n", strTmp0);
 		ret = NPI_LNX_FAILURE;
 	}
-	LOG_DEBUG("\n");
 	snprintf(strTmp0, 128, "IDX%d_IEEE", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
@@ -1073,12 +1107,16 @@ int appReadPairingEntry(rcnNwkPairingEntry_t *pEntry, uint8 index)
 		LOG_DEBUG("ERROR: %s not defined in configuration file\n", strTmp0);
 		ret = NPI_LNX_FAILURE;
 	}
-	LOG_DEBUG("[CFG_FAKE_PTABLE] pEntry->ieeeAddress = %.2X", pEntry->ieeeAddress[SADDR_EXT_LEN - 1]);
-	for (j = SADDR_EXT_LEN - 1; j > 0; j--)
+	strLen = 0;
+	for (j = SADDR_EXT_LEN - 2; j >= 0; j--)
 	{
-		pEntry->ieeeAddress[j - 1] = (uint8) strtol(pStrCntd, &pStrCntd, 16);
-		LOG_DEBUG(":%.2X", pEntry->ieeeAddress[j - 1]);
+		pEntry->ieeeAddress[j] = (uint8) strtol(pStrCntd, &pStrCntd, 16);
+    snprintf(tmpStr+strLen, sizeof(tmpStr)-strLen, ":%.2X", (pEntry->ieeeAddress[j] & 0x00FF));
+//    printf(":%.2X\n", (pEntry->ieeeAddress[j] & 0x00FF));
+    strLen += 3;
 	}
+  LOG_DEBUG("[CFG_FAKE_PTABLE] pEntry->ieeeAddress = %.2hX%s\n", pEntry->ieeeAddress[SADDR_EXT_LEN - 1], tmpStr);
+
 	snprintf(strTmp0, 128, "IDX%d_PANID", index);
 	if (NPI_LNX_SUCCESS == ConfigParser("PAIRING_INFO", strTmp0, strBuf))
 	{
@@ -1636,20 +1674,33 @@ void appDisplayPairingTable() {
 
 	// Initialize memory for backup pairing table
 	RTI_ReadItemEx(RTI_PROFILE_RTI, RTI_CONST_ITEM_MAX_PAIRING_TABLE_ENTRIES, 1,&maxNumPairingEntries);
-    for (i = 0; i < maxNumPairingEntries; i++) {
-		// Set current pairing entry
-		RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_PT_CURRENT_ENTRY_INDEX, 1,
-				(uint8 *) &i);
-		// Try to read out this entry
-		if ((result = RTI_ReadItemEx(RTI_PROFILE_RTI,
-				RTI_SA_ITEM_PT_CURRENT_ENTRY, sizeof(rcnNwkPairingEntry_t),
-				(uint8 *) pEntry)) == RTI_SUCCESS) {
+	for (i = 0; i < maxNumPairingEntries; i++) {
+    if (supportIndexedAPI == TRUE)
+    {
+      // Try to read out this entry
+      result = RTI_ReadIndexedItem(RTI_PROFILE_RTI,
+          RTI_SA_ITEM_PAIRING_TABLE_ENTRY,
+          i,
+          sizeof(rcnNwkPairingEntry_t),
+          (uint8 *) pEntry);
+    }
+    else
+    {
+      // Set current pairing entry
+      RTI_WriteItemEx(RTI_PROFILE_RTI, RTI_SA_ITEM_PT_CURRENT_ENTRY_INDEX, 1,
+          (uint8 *) &i);
+      // Try to read out this entry
+      result = RTI_ReadItemEx(RTI_PROFILE_RTI,
+          RTI_SA_ITEM_PT_CURRENT_ENTRY, sizeof(rcnNwkPairingEntry_t),
+          (uint8 *) pEntry);
+    }
+    if (result == RTI_SUCCESS)
+    {
+      // Found pairing entry; display this.
+      DisplayPairingTable(pEntry);
 
-			// Found pairing entry; display this.
-			DisplayPairingTable(pEntry);
-
-			atLeastOneEntryFound = 1;
-		}
+      atLeastOneEntryFound = 1;
+    }
 	}
 
 	if (atLeastOneEntryFound != 0) {
@@ -1663,6 +1714,129 @@ void appDisplayPairingTable() {
 	// Free pairing entry buffer
 	free(pEntry);
 }
+
+static void SoftwareVersionToString(char *retStr, int maxStrLen, swVerExtended_t* swVerExtended)
+{
+    static char tmpStr[1024];
+    size_t      curLen = 0;
+
+    snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "Extended Software Version:\n");
+    curLen = strlen(tmpStr);
+    snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tMajor:    %d\n", swVerExtended->major);
+    curLen = strlen(tmpStr);
+    snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tMinor:    %d\n", swVerExtended->minor);
+    curLen = strlen(tmpStr);
+    snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tPatch:    %d\n", swVerExtended->patch);
+    curLen = strlen(tmpStr);
+    snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tOptional: %d\n", swVerExtended->svnRev);
+    curLen = strlen(tmpStr);
+    if (swVerExtended->stack.applies)
+    {
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tStack:\n");
+        curLen = strlen(tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tInterface:\t%d\n", swVerExtended->stack.interface);
+        curLen = strlen(tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tNode:\t\t%d\n", swVerExtended->stack.node);
+        curLen = strlen(tmpStr);
+    }
+    else
+    {
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tStack field doesn't apply (0x%02X)\n",
+                ((uint8 *) swVerExtended)[offsetof(swVerExtended_t, stack)]);
+        curLen = strlen(tmpStr);
+    }
+    if (swVerExtended->profiles.applies)
+    {
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tProfiles:\n");
+        curLen = strlen(tmpStr);
+        if (swVerExtended->profiles.zrc11)
+        {
+            snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "ZRC 1.1");
+            curLen = strlen(tmpStr);
+        }
+        if (swVerExtended->profiles.mso)
+        {
+            snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "MSO");
+            curLen = strlen(tmpStr);
+        }
+        if (swVerExtended->profiles.zrc20)
+        {
+            snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\t%s\n", "ZRC 2.0");
+            curLen = strlen(tmpStr);
+        }
+    }
+    else
+    {
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tProfiles field doesn't apply (0x%02X)\n",
+                ((uint8 *) swVerExtended)[offsetof(swVerExtended_t, profiles)]);
+        curLen = strlen(tmpStr);
+    }
+    if (swVerExtended->serial.applies)
+    {
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tSerial:\n");
+        curLen = strlen(tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tInterface:\t%d\n", swVerExtended->serial.interface);
+        curLen = strlen(tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tPort:\t\t%d\n", swVerExtended->serial.port);
+        curLen = strlen(tmpStr);
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\t\tAlternative:\t%d\n", swVerExtended->serial.alternative);
+    }
+    else
+    {
+        snprintf(tmpStr+curLen, sizeof(tmpStr)-curLen, "\tSerial Interface field doesn't apply (0x%02X)\n",
+                ((uint8 *) swVerExtended)[offsetof(swVerExtended_t, serial)]);
+    }
+
+    strncpy(retStr, tmpStr, maxStrLen);
+}
+
+int appGetAndPrintExtendedSoftwareVersion(swVerExtended_t *swVerExtended)
+{
+    int retVal = RTI_SUCCESS;
+    if (retVal == RTI_ReadItem(RTI_CONST_ITEM_EXTENDED_SW_VERSION, 8, (uint8*)swVerExtended))
+    {
+        char tmpStrForTimePrint[1024];
+        SoftwareVersionToString(tmpStrForTimePrint, sizeof(tmpStrForTimePrint), swVerExtended);
+        LOG_INFO("[Initialization] - %s\n", tmpStrForTimePrint);
+    }
+
+    uint16 shortAddr = 0;
+    retVal = RTI_ReadItemEx (RTI_PROFILE_RTI, RTI_SA_ITEM_SHORT_ADDRESS, 2, (uint8*)&shortAddr);
+    LOG_INFO("Short Address:\t 0x%4X\n", shortAddr);
+    uint16 panId = 0;
+    retVal = RTI_ReadItemEx (RTI_PROFILE_RTI, RTI_SA_ITEM_PAN_ID, 2, (uint8*)&panId);
+    LOG_INFO("PAN ID:\t\t 0x%4X\n", panId);
+
+    return retVal;
+}
+
+static int appGetAndPrintSoftwareVersions(uint8 *baseVersion, swVerExtended_t *swVerExtended)
+{
+    int result;
+
+    if (RTI_SUCCESS != (result = RTI_ReadItem(RTI_CONST_ITEM_SW_VERSION, 1, baseVersion)))
+    {
+        *baseVersion = 0;
+        LOG_ERROR("Failed to read Base Software Version.\n");
+    }
+    else
+    {
+        LOG_INFO("Base Software Version = %u.%u.%u (0x%02x)\n",
+                    (*baseVersion & 0xE0) >> 5,
+                    (*baseVersion & 0x1C) >> 2,
+                    (*baseVersion & 0x03),
+                    *baseVersion);
+    }
+
+    result = appGetAndPrintExtendedSoftwareVersion(swVerExtended);
+    if (RTI_SUCCESS != result)
+    {
+        memset(swVerExtended, 0, sizeof(*swVerExtended));
+    }
+
+    return result;
+}
+
 void DisplayPairingTable(rcnNwkPairingEntry_t *pEntry)
 {
 	int j, strLen = 0;

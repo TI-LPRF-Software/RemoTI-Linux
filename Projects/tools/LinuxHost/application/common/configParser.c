@@ -582,7 +582,9 @@ int ConfigParserSetGetFromFd(FILE* cfgFd, const char* section,
 								// The value is located after the '='
 								// after the key.
 								psStr = strtok(psStr, "=");
-								psStr = strtok(NULL, "=;\"");
+								psStr = strtok(NULL, "=;\"\r");
+
+								// Trim potential return and/or newline character
 
 								resString = psStr;
 								res = 0;
