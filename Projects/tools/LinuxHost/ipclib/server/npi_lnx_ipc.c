@@ -1991,6 +1991,10 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 
 	LOG_INFO("Listen port: %s\n", serialCfg->port);
 
+#if FORCE_LOCALHOST_ONLY
+	(void)status;
+	getaddrinfo("localhost", serialCfg->port, &hints, &servinfo);
+#else
 	if ((status = getaddrinfo(NULL, serialCfg->port, &hints, &servinfo)) != 0)
 	{
 		LOG_ERROR("getaddrinfo error: %s\n", gai_strerror(status));
@@ -2005,7 +2009,7 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 		}
 	}
 
-	LOG_DEBUG("Following IP addresses are available:\n\n");
+	LOG_INFO("Following IP addresses are available:\n");
 	{
 		struct ifaddrs * ifAddrStruct=NULL;
 		struct ifaddrs * ifa=NULL;
@@ -2023,7 +2027,7 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 					tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
 					char addressBuffer[INET_ADDRSTRLEN];
 					inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
-					LOG_DEBUG(" IPv4: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
+					LOG_INFO(" IPv4: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
 				}
 				else if (ifa->ifa_addr->sa_family==AF_INET6)
 				{ // check it is IP6
@@ -2031,14 +2035,16 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 					tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
 					char addressBuffer[INET6_ADDRSTRLEN];
 					inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
-					LOG_DEBUG(" IPv6: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
+					LOG_INFO(" IPv6: interface: %s\t IP Address %s\n", ifa->ifa_name, addressBuffer);
 				}
 			}
 		}
 		if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
 	}
 
-	LOG_DEBUG("The socket will listen on the following IP addresses:\n\n");
+#endif //FORCE_LOCALHOST_ONLY
+
+	LOG_INFO("The socket will listen on the following IP addresses:\n");
 
 	struct addrinfo *p;
 	char ipstr[INET6_ADDRSTRLEN];
@@ -2063,10 +2069,11 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 
 		// convert the IP to a string and print it:
 		inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr);
-		LOG_DEBUG("  %s: %s\n", ipver, ipstr);
+		LOG_INFO("  %s: %s\n", ipver, ipstr);
 	}
 	LOG_DEBUG("0.0.0.0 means it will listen to all available IP address\n\n");
-#endif
+
+#endif //NPI_UNIX
 
 #ifdef NPI_UNIX
 	// Create the socket

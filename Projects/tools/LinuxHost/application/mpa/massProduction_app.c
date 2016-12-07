@@ -220,8 +220,8 @@ int appInit(int mode, char threadId)
 	{
 	  supportIndexedAPI = TRUE;
 	}
-  LOG_INFO("supportIndexedAPI == %s major-%d minor-%d\n",
-      (supportIndexedAPI == TRUE) ? "TRUE" : "FALSE", rnpSwVerExtended.major, rnpSwVerExtended.minor);
+	LOG_INFO("supportIndexedAPI == %s major-%d minor-%d\n",
+		(supportIndexedAPI == TRUE) ? "TRUE" : "FALSE", rnpSwVerExtended.major, rnpSwVerExtended.minor);
 
 	LOG_INFO("-------------------- END SOFTWARE VERSION READING-------------------\n");
 
