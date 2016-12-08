@@ -1992,8 +1992,18 @@ static int setupSocket(npiSerialCfg_t *serialCfg)
 	LOG_INFO("Listen port: %s\n", serialCfg->port);
 
 #if FORCE_LOCALHOST_ONLY
-	(void)status;
-	getaddrinfo("localhost", serialCfg->port, &hints, &servinfo);
+	if ((status = getaddrinfo("localhost", serialCfg->port, &hints, &servinfo)) != 0)
+	{
+		LOG_ERROR("getaddrinfo error: %s\n", gai_strerror(status));
+		strncpy(serialCfg->port, NPI_PORT, sizeof(serialCfg->port)-1);
+		LOG_INFO("Trying default port: %s instead\n", serialCfg->port);
+		if ((status = getaddrinfo("localhost", serialCfg->port, &hints, &servinfo)) != 0)
+		{
+			LOG_ERROR("getaddrinfo error: %s\n", gai_strerror(status));
+			npi_ipc_errno = NPI_LNX_ERROR_IPC_SOCKET_GET_ADDRESS_INFO;
+			NPI_LNX_IPC_Exit(NPI_LNX_FAILURE, TRUE);
+		}
+	}
 #else
 	if ((status = getaddrinfo(NULL, serialCfg->port, &hints, &servinfo)) != 0)
 	{
