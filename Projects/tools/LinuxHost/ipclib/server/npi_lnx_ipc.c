@@ -1558,10 +1558,12 @@ int NPI_AsynchMsgCback(npiMsgData_t *pMsg)
 			pMsg->len,
 			pMsg->subSys,
 			pMsg->cmdId);
+#ifdef __LOG_RECEIVED_PAYLOAD__
 	for (i = 0; i < pMsg->len; i++)
 	{
 		LOG_DEBUG(" 0x%.2X", pMsg->pData[i]);
 	}
+#endif //__LOG_RECEIVED_PAYLOAD__
 	LOG_DEBUG("\n");
 
 
