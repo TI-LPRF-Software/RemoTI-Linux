@@ -71,7 +71,7 @@ extern "C" {
 //Version Major.Minor.Revision
 #define NPI_LNX_MAJOR_VERSION		1
 #define NPI_LNX_MINOR_VERSION		4
-#define NPI_LNX_REVISION			4
+#define NPI_LNX_REVISION			5
 
 #define NPI_LNX_PARAM_NB_CONNECTIONS 		1
 #define NPI_LNX_PARAM_DEVICE_USED			2

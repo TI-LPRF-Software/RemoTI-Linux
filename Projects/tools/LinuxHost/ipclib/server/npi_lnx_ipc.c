@@ -1042,11 +1042,13 @@ static void time_print_npi_ipc_buf(const char *strDirection, const npiMsgData_t 
 		npiMsgData->cmdId);
 	tmpLen = strlen(tmpStr);
 
+#ifdef __LOG_RECEIVED_PAYLOAD__
 	for (i = 0; i < npiMsgData->len && (tmpLen < sizeof(tmpStr)); i++)
 	{
 		snprintf(tmpStr+tmpLen, sizeof(tmpStr)-tmpLen, " %02X", npiMsgData->pData[i]);
 		tmpLen += 3;
 	}
+#endif //__LOG_RECEIVED_PAYLOAD__
 	snprintf(tmpStr+tmpLen, sizeof(tmpStr)-tmpLen, "]");
 	time_printf_always_localized(callersStartTime, callersCurrentTime, callersPreviousTime, "%s\n", tmpStr);
 }
