@@ -6,7 +6,7 @@
   Description:    This file contains Linux platform specific RemoTI (RTI) API
                   Surrogate implementation
 
-  Copyright (C) {2016} Texas Instruments Incorporated - http://www.ti.com/
+  Copyright (C) {2018} Texas Instruments Incorporated - http://www.ti.com/
 
    Beej's Guide to Unix IPC was used in the development of this software:
    http://beej.us/guide/bgipc/output/html/multipage/intro.html#audience
@@ -81,6 +81,10 @@
 #include "npi_rti.h"
 #include "npi_lnx_ipc_rpc.h"
 
+#ifdef NPI_RCN
+#include "npi_rcn.h"
+#endif
+
 #ifdef NPI_BOOT
 #include "npi_boot.h"
 #endif
@@ -148,8 +152,13 @@ npiProcessMsg_t NpiAsyncMsgCbackParserTable[] =
 #else
 		NULL,
 #endif
-		  NULL,   					//RPC_SYS_RCN         11   // Remote Control Network Layer
-		  NULL,   					//RPC_SYS_RCN_CLIENT  12   // Remote Control Network Layer Client
+#ifdef NPI_RCN
+		  RCN_AsynchMsgCback, //RPC_SYS_RCN         11   // Remote Control Network Layer
+		  NULL,             //RPC_SYS_RCN_CLIENT  12   // Remote Control Network Layer Client
+#else
+      NULL,             //RPC_SYS_RCN         11   // Remote Control Network Layer
+      NULL,             //RPC_SYS_RCN_CLIENT  12   // Remote Control Network Layer Client
+#endif
 #ifdef NPI_BOOT
 		  BOOT_AsynchMsgCback,		//RPC_SYS_BOOT        13   // Serial Bootloader
 #else
