@@ -251,7 +251,7 @@ char npi_ipc_srsp_buf[(sizeof(npiMsgData_t))];
 // variable to store the number of received synchronous response bytes
 static int numOfReceievedSRSPbytes = 0;
 
-static pthread_t NPIThreadId;
+static pthread_t NPIThreadId[2];
 static void *npi_ipc_readThreadFunc (void *ptr);
 static void *npi_ipc_handleThreadFunc (void *ptr);
 
@@ -496,7 +496,7 @@ int NPI_ClientInit(const char *devPath)
 
     if (res == NPI_LNX_SUCCESS)
     {
-    	if (pthread_create(&NPIThreadId, NULL, npi_ipc_readThreadFunc, NULL))
+    	if (pthread_create(&NPIThreadId[0], NULL, npi_ipc_readThreadFunc, NULL))
     	{
     		// thread creation failed
     		LOG_ERROR("[NPI Client] %s(): Failed to create NPI IPC Client read thread\n", __FUNCTION__);
@@ -510,7 +510,7 @@ int NPI_ClientInit(const char *devPath)
 
     if (res == NPI_LNX_SUCCESS)
     {
-    	if (pthread_create(&NPIThreadId, NULL, npi_ipc_handleThreadFunc, NULL))
+    	if (pthread_create(&NPIThreadId[1], NULL, npi_ipc_handleThreadFunc, NULL))
     	{
     		// thread creation failed
     		LOG_ERROR("[NPI Client] Failed to create NPI IPC Client handle thread\n");
@@ -1055,6 +1055,13 @@ static void npi_ipc_delsyncres(void)
  **************************************************************************************************/
 void NPI_ClientClose(void)
 {
+	//cancel worker threads
+	pthread_cancel(NPIThreadId[0]);
+	pthread_cancel(NPIThreadId[1]);
+	//wait for cancel finish
+	pthread_join(NPIThreadId[0], NULL);
+	pthread_join(NPIThreadId[1], NULL);
+
 	// Close the NPI socket connection
 
 	close(sNPIconnected);
